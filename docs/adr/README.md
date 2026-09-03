@@ -43,6 +43,12 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | 8 Decision log "Minimum OS: Android 14" | No rationale recorded and no capture API needs API 34. Kept for the smaller test matrix, with a Play Console measurement before public beta. | 0012 |
 | 8-Q7 tech stack | Decided: Kotlin + CameraX 1.6.2, Compose, Ktor, static web bundle. Cross-platform UI frameworks rejected for the capture path. | 0002, 0006, 0009 |
 
+## Open conflicts
+
+| Documents | Conflict | Resolution needed |
+|---|---|---|
+| ADR-0002 vs `docs/spec-chapter-markers.md` CM-1 | CM-1 requires an app-owned fragmented muxer with soft-remux finalisation in Phase 1; ADR-0002 chose the CameraX stock `Recorder` with no muxer access. | Davide: defer CM-1 to the CameraX 1.7 revisit, or write a superseding ADR adopting ADR-0002 Option C for the recording pipeline. |
+
 ## PRD amendments
 
 All amendments listed by the ADRs above were applied to the PRD on 2026-09-03 (Draft v0.3). The PRD cites the ADR next to each amended passage. Every ADR the PRD cites is Accepted as of 2026-09-03. If a future Proposed ADR amends the PRD before acceptance, mark the passage provisional here; when such an ADR is rejected, revert the cited passage and mark the ADR Deprecated.
