@@ -2,13 +2,13 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.2 |
+| **Status** | Draft v0.3 |
 | **Date** | 2026-09-03 |
 | **Author** | Davide Mendolia |
 | **Platforms** | Android first (min Android 14), then iOS (min iOS 16) |
 | **Scope** | v1 (capture engine + local web control) |
 
-> **Assumptions still open.** Preview transport (JPEG over WebSocket), fragmented MP4 for crash resilience, and the behaviour on lenses that lack manual-control capabilities are drafting positions, listed in **Open Questions**. Audio scope, platform order, minimum OS versions, and web-interface security were decided on 2026-09-03; see the decision log in section 8.
+> **Status of assumptions.** Technical positions are recorded as Architecture Decision Records in `docs/adr/` (index: `docs/adr/README.md`); this document cites them as (ADR-NNNN). Preview transport is an MJPEG HTTP stream (ADR-0008), crash resilience is covered up to a take length measured in Phase 0 (6.7), and behaviour on lenses without manual-control capabilities is decided (ADR-0011). Audio scope, platform order, minimum OS versions, web-interface security, and the Android capture stack were decided on 2026-09-03; see the decision log in section 8.
 
 ---
 
@@ -67,7 +67,7 @@ Ordered by priority.
 - As a user whose phone cannot record 4K/30 or lacks manual exposure control, I want a clear message about what the app can and cannot do on this device rather than silent degradation.
 - As a user in Japan (two mains frequencies in one country), I want to be able to override the shutter choice so that automatic region detection does not cause flicker.
 - As a user whose browser loses the connection mid-take, I want the recording to continue on the phone so that a Wi-Fi blip does not ruin a take.
-- As a user who accidentally closes the app or whose phone dies mid-recording, I want the partial file to be playable so that the take is not lost entirely.
+- As a user who accidentally closes the app or whose phone dies mid-recording, I want the partial file to be playable so that the take is not lost entirely. *(Android MVP: covered up to a take length measured in Phase 0; any length is P1. See 6.7.)*
 
 ## 6. Requirements
 
@@ -77,18 +77,18 @@ Ordered by priority.
 |---|---|---|
 | Resolution | 3840 × 2160 (UHD) | Fallback 1920 × 1080 only if the device cannot do UHD at 30 fps. |
 | Frame rate | 30 fps, constant | Min and max frame duration both locked to 1/30 s. No variable frame rate. |
-| Shutter | 1/60 s (60 Hz grid) or 1/50 s (50 Hz grid) | See 6.2. |
+| Shutter | 1/60 s (60 Hz grid) or 1/50 s (50 Hz grid) | See 6.2. Steps to 1/120 s or 1/100 s only when overexposed at base ISO (6.3). |
 | ISO | Auto, lowest that achieves target exposure | See 6.3. |
 | White balance | Locked preset, default 5600 K | See 6.4. |
 | Focus | Continuous AF with face priority, lockable | Tap-to-focus and lock on both phone and web. |
-| Stabilisation | Off | Phone is on a tripod; stabilisation crops and can wobble. P1 toggle. |
+| Stabilisation | Off, both EIS and OIS | Phone is on a tripod; EIS crops and can wobble, OIS drifts. P1 toggle. (ADR-0002) |
 | Orientation | Landscape | Portrait supported. Web UI shows orientation. |
 | Camera | Rear main (wide) | Front camera selectable. |
 | Audio | 48 kHz AAC stereo or mono, from the best available input | See 6.6. |
 | Colour | SDR, Rec.709, 8-bit | HDR explicitly off. |
 
 **Acceptance criteria**
-- [ ] On a supported device, a fresh install records a clip whose metadata shows 3840×2160, 30.00 fps constant, shutter 1/50 or 1/60 matching region, WB locked.
+- [ ] On a supported device, a fresh install records a clip whose metadata shows 3840×2160, 30.00 fps constant, shutter 1/50 or 1/60 matching region (or the flicker-safe step of 6.3 if the scene required it), WB locked.
 - [ ] Recording a 60 Hz LED panel at 1/60 s shows no rolling bands; same for 50 Hz at 1/50 s.
 - [ ] Frame rate does not drop below 30 fps in low light (the driver must not extend exposure past the locked shutter).
 
@@ -109,15 +109,16 @@ Ordered by priority.
 
 On a phone the aperture is fixed, so once shutter is locked, ISO is the only remaining exposure variable. "Lowest possible" means: run an auto-exposure loop that holds shutter fixed and picks the lowest ISO that hits the target exposure.
 
-- Neither iOS nor Android exposes a native shutter-priority mode. The app runs its own AE loop: read the exposure offset from the device, adjust ISO within the device's supported range, hold shutter constant. Damped to avoid visible pumping.
+- Neither iOS nor Android exposes a native shutter-priority mode, and Android gives no metering feedback once auto-exposure is off. The app runs its own AE loop on both platforms: meter a face-weighted luminance from the analysis stream (the same frames that feed the web preview), adjust ISO within the device's supported range, hold shutter constant. Damped to avoid visible pumping. (ADR-0005)
 - ISO manual lock available (phone and web) for users who want a fixed value.
-- **Too-bright warning:** if the scene is overexposed at the device's base ISO, show "Too much light: reduce light or close blinds" (phones have no ND). Do not silently raise shutter speed.
+- **Too-bright handling:** if the scene is overexposed at the device's base ISO, first step the shutter to the next flicker-safe value: 1/100 s on a 50 Hz grid, 1/120 s on 60 Hz. Both are whole multiples of the mains half-period and do not band, and the motion-blur difference is invisible for a seated speaker. The shutter in use is always shown on phone and web. Only if that step is still overexposed, show "Too much light: reduce light or close blinds" (phones have no ND). Never raise shutter beyond that one step; a manually locked shutter disables the step. (ADR-0005)
 - **Too-dark warning:** if ISO exceeds a per-device noise threshold (default ISO 800, tunable), show "Low light: add light to reduce noise". Do not slow the shutter.
 
 **Acceptance criteria**
 - Given a constant scene, when recording, then ISO settles within 2 seconds and does not oscillate by more than one stop.
 - Given the scene brightens, then ISO decreases, shutter stays fixed, frame rate stays at 30.
-- Given the scene is overexposed at base ISO, then the warning appears within 1 second on phone and web.
+- Given the scene is overexposed at base ISO at 1/50 s, then the shutter steps to 1/100 s, the readout shows it on phone and web, and no warning is shown.
+- Given the scene is overexposed at base ISO and at the flicker-safe step, then the warning appears within 1 second on phone and web.
 
 ### 6.4 White balance presets (P0)
 
@@ -156,46 +157,46 @@ Two scenarios, each with three Kelvin presets. WB is always locked; auto WB is n
 Confirmed in scope for v1 (decision 2026-09-03).
 
 - Record audio with the video: AAC, 48 kHz, 128–256 kbps.
-- Input priority: wired or USB-C/Lightning microphone, then built-in mic. Bluetooth mics are supported but flagged: "Bluetooth audio is low quality (HFP). Use a wired mic if possible."
-- Live audio level meter on phone and web; clipping indicator.
+- Input priority: wired or USB-C/Lightning microphone, then built-in mic. Android MVP: system default routing, which prefers a plugged microphone; the app shows which input is active but does not select it (ADR-0002). Bluetooth mics are supported but flagged: "Bluetooth audio is low quality (HFP). Use a wired mic if possible."
+- Live audio level meter on phone and web; clipping indicator. Android MVP: 5 Hz, because CameraX reports amplitude every 200 ms; ≥ 10 Hz once the capture stack exposes PCM (P1). (ADR-0002)
 - Gain: system auto in v1. Manual gain P1.
 
 **Acceptance criteria**
 - [ ] Recorded file contains an AAC track at 48 kHz in sync with video (< 40 ms drift over 10 min).
 - [ ] Plugging in a USB-C mic switches input without restarting the session; web UI reflects the new input.
-- [ ] Level meter updates at ≥ 10 Hz on the web UI.
+- [ ] Level meter updates at ≥ 5 Hz on the web UI (MVP); ≥ 10 Hz is the P1 target.
 
 ### 6.7 Encoding (P0)
 
-- Video: HEVC (H.265) Main profile, 8-bit, if a hardware encoder is present; otherwise H.264 High profile. Software HEVC is never used (thermal and battery).
-- Detection: iOS — check available codec types on the movie output; Android — query `MediaCodecList` for a `video/hevc` encoder that reports hardware acceleration (API 29+).
+- Video: HEVC (H.265) Main profile, 8-bit, when the device provides it; otherwise H.264 High profile. Android MVP (CameraX 1.6.2) cannot force the codec: it records with the codec the device's UHD encoder profile declares and shows it before recording. Enforcing HEVC on every hardware-capable device is scheduled for the CameraX 1.7 revisit (ADR-0002). Software HEVC is never used (thermal and battery).
+- Detection: iOS — check available codec types on the movie output; Android — read the codec from the CameraX video capabilities for the selected quality, and query `MediaCodecList` for a hardware `video/hevc` encoder for the capability report and the 1.7 enforcement.
 - Target bitrate: HEVC 4K30 ≈ 45 Mbps; H.264 4K30 ≈ 80 Mbps. Tunable P1.
-- Container: MP4 (`.mp4`) on both platforms. Keyframe interval 1 s.
-- **Crash resilience:** write fragmented MP4 (or periodic moov updates) so that a file truncated by a crash or dead battery is still playable up to the last fragment. **The mechanism is decided in [spec-chapter-markers.md](spec-chapter-markers.md) CM-1**: fragmented write plus a soft-remux finalisation (OBS's "hybrid MP4"), which is also what makes chapter markers possible. Decide this in Phase 1; retrofitting it later means replacing the muxer in a shipped app.
+- Container: MP4 (`.mp4`) on both platforms. Keyframe interval 1 s where the stack allows setting it (iOS); the Android MVP uses the CameraX default.
+- **Crash resilience:** a file truncated by a crash or dead battery should be playable up to the last second. Android MVP: the CameraX 1.6.2 muxer rewrites the file index every second inside a fixed 400 KB reserve, so this holds for takes up to a length Phase 0 measures (expected on the order of 10–15 minutes) and is recorded here once known; longer takes are unplayable after a kill, and resilience for any length is P1 (ADR-0002). iOS can use `AVAssetWriter` fragment intervals from the start. [spec-chapter-markers.md](spec-chapter-markers.md) CM-1 (fragmented write plus soft-remux finalisation, which needs an app-owned muxer) is **deferred to the CameraX 1.7 revisit** (decision 2026-09-03, Davide); until then the mechanism is the one above.
 - Files saved to the system camera roll (iOS Photos) or `Movies/Scenaristo` (Android MediaStore). Filename: `Scenaristo_YYYY-MM-DD_HH-MM-SS.mp4`.
 - Codec in use is displayed on phone and web before recording.
 
 **Acceptance criteria**
-- Given a device with hardware HEVC, then the recorded file's video track is `hvc1`/`hev1`.
-- Given a device without hardware HEVC, then the track is `avc1` and the UI said so before recording.
-- Given the app is force-killed 30 s into a recording, then the file plays for at least the first 25 s.
+- Given a device whose UHD encoder profile declares HEVC, then the recorded file's video track is `hvc1`/`hev1`. From CameraX 1.7: given hardware HEVC, then HEVC.
+- Given the device profile declares H.264, then the track is `avc1` and the UI said so before recording.
+- Given the app is force-killed 30 s into a recording, then the file plays for at least the first 25 s. (P1: the same holds at any take length.)
 
 ### 6.8 Local web interface (P0)
 
 The phone runs an HTTP + WebSocket server on the local network. Any modern browser (Chrome, Safari, Firefox, Edge, current and previous major version) on the same network can open it.
 
 **Discovery and connection**
-- Phone shows the URL (`http://<ip>:<port>`) and a QR code on its screen. mDNS name (`scenaristo.local`) advertised where the platform supports it; the IP URL is the reliable path.
+- Phone shows the URL (`http://<ip>:<port>`) and a QR code on its screen. No mDNS name in v1: Android 14 offers no public way to register a hostname, so the IP URL is the only path (ADR-0006).
 - iOS requests Local Network permission; the app explains why.
 - If no Wi-Fi is available, the app explains that the phone's hotspot can be used and shows the same URL.
 
 **Security**
 - **v1: open LAN access** (decision 2026-09-03). Any client on the local network that can reach the URL can view the preview and control the camera. The phone shows how many clients are connected so an unexpected viewer is visible.
 - **Later version (P1): pairing check.** On first connection from a new browser, both the phone and the browser display the same short code (a number or an emoji sequence). The user confirms on the phone that the codes match before the browser is granted control. Confirmed browsers are remembered until the app is reinstalled or the user revokes them from the phone. This proves the person at the browser can also see the phone, without typing secrets.
-- Plain HTTP in both versions (self-signed TLS on LAN causes browser warnings and helps nobody). The interface must never be reachable off-LAN: bind to the LAN interface only, never to a public address.
+- Plain HTTP in both versions (self-signed TLS on LAN causes browser warnings and helps nobody). Consequence: the page is not a secure context, so browser APIs that require one (WebCodecs among them) are unavailable to the web UI. The interface must never be reachable off-LAN: the server rejects any request whose remote address is not a private LAN address and any request whose `Host` header is not an IP literal, which defends against DNS rebinding from a website on the same LAN; cellular interfaces receive no inbound connections. (ADR-0006)
 
 **Preview**
-- Downscaled preview, default 960 × 540 at up to 15 fps, JPEG frames over WebSocket. Quality and frame rate degrade automatically under bandwidth pressure. Target glass-to-glass latency < 500 ms on a healthy Wi-Fi network.
+- Downscaled preview, default 960 × 540 at up to 15 fps, delivered as an MJPEG HTTP stream that the browser renders natively (ADR-0008). Quality and frame rate degrade automatically under bandwidth pressure. Target glass-to-glass latency < 500 ms on a healthy Wi-Fi network.
 - Preview is separate from the recording pipeline: recording is always full resolution and frame rate regardless of preview quality or whether a browser is connected.
 - Preview shows framing overlays (rule-of-thirds, eye-line guide) toggleable from the web UI.
 - P2: WebRTC transport for lower latency and better compression.
@@ -203,18 +204,19 @@ The phone runs an HTTP + WebSocket server on the local network. Any modern brows
 **Controls (every setting listed in 6.1–6.7 plus)**
 - Start / stop recording with a large, unambiguous control; recording state is impossible to misread (red border, elapsed timer).
 - Shutter (1/50, 1/60, override), grid frequency, ISO (auto / manual value), white balance scenario and preset, lens, focus (tap on preview, lock), audio input and level, codec readout, orientation.
-- Status: battery %, charging state, thermal state (nominal / fair / serious / critical), free storage as minutes remaining at the current bitrate, connection quality.
+- Status: shutter in use (including the flicker-safe step of 6.3), battery %, charging state, thermal state (nominal / fair / serious / critical), free storage as minutes remaining at the current bitrate, connection quality.
 - Warnings (too bright, too dark, too close, thermal, low storage, low battery) are mirrored from the phone.
 
 **State**
 - Single source of truth on the phone. Every change from any client is broadcast to all connected clients within 200 ms.
-- Multiple browsers may connect; last write wins.
+- Multiple browsers may connect. Clients send commands, not state; the phone applies them in arrival order, so the last accepted command wins. Every state broadcast carries a revision number, and record start and stop are separate idempotent commands so a retried message cannot toggle a recording off. See the protocol specification (ADR-0007).
 - If the browser disconnects during a recording, the recording continues. On reconnect the browser shows the current recording state and elapsed time.
 
 **Acceptance criteria**
 - Given the phone shows a QR code, when a laptop on the same Wi-Fi scans it, then the web UI loads with a live preview within 5 seconds.
 - Given a second browser on the same network opens the URL, then it sees the same preview and state, and the phone's connected-client count reads 2.
-- Given a request from outside the LAN interface, then the server does not answer (it is not bound there).
+- Given a request from a non-private remote address, then the server answers 403.
+- Given a request whose `Host` header is not an IP literal, then the server answers 403.
 - Given the user changes WB on the phone, then the web UI reflects it within 200 ms, and vice versa.
 - Given recording is started from the browser, when Wi-Fi is turned off on the laptop, then the phone keeps recording and the file is complete on stop.
 - Given a 4K/30 recording is running, then preview frames continue and recorded frame rate stays at 30 (preview must not steal encoder time).
@@ -222,13 +224,13 @@ The phone runs an HTTP + WebSocket server on the local network. Any modern brows
 
 ### 6.9 On-device UI (P0)
 
-The phone UI is intentionally minimal: preview, record button, the QR/URL panel, and a settings sheet exposing the same controls as the web UI. Screen stays awake while the app is foregrounded. The app must stay in the foreground to record (both OSes suspend the camera in the background); the UI states this.
+The phone UI is intentionally minimal: preview, record button, the QR/URL panel, and a settings sheet exposing the same controls as the web UI. Screen stays awake while the app is foregrounded. On Android, capture and the web server run in a foreground service: once a recording or a browser session has been started from the app, the user may lock the phone and both continue, and the persistent notification shows recording state, elapsed time, and connected clients (ADR-0003). On iOS the app must stay in the foreground to record, and the UI states this.
 
 ### 6.10 Device capability handling (P0)
 
 - On first launch and on each lens switch, probe **per lens**: 4K/30 support, manual shutter and ISO (Android: `MANUAL_SENSOR` capability; iOS: custom exposure mode support), manual WB gains (Android: `MANUAL_POST_PROCESSING`; iOS: locked white balance with device gains), and hardware HEVC.
 - Show a one-screen capability report ("Main camera: 4K30 ✓, manual shutter ✓, manual WB ≈ approximated, HEVC ✓. Ultrawide: manual shutter ✗").
-- On Android, gate each control on the capability flag of the active lens, not on the hardware level (`LIMITED` / `FULL` / `LEVEL_3`) and not on the OS version. A lens without the flag gets the behaviour decided in Open Question 1. Controls that are unavailable are labelled "Not supported on this lens" rather than pretending.
+- On Android, gate each control on the capability flag of the active lens, not on the hardware level (`LIMITED` / `FULL` / `LEVEL_3`) and not on the OS version. A lens without `MANUAL_SENSOR` cannot record; the user is steered to a lens that has it. A lens without `MANUAL_POST_PROCESSING` records with the approximated white balance of 6.4 (ADR-0011). Controls that are unavailable are labelled "Not supported on this lens" rather than pretending.
 - Minimum OS (decision 2026-09-03): Android 14 (API 34), iOS 16. The OS floor does not guarantee manual controls; those depend on the per-lens flags above, which the phone maker declares and which do not change with OS updates.
 
 ### 6.11 Nice-to-have (P1)
@@ -238,11 +240,12 @@ The phone UI is intentionally minimal: preview, record button, the QR/URL panel,
 - "Auto once" white balance snap to nearest preset.
 - Face-size "too close" detector.
 - Stabilisation toggle.
-- Manual audio gain; external mic level calibration.
+- Manual audio gain; external mic level calibration; level meter at ≥ 10 Hz.
+- Crash-resilient recording files on Android (fragmented MP4), see 6.7.
 - Flicker detection to confirm grid frequency.
 - Bitrate presets (Efficient / Standard / High).
 - Countdown before record (3-2-1) shown on the phone and web so the talent knows when to start.
-- **Chapter markers from the browser** — press a key to mark take boundaries in a long recording; written into the MP4 as a chapter track plus a crash-safe sidecar. Specified in [spec-chapter-markers.md](spec-chapter-markers.md). Note that its container requirement lands in Phase 1, not Phase 3.
+- **Chapter markers from the browser** — press a key to mark take boundaries in a long recording; written into the MP4 as a chapter track plus a crash-safe sidecar. Specified in [spec-chapter-markers.md](spec-chapter-markers.md). Its container requirement (CM-1) is deferred to the CameraX 1.7 revisit in ADR-0002 (decision 2026-09-03), so chapter markers ship no earlier than that revisit.
 
 ### 6.12 Future considerations (P2)
 
@@ -263,7 +266,7 @@ Design so these are not blocked:
 | Web interface connection success rate | ≥ 90 % of attempts connect within 30 s | ≥ 95 % | Server log: QR shown → first WebSocket frame |
 | Sessions that use the web interface | ≥ 60 % | ≥ 75 % | Sessions with ≥ 1 web client |
 | Recordings that finish without error (thermal stop, storage full, crash) | ≥ 97 % | ≥ 99 % | Recording start / stop / error events |
-| Recordings using HEVC on HEVC-capable devices | 100 % | — | File metadata |
+| Recordings using HEVC on HEVC-capable devices | 100 % (suspended for the Android MVP; measured from CameraX 1.7, see 6.7) | — | File metadata |
 | Flicker complaints in support | 0 | — | Support inbox |
 
 **Lagging (90 days)**
@@ -283,19 +286,21 @@ Analytics are opt-in and local-first; no metric requires a backend in v1.
 |---|---|
 | Audio in v1? | Yes, as specified in 6.6. |
 | Platform order | Android first. iOS follows once the Android capture engine is proven. |
-| Minimum OS | Android 14 (API 34), iOS 16. |
+| Minimum OS | Android 14 (API 34), iOS 16. Rationale: the smallest test matrix while one developer proves the capture engine; no capture API used needs API 34. Revisit before public beta with Play Console device data (ADR-0012). |
 | Web interface security | v1 ships with open LAN access. A later version adds a pairing check: a number or emoji code shown on both phone and browser, confirmed on the phone. Specified in 6.8 and listed as P1. |
+| Android capture stack | CameraX 1.6.2, pinned, with the stock Recorder. Losses accepted for the MVP: crash resilience only up to a measured take length, codec follows the device profile, level meter at 5 Hz, audio input by system routing. Revisit at CameraX 1.7 (ADR-0002). |
+| Lenses without manual-control capabilities (was blocking question 1) | Refuse recording on lenses without `MANUAL_SENSOR`; degrade white balance through locked platform AWB modes on lenses without `MANUAL_POST_PROCESSING` (ADR-0011). |
 
 **Blocking (answer before build starts)**
-1. **Behaviour on lenses without manual-control capabilities.** Manual shutter and ISO require the Camera2 `MANUAL_SENSOR` capability; Kelvin white balance requires `MANUAL_POST_PROCESSING`. Both are declared per lens by the phone maker's camera driver and do not change with the Android version, so the Android 14 floor does not settle this. A phone can have them on the main camera and not on the ultrawide or telephoto. Decide, for each flag, whether to (a) refuse to record on that lens and steer the user to one that has it, or (b) ship a degraded mode using platform auto-exposure or auto white balance with the affected controls disabled and labelled. Recommendation: (a) for `MANUAL_SENSOR`, because flicker-free shutter is the product's core promise and a take with rolling bands is worse than no take; (b) for `MANUAL_POST_PROCESSING`, using the platform AWB fallback already in 6.4. — *Engineering / Product*
+1. **Decided 2026-09-03, see the decision log and ADR-0011.** Behaviour on lenses without manual-control capabilities. Manual shutter and ISO require the Camera2 `MANUAL_SENSOR` capability; Kelvin white balance requires `MANUAL_POST_PROCESSING`. Both are declared per lens by the phone maker's camera driver and do not change with the Android version, so the Android 14 floor does not settle this. A phone can have them on the main camera and not on the ultrawide or telephoto. Decide, for each flag, whether to (a) refuse to record on that lens and steer the user to one that has it, or (b) ship a degraded mode using platform auto-exposure or auto white balance with the affected controls disabled and labelled. Recommendation: (a) for `MANUAL_SENSOR`, because flicker-free shutter is the product's core promise and a take with rolling bands is worse than no take; (b) for `MANUAL_POST_PROCESSING`, using the platform AWB fallback already in 6.4. — *Engineering / Product*
 
 **Non-blocking (resolve during implementation)**
-2. **Kelvin → gains calibration on Android.** Per-device curve, generic approximation, or platform AWB modes only? Depends on how far off a generic curve is on the top 10 target devices. — *Engineering*
+2. **Kelvin → gains calibration on Android.** Decided direction (ADR-0011): one generic curve, normalised per device at 5600 K from the platform daylight gains; a per-device table only if Phase 0 grey-card tests miss ±300 K. — *Engineering*
 3. **Custom AE loop stability.** How aggressive can ISO adjustment be before it is visible on camera? Needs testing on real devices. — *Engineering*
 4. **Thermal behaviour at 4K30 HEVC.** How long can target devices sustain recording plus preview encoding before throttling? Determines whether the preview needs to drop to 5 fps when the phone is hot. — *Engineering*
-5. **Preview transport.** JPEG-over-WebSocket is drafted for simplicity. Is < 500 ms latency achievable on typical home Wi-Fi, or is WebRTC needed in v1? — *Engineering*
+5. **Preview transport.** Decided for v1: MJPEG over HTTP rendered by the browser's own image element (ADR-0008); Phase 0 checks iPhone Safari rendering and measures latency and thermal cost. WebRTC stays P2; WebCodecs is excluded by plain HTTP (6.8). — *Engineering*
 6. **Mixed-grid country list.** Confirm the list of countries needing the prominent toggle. — *Product*
-7. **Tech stack.** Native Android (Kotlin, Camera2) is the natural choice for a manual-control camera app shipping Android first. Decide now whether the web UI is built so it can be reused by the later iOS app unchanged (recommended: a static bundle served by both apps). — *Engineering*
+7. **Tech stack.** Decided: Kotlin with CameraX 1.6.2 reaching Camera2 through interop (ADR-0002); web UI as one static bundle served unchanged by both apps (ADR-0009); protocol specified independently of either app (ADR-0007); multiplatform strategy in ADR-0013. — *Engineering*
 8. **Pairing code format.** Number (4–6 digits) or emoji sequence for the P1 pairing check? Emoji is friendlier and harder to shoulder-surf across languages; digits are easier to read aloud to an assistant. — *Product / Design*
 9. **App name and store listing.** "Scenaristo Camera" is used as a working title. — *Product / Marketing*
 
@@ -305,15 +310,16 @@ No hard external deadline is known. Suggested phasing:
 
 | Phase | Scope | Exit criterion |
 |---|---|---|
-| **0 — Android spike (1–2 wks)** | Prove manual shutter + custom ISO loop + locked WB + hardware HEVC on two Android reference devices (one Pixel, one Samsung). Measure thermal headroom. | Flicker-free 10-minute 4K30 HEVC clip on both devices, no throttling. |
+| **0 — Android spike (1–2 wks)** | Prove manual shutter + custom ISO loop + locked WB through CameraX 1.6.2 interop on two Android reference devices (one Pixel, one Samsung); verify the requested exposure, ISO, and frame duration are echoed in capture results; record the codec each device profile selects for UHD. Measure thermal headroom. | Flicker-free 10-minute 4K30 clip on both devices, no throttling, interop keys honoured throughout. |
 | **1 — Android capture engine + phone UI** | 6.1–6.7, 6.9, 6.10 on Android 14+. Recording works entirely on the phone. | Internal users record real content with defaults only. |
 | **2 — Web control** | 6.8: server, discovery, preview, full control and state sync. Open LAN access. Web UI built as a static bundle reusable by iOS. | A solo creator completes a take from a laptop without touching the phone. |
-| **3 — Android polish and P1** | Pairing check, file download, countdown, auto-once WB, stabilisation toggle, Play Store submission. | Public Android beta. |
-| **4 — iOS** | Port the capture engine to AVFoundation on iOS 16+, reuse the web UI and server design. | iOS reaches parity with the Android beta. |
+| **3 — Android polish and P1** | Pairing check, file download, countdown, auto-once WB, stabilisation toggle, Play Store submission. CameraX 1.7 revisit if stable by then: HEVC enforcement, interop migration, crash-resilient files (ADR-0002). | Public Android beta. |
+| **4 — iOS** | Port the capture engine to AVFoundation on iOS 16+; reuse the web bundle and protocol unchanged; pass the shared domain fixtures (ADR-0013). | iOS reaches parity with the Android beta. |
 
 **Dependencies and risks**
 - Android manual-control support varies by OEM and by lens, independent of OS version. The reference device list should be chosen before Phase 0 and include a Pixel (LEVEL_3, all flags), a Samsung (main camera typically has `MANUAL_SENSOR`, secondary lenses often do not), and one device from an OEM known to restrict Camera2 manual controls despite offering them in its own camera app.
 - Thermal throttling at 4K30 HEVC with simultaneous preview encoding is the single biggest technical risk; Phase 0 exists to retire it.
+- CameraX applies manual keys through interop on a best-effort basis. Phase 0 verifies they are honoured on both reference devices; Camera2-direct is the escape hatch for the control path if they are not (ADR-0002).
 - Shipping v1 with open LAN access is acceptable for home and small-studio use; the Play Store listing should say so plainly so that office users know to wait for the pairing check.
 - Apple Local Network permission and App Store review of a local HTTP server (Phase 4): no known blocker, but the review notes must explain the feature.
 
