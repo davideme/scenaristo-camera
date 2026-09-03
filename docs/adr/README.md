@@ -2,6 +2,17 @@
 
 Decisions that shape the Scenaristo Camera architecture, one per file, numbered in order of creation. The process is defined in [ADR-0001](0001-record-architecture-decisions.md) and the requirement to write one is in the repository [CLAUDE.md](../../CLAUDE.md). Copy [0000-template.md](0000-template.md) to start a new one.
 
+## Writing one
+
+1. Copy [0000-template.md](0000-template.md) to `NNNN-short-title.md` with the next free number. Numbers are never reused, including withdrawn ones (see 0004).
+2. Status starts as `Proposed`. **Only Davide sets `Accepted`.** Never edit an Accepted ADR's decision: write a new ADR with `Supersedes ADR-NNNN` and set the old one to `Superseded by ADR-MMMM`.
+3. Fill every section. Name at least two real options with a dimension table each. State a concrete "revisit when" trigger in Consequences — a measurement, a release, a date. If the ADR changes PRD text, list the amendment under Decision.
+4. Add the row to the Index below in the same change, and to the Challenges table if it amends the PRD, or to Open conflicts if it contradicts another ADR.
+5. Reference the ADR number in the commit body and the pull request description (`ADR-0007`).
+6. Run `./tools/check-adr-index.sh`; CI runs it too.
+
+When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADRs win and the PRD is pending amendment; Proposed ADRs are a challenge awaiting Davide's decision, so do not build against them as settled.
+
 ## Index
 
 | ADR | Title | Status | PRD |
@@ -15,10 +26,13 @@ Decisions that shape the Scenaristo Camera architecture, one per file, numbered 
 | [0007](0007-control-protocol.md) | JSON over one WebSocket, revisioned snapshots, idempotent commands | Accepted | 6.8 |
 | [0008](0008-preview-transport.md) | MJPEG HTTP stream rendered natively by the browser; JPEG over WebSocket as fallback | Accepted | 6.8, 6.12 |
 | [0009](0009-web-ui-static-bundle.md) | Web UI as one static bundle (Vite + TypeScript + Preact) built into app resources; TS types generated from `:domain` | Accepted | 6.8, 9 |
-| [0010](0010-platform-free-domain-defer-kmp.md) | `:domain` as a single-target Kotlin Multiplatform module; iOS target deferred | Accepted | 9 |
+| [0010](0010-platform-free-domain-defer-kmp.md) | `:domain` as a single-target Kotlin Multiplatform module; iOS target deferred | Superseded by [0015](0015-domain-module-build-shape.md) | 9 |
 | [0011](0011-per-lens-capability-gating.md) | Require `MANUAL_SENSOR` to record; degrade WB without `MANUAL_POST_PROCESSING` | Accepted | 6.4, 6.10, 8-Q1 |
 | [0012](0012-minimum-os-versions.md) | Minimum OS Android 14 / iOS 16, with a measurement trigger | Accepted | 6.10, 8 |
 | [0013](0013-multiplatform-strategy.md) | Multiplatform: native capture per platform, shared web UI and protocol, fixture-tested domain; KMP and Compose Multiplatform deferred | Accepted | 9, 8-Q7 |
+| [0014](0014-build-toolchain.md) | Gradle 9.7.1 / AGP 9.4.0 / Kotlin 2.4.10 on Java 17; `android` CLI provisions the SDK; wrapper committed; `targetSdk` stated explicitly | Proposed | 6.1, 6.10, 8-Q7, 9 |
+| [0015](0015-domain-module-build-shape.md) | `:domain` with two JVM-family targets under the Android KMP library plugin; platform-freeness enforced by compiler plus lint. Supersedes 0010 | Proposed | 9, 6.2, 6.3, 6.4, 6.10 |
+| [0016](0016-continuous-integration.md) | PRs gated on compilation, host tests and repo invariants; device verification stays manual | Proposed | 6.1-6.7, 6.10, 9 |
 
 ## Challenges to positions stated in the PRD
 
@@ -47,6 +61,7 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 
 | Documents | Conflict | Resolution needed |
 |---|---|---|
+| ADR-0015 vs ADR-0010 | ADR-0010 specifies a single `androidTarget()` and justifies it by compiler-enforced platform-freeness. AGP 9 removed that API, and a single target enforces nothing (measured 2026-09-03: `android.*` and `java.*` both compile in `commonMain`). ADR-0015 proposes two JVM-family targets plus a lint. | **Awaiting Davide.** ADR-0015 is Proposed; ADR-0010 is marked Superseded pending its acceptance. |
 | ADR-0002 vs `docs/spec-chapter-markers.md` CM-1 | CM-1 requires an app-owned fragmented muxer with soft-remux finalisation in Phase 1; ADR-0002 chose the CameraX stock `Recorder` with no muxer access. | **Resolved 2026-09-03 (Davide):** CM-1 deferred to the CameraX 1.7 revisit; added to the ADR-0002 revisit checklist. |
 
 ## PRD amendments

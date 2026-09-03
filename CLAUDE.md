@@ -27,15 +27,18 @@ Read `docs/adr/README.md` before changing anything architectural, and follow the
 
 **Do not write an ADR for:** bug fixes, refactors inside one module that keep interfaces, UI copy and layout, test additions, additive protocol fields, documentation.
 
-**How:**
-
-1. Copy `docs/adr/0000-template.md` to `docs/adr/NNNN-short-title.md` with the next number.
-2. Status starts as `Proposed`. Only Davide sets `Accepted`. Never edit an Accepted ADR's decision; write a new one with `Supersedes ADR-NNNN` and set the old one to `Superseded by ADR-MMMM`.
-3. Fill every section. Name at least two real options with a dimension table each. State a concrete "revisit when" trigger in Consequences. If the ADR changes PRD text, list the amendment under Decision.
-4. Add the row to the index in `docs/adr/README.md` in the same change, and to the "Challenges" table if it amends the PRD.
-5. Reference the ADR number in the commit message and PR description (`ADR-0007`).
+**How to write one:** `docs/adr/README.md`. Two rules worth repeating here because they are the ones that get missed: an ADR ships in the same change as the code it justifies, and only Davide sets a status to `Accepted` — open yours as `Proposed`.
 
 When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADRs win and the PRD is pending amendment; Proposed ADRs are a challenge awaiting Davide's decision, so do not build against them as if settled unless the task says so.
+
+## Tooling and skills
+
+- Setup, build, test and PR conventions: `CONTRIBUTING.md`. Read it before running a build command. Android tooling here is Google's `android` CLI; there is **no `sdkmanager`, `adb`, `avdmanager` or system `gradle`** on the maintainer's machine, and CI runners are the opposite. Do not copy setup instructions between the two (ADR-0014).
+- Build from `android/`: `./gradlew build`. `:domain` tests run as `./gradlew :domain:jvmTest`.
+- The `commonTest` / `withHostTest {}` build warning is expected and deliberate (ADR-0015). Do not "fix" it.
+- Repo invariants are enforced by `tools/check-adr-invariants.sh`, `tools/check-domain-platform-free.sh` and `tools/check-adr-index.sh`, all of which run in CI. If one fails, the message names the ADR.
+- Google's Android skills (`camerax`, `testing-setup`, `android-profiler`, `android-cli`) are referenced as the pinned `android-skills` plugin, not vendored. **Consult the `camerax` skill before writing anything that touches CameraX, `Camera2Interop`, `Recorder` or `ImageAnalysis`.** If the plugin was never installed (`claude plugin install android-skills`) those skills are simply absent — there is no fallback.
+- What to work on: `docs/ROADMAP.md`.
 
 ## Working conventions
 

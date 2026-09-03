@@ -1,0 +1,59 @@
+name: Bug report
+description: Something behaves differently from a PRD acceptance criterion.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Behaviour is per-device and per-lens (PRD 6.10, ADR-0011), so a report
+        without the device and the active lens usually cannot be acted on.
+  - type: input
+    id: device
+    attributes:
+      label: Device model
+      placeholder: "Pixel 9 Pro / Samsung Galaxy S24"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Android version and OEM skin
+      placeholder: "Android 15, One UI 7"
+    validations:
+      required: true
+  - type: input
+    id: lens
+    attributes:
+      label: Active lens
+      description: Which lens was selected, and its 35 mm equivalent if the app shows it.
+      placeholder: "Rear main (wide), 24 mm equiv."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+    validations:
+      required: true
+  - type: input
+    id: criterion
+    attributes:
+      label: Which PRD criterion is violated
+      placeholder: "6.1 - metadata should show 30.00 fps constant"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps, expected, actual
+    validations:
+      required: true
+  - type: dropdown
+    id: thermal
+    attributes:
+      label: Was the phone hot?
+      description: Thermal throttling changes capture behaviour (PRD 8-Q4).
+      options: ["No", "Warm", "Hot", "Do not know"]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, or metadata of the recorded file
+      render: shell

@@ -1,6 +1,6 @@
 # ADR-0010: Keep domain logic free of Android dependencies; defer Kotlin Multiplatform
 
-**Status:** Accepted (2026-09-03, Davide)
+**Status:** Superseded by ADR-0015 (proposed 2026-09-03). Was Accepted 2026-09-03, Davide.
 **Date:** 2026-09-03
 **Deciders:** Davide Mendolia
 **PRD sections:** 9 (Phase 4 "port the capture engine"), 6.2, 6.3, 6.4, 6.10
