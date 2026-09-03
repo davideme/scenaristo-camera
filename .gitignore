@@ -25,6 +25,10 @@ lint-results*.xml
 # --- Node / web bundle (ADR-0009) -----------------------------------------
 node_modules/
 web/dist/
+# web/ uses pnpm (ADR-0014). A stray npm or yarn lockfile means two
+# resolvers disagreeing about the same tree.
+package-lock.json
+yarn.lock
 *.tsbuildinfo
 npm-debug.log*
 .vite/

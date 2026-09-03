@@ -56,6 +56,7 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | 8 Open Question 1 (blocking) | Answered: refuse recording on lenses without `MANUAL_SENSOR`; degrade WB via locked AWB modes without `MANUAL_POST_PROCESSING`. | 0011 |
 | 8 Decision log "Minimum OS: Android 14" | No rationale recorded and no capture API needs API 34. Kept for the smaller test matrix, with a Play Console measurement before public beta. | 0012 |
 | 8-Q7 tech stack | Decided: Kotlin + CameraX 1.6.2, Compose, Ktor, static web bundle. Cross-platform UI frameworks rejected for the capture path. | 0002, 0006, 0009 |
+| ADR-0009 "a Gradle `Exec` task in `:app` runs `npm run build`" | `web/` uses pnpm 10, pinned via `packageManager`. ADR-0009's decision is unchanged; only the command is. Read every `npm run build` in ADR-0009 as `pnpm run build`. | 0014 |
 
 ## Open conflicts
 

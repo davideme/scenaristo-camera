@@ -32,7 +32,7 @@ Does anything here contradict an Accepted ADR or a technical statement in the PR
 ## Verification
 
 - [ ] `cd android && ./gradlew build` passes
-- [ ] `cd web && npm run check && npm run build` passes
+- [ ] `cd web && pnpm run check && pnpm run build` passes
 - [ ] `./tools/check-adr-index.sh`, `./tools/check-adr-invariants.sh` and
       `./tools/check-domain-platform-free.sh` pass
 

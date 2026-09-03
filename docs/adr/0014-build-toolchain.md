@@ -104,14 +104,27 @@ could never run. The jar is committed and validated in CI by `gradle/actions/wra
 **Configuration cache is on.** This constrains all future build logic in the repository: no
 `Project` access at execution time.
 
+**`web/` uses pnpm 10, not npm.** The version is pinned in `package.json` via `packageManager`, so
+Corepack resolves it and CI, local machines and any future contributor share one resolver.
+`pnpm install --frozen-lockfile` is the `npm ci` equivalent: it fails rather than silently
+rewriting the lockfile when `package.json` has drifted. `package-lock.json` and `yarn.lock` are
+git-ignored, because two lockfiles for one tree means two resolvers disagreeing about it.
+
+*This amends a technical statement in Accepted ADR-0009*, whose Decision says "a Gradle `Exec`
+task in `:app` runs `npm run build`". The text to amend is that phrase and the surrounding
+`npm run build` references: read them as `pnpm run build`. ADR-0009's actual decision — one static
+bundle, Vite + TypeScript + Preact, protocol types generated from `:domain`, no host coupling — is
+untouched; only the command changes. The Phase 2 Gradle-to-npm bridge described below is
+correspondingly a Gradle-to-pnpm bridge.
+
 **Test frameworks are split by necessity, not preference:** `kotlin.test` in `:domain`'s
 `commonTest` (the only multiplatform option), JUnit 4 in the Android modules (what AGP and
 Compose testing assume).
 
-**The Gradle-to-npm bridge is deferred to Phase 2.** ADR-0009 Action Item 3 prescribes an `Exec`
+**The Gradle-to-pnpm bridge is deferred to Phase 2.** ADR-0009 Action Item 3 prescribes an `Exec`
 task with `preBuild.dependsOn` and `web/dist` as a resources source directory. AGP 9 defaults
 `android.sourceset.disallowProvider` to true, so that now requires the `androidComponents`
-Sources API. Wiring it during the bootstrap would put npm on the critical path of every Android
+Sources API. Wiring it during the bootstrap would put pnpm on the critical path of every Android
 build and is a configuration-cache hazard, for no benefit until the web UI exists. `web/` builds
 independently until then. This defers an ADR-0009 action item; it does not change its decision.
 

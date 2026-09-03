@@ -113,11 +113,16 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+      # pnpm must be installed before setup-node, or the pnpm cache resolution
+      # in setup-node has no pnpm to ask for its store path.
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npm run check
-      - run: npm run build
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      # --frozen-lockfile is pnpm's `npm ci`: it fails rather than silently
+      # updating pnpm-lock.yaml when package.json has drifted from it.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run build

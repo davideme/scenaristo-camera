@@ -41,11 +41,11 @@ four jobs:
   subject from it.
 - **`android`** — `ktlintCheck`, `test`, `lint`, `assembleDebug`, on Temurin 21 with
   `gradle/actions/wrapper-validation`.
-- **`web`** — `npm ci`, typecheck, `npm run build`.
+- **`web`** — `pnpm install --frozen-lockfile`, typecheck, `pnpm run build` (ADR-0014).
 
 **Every CI step is a Gradle task or an npm script that a contributor runs identically.** No
 workflow step invokes `android`, `sdkmanager` or `adb`. If a check cannot be expressed as
-`./gradlew <task>`, `npm run <script>` or a script in `tools/`, it does not go in CI. This is the
+`./gradlew <task>`, `pnpm run <script>` or a script in `tools/`, it does not go in CI. This is the
 rule that keeps the local/CI divergence from spreading past the setup step.
 
 **A green CI run does not mean the app works.** It means the code compiles, host tests and

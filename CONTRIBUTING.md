@@ -34,11 +34,14 @@ close, and reference the parent.
 
 ### 3.1 Everyone
 
-JDK 21 (Temurin), Node 22+, `git`, `gh`.
+JDK 21 (Temurin), Node 22+, pnpm 10+, `git`, `gh`.
 
 ```bash
-java -version && node -v && gh auth status
+java -version && node -v && pnpm --version && gh auth status
 ```
+
+`web/` uses **pnpm**, not npm (ADR-0014). `package.json` pins the version via `packageManager`,
+so Corepack will use the right one; `corepack enable` if you do not have pnpm already.
 
 ### 3.2 Android tooling, macOS — the `android` CLI
 
@@ -83,10 +86,10 @@ the code compiles, host tests and fixtures pass, and the web bundle builds. See 
 ### 3.4 Web
 
 ```bash
-cd web && npm ci && npm run dev
+cd web && pnpm install && pnpm run dev
 ```
 
-`npm run build` produces `web/dist/` — one HTML file, one JS file, one CSS file, no external
+`pnpm run build` produces `web/dist/` — one HTML file, one JS file, one CSS file, no external
 requests (ADR-0009). The page is served over plain HTTP from a LAN IP, so there is no secure
 context and no CDN to reach.
 
@@ -108,7 +111,7 @@ Run from `android/` unless stated otherwise.
 
 | Goal | Command |
 |---|---|
-| Everything CI runs | `./gradlew build` then `cd ../web && npm ci && npm run check && npm run build` |
+| Everything CI runs | `./gradlew build` then `cd ../web && pnpm install --frozen-lockfile && pnpm run check && pnpm run build` |
 | Domain tests and protocol fixtures, no device | `./gradlew :domain:jvmTest` |
 | All host tests | `./gradlew test :domain:jvmTest` |
 | Android lint | `./gradlew lint` |
