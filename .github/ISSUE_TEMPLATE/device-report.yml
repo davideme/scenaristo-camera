@@ -1,0 +1,56 @@
+name: Device compatibility report
+description: Report what a phone can and cannot do. Useful even without writing code.
+labels: ["device-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The project's largest unknowns are empirical and per-device, and the
+        maintainer has two phones. A report from yours is a real contribution:
+        it feeds ADR-0002 (which codec each device profile picks for UHD, whether
+        the interop manual keys are honoured), ADR-0011 (the per-lens
+        MANUAL_SENSOR / MANUAL_POST_PROCESSING truth table) and PRD 8-Q4 (thermals).
+  - type: input
+    id: device
+    attributes:
+      label: Device model
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Android version and OEM skin
+    validations:
+      required: true
+  - type: textarea
+    id: lenses
+    attributes:
+      label: Per-lens capabilities
+      description: One row per lens the app lists.
+      value: |
+        | Lens | 35 mm equiv. | 4K30 | MANUAL_SENSOR | MANUAL_POST_PROCESSING |
+        |---|---|---|---|---|
+        |  |  |  |  |  |
+    validations:
+      required: true
+  - type: input
+    id: codec
+    attributes:
+      label: Codec chosen for UHD
+      description: What the app reports before recording (PRD 6.7).
+  - type: dropdown
+    id: interop
+    attributes:
+      label: Did the manual keys echo back the requested values?
+      description: Shutter, ISO and frame duration, as shown in the app's diagnostics.
+      options: ["Yes, all", "Partly", "No", "Did not check"]
+  - type: input
+    id: thermal
+    attributes:
+      label: Longest clean 4K30 take before throttling
+      placeholder: "14 minutes, then frame rate dropped"
+  - type: textarea
+    id: report
+    attributes:
+      label: Paste the in-app capability report
+      render: text

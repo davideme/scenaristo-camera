@@ -1,0 +1,68 @@
+# --- Gradle / Kotlin / Android --------------------------------------------
+.gradle/
+build/
+local.properties
+captures/
+.cxx/
+.kotlin/
+release/
+lint-results*.html
+lint-results*.xml
+*.apk
+*.aab
+*.ap_
+*.dex
+*.aar
+*.hprof
+
+# The wrapper IS the build's bootstrap: there is no system Gradle on the
+# maintainer's machine, so a clone without these cannot build at all.
+# Many Android templates carry a blanket *.jar; this one deliberately does not.
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!gradle/libs.versions.toml
+
+# --- Node / web bundle (ADR-0009) -----------------------------------------
+node_modules/
+web/dist/
+# web/ uses pnpm (ADR-0014). A stray npm or yarn lockfile means two
+# resolvers disagreeing about the same tree.
+package-lock.json
+yarn.lock
+*.tsbuildinfo
+npm-debug.log*
+.vite/
+coverage/
+
+# web/src/protocol.ts is generated from the @Serializable classes in :domain
+# but is checked in on purpose (ADR-0009): the web build then needs no Kotlin
+# toolchain, and protocol drift shows up as a reviewable diff.
+
+# --- IntelliJ / Android Studio --------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# --- macOS ----------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# --- Agent workspace ------------------------------------------------------
+# .claude/settings.json IS tracked: it carries the shared permission policy
+# and the pinned android-skills marketplace. These two are machine-local and
+# were previously ignored only by a global gitignore / .git/info/exclude,
+# neither of which any other clone inherits.
+.claude/settings.local.json
+.claude/worktrees/
+
+# --- Secrets / signing ----------------------------------------------------
+*.jks
+*.keystore
+keystore.properties
+google-services.json

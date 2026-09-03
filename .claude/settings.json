@@ -1,0 +1,76 @@
+{
+  "extraKnownMarketplaces": {
+    "android-skills": {
+      "source": {
+        "source": "github",
+        "repo": "android/skills",
+        "sha": "725364add95396448b0c91c585265dbaf1c36987"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "android-skills": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git branch:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh label list:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh repo view:*)",
+      "Bash(./tools/check-adr-index.sh)",
+      "Bash(./tools/check-adr-invariants.sh)",
+      "Bash(./tools/check-domain-platform-free.sh)",
+      "Bash(./gradlew test:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(./gradlew check:*)",
+      "Bash(./gradlew lint:*)",
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash(./gradlew tasks:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm run build)",
+      "Bash(pnpm run check)",
+      "Bash(android info:*)",
+      "Bash(android sdk list:*)",
+      "Bash(android describe:*)",
+      "Bash(android docs:*)"
+    ],
+    "ask": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git switch -c:*)",
+      "Bash(git checkout -b:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh issue close:*)",
+      "Bash(gh label create:*)",
+      "Bash(gh label delete:*)",
+      "Bash(gh api --method POST:*)",
+      "Bash(gh api --method PATCH:*)",
+      "Bash(gh api --method DELETE:*)",
+      "Bash(android sdk install:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(gh release delete:*)",
+      "Read(./android/local.properties)",
+      "Read(./**/*.jks)",
+      "Read(./**/keystore.properties)"
+    ]
+  }
+}

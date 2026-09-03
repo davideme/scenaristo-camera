@@ -1,0 +1,50 @@
+# Scenaristo Camera - editor and formatter baseline.
+# ktlint reads this file; the ktlint_* keys below are the Kotlin style contract.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+[*.{kt,kts}]
+indent_size = 4
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+ij_kotlin_name_count_to_use_star_import = 2147483647
+ij_kotlin_name_count_to_use_star_import_for_members = 2147483647
+ktlint_code_style = intellij_idea
+ktlint_standard_no-wildcard-imports = enabled
+ktlint_standard_function-naming = enabled
+# @Composable functions are PascalCase; test names are backtick-quoted sentences
+# citing PRD acceptance criteria (see CONTRIBUTING.md).
+ktlint_function_naming_ignore_when_annotated_with = Composable, Test
+
+[*.{ts,tsx,js,mjs,cjs,css}]
+indent_size = 2
+max_line_length = 100
+
+[*.json]
+indent_size = 2
+
+[*.{yml,yaml}]
+indent_size = 2
+max_line_length = off
+
+[*.md]
+indent_size = 2
+# The PRD and the ADRs are long unwrapped paragraphs; a wrap rule would rewrite
+# every document in the repository.
+max_line_length = off
+# Two trailing spaces are a Markdown line break.
+trim_trailing_whitespace = false
+
+[*.{pro,properties}]
+indent_size = 4
+
+[gradle/wrapper/gradle-wrapper.properties]
+insert_final_newline = false

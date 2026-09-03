@@ -1,0 +1,134 @@
+# What this gate does and does not prove: see ADR-0016.
+#
+# Green means the code compiles, host tests and protocol fixtures pass, the web
+# bundle builds, and the repository invariants hold. It does NOT mean the app
+# records correctly. An emulator has no real camera, no MANUAL_SENSOR and no
+# hardware HEVC encoder, so capture behaviour is verified on a physical Pixel
+# and Samsung by the PR author, recorded in the pull request's hardware table.
+#
+# Every step below is a Gradle task, an npm script, or a script in tools/, so a
+# contributor can reproduce any failure locally. Nothing here calls `android`,
+# `sdkmanager` or `adb`: local setup and CI setup differ (ADR-0014) and only the
+# commands are allowed to be shared.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    name: Repository invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ADR invariants (CameraX pin, Camera2Interop confinement)
+        run: ./tools/check-adr-invariants.sh
+      - name: ':domain commonMain is platform-free'
+        run: ./tools/check-domain-platform-free.sh
+      - name: ADR index is consistent
+        run: ./tools/check-adr-index.sh
+
+  pr-title:
+    name: PR title is a Conventional Commit
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      # A squash merge takes its subject from the PR title, so the title is the
+      # thing that has to conform. See CONTRIBUTING.md.
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            build
+            ci
+            refactor
+            test
+            perf
+            chore
+          scopes: |
+            domain
+            capture
+            server
+            app
+            web
+            adr
+            prd
+            ci
+          requireScope: false
+
+  android:
+    name: Build and test (Android)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: android
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Unit and fixture tests
+        run: ./gradlew test :domain:jvmTest
+      - name: Android lint
+        run: ./gradlew lint
+      - name: Assemble debug
+        run: ./gradlew assembleDebug
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-android
+          path: |
+            android/**/build/reports/tests/**
+            android/**/build/reports/lint-results-*.html
+          retention-days: 7
+
+  web:
+    name: Build and typecheck (web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm must be installed before setup-node, or the pnpm cache resolution
+      # in setup-node has no pnpm to ask for its store path.
+      # package_json_file is explicit because `defaults.run.working-directory`
+      # applies only to `run:` steps, not to action inputs: without it the
+      # action looks for package.json at the repo root and finds no
+      # `packageManager` field to read the version from.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      # --frozen-lockfile is pnpm's `npm ci`: it fails rather than silently
+      # updating pnpm-lock.yaml when package.json has drifted from it.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run build

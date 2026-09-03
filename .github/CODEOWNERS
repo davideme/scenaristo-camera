@@ -1,0 +1,14 @@
+# Davide owns everything by default.
+*                                   @davideme
+
+# Product and architecture.
+/docs/PRD-talking-head-camera.md    @davideme
+/docs/spec-chapter-markers.md       @davideme
+/docs/adr/                          @davideme
+/CLAUDE.md                          @davideme
+
+# Repository policy, CI, and agent configuration.
+/.github/                           @davideme
+/.claude/                           @davideme
+/tools/                             @davideme
+/CONTRIBUTING.md                    @davideme

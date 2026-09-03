@@ -1,0 +1,62 @@
+name: Implementation task
+description: One reviewable chunk of work, usually part of a larger user story.
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: >
+        User-story issues (#2-#17) are phase-sized: #2 alone spans PRD 6.1-6.4.
+        Use this form for the piece a single pull request will actually close.
+  - type: input
+    id: parent
+    attributes:
+      label: Parent user story
+      description: The issue this is part of, e.g. "#2". Write "none" if standalone.
+    validations:
+      required: true
+  - type: input
+    id: prd
+    attributes:
+      label: PRD sections
+      placeholder: "6.3, 6.8"
+    validations:
+      required: true
+  - type: input
+    id: adrs
+    attributes:
+      label: Governing ADRs
+      placeholder: "ADR-0005, ADR-0011"
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Roadmap phase
+      options:
+        - "0 - Android spike"
+        - "1 - Capture engine"
+        - "2 - Web control"
+        - "3 - Polish and P1"
+        - "4 - iOS"
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria this covers
+      description: Quote the PRD criteria verbatim, as a checklist. Tests must cite them.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: dropdown
+    id: adr-needed
+    attributes:
+      label: Does this need a new ADR?
+      description: Check the trigger list in CLAUDE.md.
+      options: ["No", "Yes", "Unsure"]
+    validations:
+      required: true
+  - type: textarea
+    id: davide
+    attributes:
+      label: Needs a decision from Davide?
+      description: Anything that changes a user-visible default the PRD specifies.

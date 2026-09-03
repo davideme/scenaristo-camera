@@ -1,0 +1,51 @@
+name: Architecture decision needed
+description: Record that a decision is required, before anyone has time to write the ADR.
+labels: ["adr"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Use this when you hit a decision that CLAUDE.md says needs an ADR but you
+        are not writing it right now. Without it, ADR-shaped questions get buried
+        in pull request comments. Only Davide sets an ADR to Accepted.
+  - type: textarea
+    id: decision
+    attributes:
+      label: The decision, in one sentence
+      placeholder: "We need to choose how the preview stream degrades when the device is thermally throttled."
+    validations:
+      required: true
+  - type: dropdown
+    id: trigger
+    attributes:
+      label: Which CLAUDE.md trigger does this hit?
+      multiple: true
+      options:
+        - "Adds, removes or replaces a dependency, framework, build tool, or platform API family"
+        - "Changes how frames, audio or files flow"
+        - "Changes the phone-to-browser protocol non-additively, or adds a channel or endpoint"
+        - "Changes process lifecycle, permissions, background behaviour, network binding, or security"
+        - "Changes a default the PRD specifies, or the minimum OS"
+        - "Changes capability gating"
+        - "Introduces shared logic both platforms must implement identically"
+        - "Contradicts an existing ADR or a technical statement in the PRD"
+    validations:
+      required: true
+  - type: input
+    id: prd
+    attributes:
+      label: PRD sections affected
+  - type: input
+    id: contradicts
+    attributes:
+      label: ADRs this would contradict or supersede
+      placeholder: "ADR-0008"
+  - type: textarea
+    id: options
+    attributes:
+      label: Options already considered
+      description: Even a rough list saves the eventual ADR author a pass.
+  - type: textarea
+    id: blocking
+    attributes:
+      label: Is work blocked on this, and what?
