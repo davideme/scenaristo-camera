@@ -16,15 +16,15 @@ or PRD section it came from, not shipped code.
 
 ## Phase 0 — Android spike
 
-**Exit criterion (ADR-0017, amending PRD section 9):** a flicker-free 10-minute 4K30 clip on the
+**Exit criterion (PRD section 9, ADR-0017):** a flicker-free 10-minute 4K30 clip on the
 reference device, no throttling, interop keys honoured throughout, previewed in a macOS browser.
 
 **The reference matrix is one phone and one browser: a Pixel 10, and a MacBook running Safari and
 Chrome.** Davide decided on 2026-09-03 that Phase 0 runs against the hardware that exists rather
 than waiting on a second phone; a Samsung and the restrictive-OEM device PRD section 9 suggests
 become the pre-beta matrix, and the iOS Safari preview check moves to Phase 4. The reasoning, and
-the three things this leaves unmeasured, are in [ADR-0017](adr/0017-phase-0-verification-matrix.md).
-That ADR is `Proposed`; the issues below are already written against it.
+the three things this leaves unmeasured, are in [ADR-0017](adr/0017-phase-0-verification-matrix.md),
+Accepted on 2026-09-03; PRD section 9 and 8-Q5 were amended to match (Draft v0.4).
 
 A Phase 0 pass is therefore evidence about a Pixel 10, not about Android. Three gaps ride along and
 must not be closed by assumption: ADR-0011's per-lens gating stays fixture-tested (no lens without

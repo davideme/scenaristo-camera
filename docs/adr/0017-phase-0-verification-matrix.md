@@ -1,6 +1,6 @@
 # ADR-0017: Run Phase 0 on one reference device — a Pixel 10 — with a MacBook browser as the only remote client
 
-**Status:** Proposed
+**Status:** Accepted (2026-09-03, Davide)
 **Date:** 2026-09-03
 **Deciders:** Davide Mendolia
 **PRD sections:** 9 (phasing, dependencies and risks), 8-Q5, 6.8, 6.10
@@ -146,7 +146,7 @@ ADR-0016 makes about a green CI run.
 
 ## Action Items
 
-1. [ ] Amend PRD section 9 and 8-Q5 per the table under Decision, once this ADR is Accepted.
+1. [x] PRD section 9 and 8-Q5 amended per the table under Decision (2026-09-03, Draft v0.4).
 2. [ ] Record the exact Pixel 10 model and Android build with the first Phase 0 measurement, here
        and in the PR hardware table (ADR-0016).
 3. [x] Opened #29 (Phase 3 milestone): re-run #20, #21, #23, #24 and #25 on a second OEM device,

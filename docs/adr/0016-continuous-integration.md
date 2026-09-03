@@ -48,6 +48,26 @@ workflow step invokes `android`, `sdkmanager` or `adb`. If a check cannot be exp
 `./gradlew <task>`, `pnpm run <script>` or a script in `tools/`, it does not go in CI. This is the
 rule that keeps the local/CI divergence from spreading past the setup step.
 
+**On a pull request, `android` and `web` run only when their own directory changed.** A `changes`
+job runs `tools/changed-scopes.sh` — a shell script, so it obeys the rule above and a contributor
+can predict CI with `./tools/changed-scopes.sh origin/main` — and the two build jobs are gated on
+its output. `guards` and `pr-title` are never filtered: the invariants exist to catch documentation
+drift, and the ADR index breaks from a docs-only change more readily than from a code one.
+
+Two properties make this safe rather than merely cheaper. A **push to main runs the whole gate
+unfiltered**, so nothing reaches main unverified and the Gradle cache (written only on main) keeps
+being refreshed. And filtering is done with a job-level `if`, not with `on.pull_request.paths`: a
+job skipped by `if` reports a status, so it still satisfies a required status check, whereas a
+workflow skipped by a path filter reports nothing and would hang a required check forever. That
+distinction is the reason for the extra job, and it is why the filter must not be moved up to the
+`on:` block later.
+
+The scope map is deliberately literal — `android/` and `web/`, nothing more. In particular a change
+to `ci.yml` does not pull every job back in, so a documentation pull request that also edits the
+workflow does not spend five minutes assembling an APK. The cost is that a change to a job's own
+definition is first exercised by the push to main that merges it. That is a real regression window,
+accepted because the alternative charges every docs change for it.
+
 **A green CI run does not mean the app works.** It means the code compiles, host tests and
 fixtures pass, and the web bundle builds. Capture behaviour is verified on a physical reference
 device by the author, who records the device, OS version, lens and observation in the pull request
@@ -70,7 +90,8 @@ until Phase 4 brings iOS.
 | Reversibility | High |
 
 **Pros:** Fast; every check is reproducible locally; the guards convert two eroding ADR rules into
-build failures; the PR template makes device verification visible instead of implicit.
+build failures; the PR template makes device verification visible instead of implicit; path scoping
+keeps a docs pull request from paying for an Android build.
 **Cons:** Relies on author honesty for the hardware table. Mitigated by it being a review item and
 by a solo/small contributor base.
 
@@ -127,8 +148,12 @@ so nobody mistakes a green tick for a working camera.
 
 ## Action Items
 
-1. [x] Add `.github/workflows/ci.yml` with the four jobs.
+1. [x] Add `.github/workflows/ci.yml` with the four jobs, plus the `changes` job that scopes
+   `android` and `web` to their own directories on pull requests.
 2. [x] Add the hardware verification table to the pull request template.
 3. [ ] Davide: add the CI checks as required status checks on the `main` ruleset once they have run
-   once and their names exist.
+   once and their names exist. Safe to include `android` and `web`: they are skipped by a job-level
+   `if`, and a skipped job satisfies a required check.
 4. [ ] Revisit nightly instrumented tests when Phase 1 has UI worth regressing.
+5. [ ] Add `^web/` to the android scope in `tools/changed-scopes.sh` when ADR-0009 action 1 makes
+   the web bundle an input to `assembleDebug` (Phase 2).

@@ -110,7 +110,7 @@ The emulator has no real camera, no `MANUAL_SENSOR`, no hardware HEVC encoder an
 behaviour. It is useful for `:domain`, `:server` and non-camera UI, and for nothing else this app
 is about.
 
-Reference devices are one Pixel 10 and a MacBook running Safari and Chrome (ADR-0017, amending PRD
+Reference devices are one Pixel 10 and a MacBook running Safari and Chrome (ADR-0017, PRD
 section 9). There is no second phone and no iOS device, so a Phase 0 result is evidence about a
 Pixel 10 and about WebKit on macOS — say that, rather than implying fleet-wide or iOS coverage. The
 second OEM device and the iOS Safari check arrive before public beta; see ADR-0017.
@@ -121,6 +121,11 @@ not a feature.
 ## 4. Build, test, run
 
 Run from `android/` unless stated otherwise.
+
+On a pull request, the `android` and `web` jobs run **only when their own directory changed**
+(ADR-0016); `../tools/changed-scopes.sh origin/main` prints what CI will do for your branch. A push
+to `main` always runs the whole gate. A skipped job means CI saw nothing in that directory, not that
+it verified anything — the commands below are still yours to run.
 
 | Goal | Command |
 |---|---|
@@ -133,6 +138,7 @@ Run from `android/` unless stated otherwise.
 | Repo invariants | `../tools/check-adr-invariants.sh` |
 | `:domain` is platform-free | `../tools/check-domain-platform-free.sh` |
 | ADR index is consistent | `../tools/check-adr-index.sh` |
+| What CI will actually run for your branch | `../tools/changed-scopes.sh origin/main` |
 
 The build prints `WARNING: The 'commonTest' source directory exists, but android host tests are
 not enabled`. That is expected: `:domain` tests run on its `jvm` target, deliberately, so they

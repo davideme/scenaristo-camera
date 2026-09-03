@@ -11,6 +11,13 @@
 # contributor can reproduce any failure locally. Nothing here calls `android`,
 # `sdkmanager` or `adb`: local setup and CI setup differ (ADR-0014) and only the
 # commands are allowed to be shared.
+#
+# On a pull request the `android` and `web` jobs run only when their own
+# directory changed (`tools/changed-scopes.sh`, ADR-0016). A push to main always
+# runs the complete gate, so nothing merges to main unverified and the Gradle
+# cache keeps being written. `guards` and `pr-title` are never filtered: the
+# repository invariants cover documentation, and the ADR index breaks from a
+# docs-only change more easily than from a code one.
 name: ci
 
 on:
@@ -26,6 +33,23 @@ permissions:
   contents: read
 
 jobs:
+  # Which jobs are worth running. Cheap, and the same script a contributor can
+  # run locally to predict what CI will do:  ./tools/changed-scopes.sh origin/main
+  changes:
+    name: Changed scopes
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.scopes.outputs.android }}
+      web: ${{ steps.scopes.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The merge base has to be reachable for the diff to mean anything.
+          fetch-depth: 0
+      - id: scopes
+        # No argument on a push: every scope comes back true and the full gate runs.
+        run: ./tools/changed-scopes.sh "${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+
   guards:
     name: Repository invariants
     runs-on: ubuntu-latest
@@ -74,6 +98,8 @@ jobs:
 
   android:
     name: Build and test (Android)
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -108,6 +134,8 @@ jobs:
 
   web:
     name: Build and typecheck (web)
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
