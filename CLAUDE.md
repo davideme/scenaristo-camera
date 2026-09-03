@@ -44,7 +44,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 
 - Product decisions (scope, priority, defaults as experienced by users) are Davide's; propose, do not decide. Technical decisions go through ADRs.
 - The PRD's acceptance criteria are the definition of done for capture behaviour; cite them in tests.
-- Reference devices for Phase 0 are one Pixel and one Samsung (PRD section 9). Anything that only works on one of them is a bug or an ADR, not a feature.
+- The Phase 0 reference matrix is one phone and one browser: a Pixel 10 and a MacBook (ADR-0017, PRD section 9). There is no Samsung, no iPhone and no iPad. Do not write a checklist, test or doc line that assumes a second device, and do not describe a Pixel 10 result as Android-wide or a macOS Safari result as iOS coverage. Widening the matrix is a later phase and a superseding ADR.
 - `:domain` is a single-target Kotlin Multiplatform module; all of its code lives in `commonMain` so the compiler keeps it platform-free (ADR-0010).
 - CameraX is pinned at 1.6.2 (ADR-0002). Do not bump it; the 1.7 upgrade is a scheduled review with its own checklist in that ADR. All `Camera2Interop` usage stays inside the `ManualControls` class in `:capture`.
 - Do not commit or push unless asked. Branches are created by the workflow; do not create new ones.

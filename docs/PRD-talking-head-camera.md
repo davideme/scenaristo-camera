@@ -2,13 +2,13 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.3 |
+| **Status** | Draft v0.4 |
 | **Date** | 2026-09-03 |
 | **Author** | Davide Mendolia |
 | **Platforms** | Android first (min Android 14), then iOS (min iOS 16) |
 | **Scope** | v1 (capture engine + local web control) |
 
-> **Status of assumptions.** Technical positions are recorded as Architecture Decision Records in `docs/adr/` (index: `docs/adr/README.md`); this document cites them as (ADR-NNNN). Preview transport is an MJPEG HTTP stream (ADR-0008), crash resilience is covered up to a take length measured in Phase 0 (6.7), and behaviour on lenses without manual-control capabilities is decided (ADR-0011). Audio scope, platform order, minimum OS versions, web-interface security, and the Android capture stack were decided on 2026-09-03; see the decision log in section 8.
+> **Status of assumptions.** Technical positions are recorded as Architecture Decision Records in `docs/adr/` (index: `docs/adr/README.md`); this document cites them as (ADR-NNNN). Preview transport is an MJPEG HTTP stream (ADR-0008), crash resilience is covered up to a take length measured in Phase 0 (6.7), and behaviour on lenses without manual-control capabilities is decided (ADR-0011). Phase 0 runs on one reference device — a Pixel 10 — with a MacBook browser (ADR-0017); section 9 says what that leaves unmeasured. Audio scope, platform order, minimum OS versions, web-interface security, and the Android capture stack were decided on 2026-09-03; see the decision log in section 8.
 
 ---
 
@@ -298,7 +298,7 @@ Analytics are opt-in and local-first; no metric requires a backend in v1.
 2. **Kelvin → gains calibration on Android.** Decided direction (ADR-0011): one generic curve, normalised per device at 5600 K from the platform daylight gains; a per-device table only if Phase 0 grey-card tests miss ±300 K. — *Engineering*
 3. **Custom AE loop stability.** How aggressive can ISO adjustment be before it is visible on camera? Needs testing on real devices. — *Engineering*
 4. **Thermal behaviour at 4K30 HEVC.** How long can target devices sustain recording plus preview encoding before throttling? Determines whether the preview needs to drop to 5 fps when the phone is hot. — *Engineering*
-5. **Preview transport.** Decided for v1: MJPEG over HTTP rendered by the browser's own image element (ADR-0008); Phase 0 checks iPhone Safari rendering and measures latency and thermal cost. WebRTC stays P2; WebCodecs is excluded by plain HTTP (6.8). — *Engineering*
+5. **Preview transport.** Decided for v1: MJPEG over HTTP rendered by the browser's own image element (ADR-0008); Phase 0 checks rendering in Safari and Chrome on macOS and measures latency and thermal cost. Safari on iOS is checked in Phase 4, since there is no iOS device in the reference matrix (ADR-0017); macOS Safari is WebKit and covers the same MJPEG decode path, but not iOS media policy. WebRTC stays P2; WebCodecs is excluded by plain HTTP (6.8). — *Engineering*
 6. **Mixed-grid country list.** Confirm the list of countries needing the prominent toggle. — *Product*
 7. **Tech stack.** Decided: Kotlin with CameraX 1.6.2 reaching Camera2 through interop (ADR-0002); web UI as one static bundle served unchanged by both apps (ADR-0009); protocol specified independently of either app (ADR-0007); multiplatform strategy in ADR-0013. — *Engineering*
 8. **Pairing code format.** Number (4–6 digits) or emoji sequence for the P1 pairing check? Emoji is friendlier and harder to shoulder-surf across languages; digits are easier to read aloud to an assistant. — *Product / Design*
@@ -310,16 +310,16 @@ No hard external deadline is known. Suggested phasing:
 
 | Phase | Scope | Exit criterion |
 |---|---|---|
-| **0 — Android spike (1–2 wks)** | Prove manual shutter + custom ISO loop + locked WB through CameraX 1.6.2 interop on two Android reference devices (one Pixel, one Samsung); verify the requested exposure, ISO, and frame duration are echoed in capture results; record the codec each device profile selects for UHD. Measure thermal headroom. | Flicker-free 10-minute 4K30 clip on both devices, no throttling, interop keys honoured throughout. |
+| **0 — Android spike (1–2 wks)** | Prove manual shutter + custom ISO loop + locked WB through CameraX 1.6.2 interop on the Pixel 10 reference device (ADR-0017); verify the requested exposure, ISO, and frame duration are echoed in capture results; record the codec the device profile selects for UHD. Measure thermal headroom. | Flicker-free 10-minute 4K30 clip on the reference device, no throttling, interop keys honoured throughout, previewed in a macOS browser. |
 | **1 — Android capture engine + phone UI** | 6.1–6.7, 6.9, 6.10 on Android 14+. Recording works entirely on the phone. | Internal users record real content with defaults only. |
 | **2 — Web control** | 6.8: server, discovery, preview, full control and state sync. Open LAN access. Web UI built as a static bundle reusable by iOS. | A solo creator completes a take from a laptop without touching the phone. |
 | **3 — Android polish and P1** | Pairing check, file download, countdown, auto-once WB, stabilisation toggle, Play Store submission. CameraX 1.7 revisit if stable by then: HEVC enforcement, interop migration, crash-resilient files (ADR-0002). | Public Android beta. |
 | **4 — iOS** | Port the capture engine to AVFoundation on iOS 16+; reuse the web bundle and protocol unchanged; pass the shared domain fixtures (ADR-0013). | iOS reaches parity with the Android beta. |
 
 **Dependencies and risks**
-- Android manual-control support varies by OEM and by lens, independent of OS version. The reference device list should be chosen before Phase 0 and include a Pixel (LEVEL_3, all flags), a Samsung (main camera typically has `MANUAL_SENSOR`, secondary lenses often do not), and one device from an OEM known to restrict Camera2 manual controls despite offering them in its own camera app.
+- Android manual-control support varies by OEM and by lens, independent of OS version. Phase 0 runs on one reference device, a Pixel 10 (LEVEL_3, all flags), with a MacBook browser as the remote client (ADR-0017). A Samsung (main camera typically has `MANUAL_SENSOR`, secondary lenses often do not) and a device from an OEM known to restrict Camera2 manual controls despite offering them in its own camera app are the **pre-beta** matrix, added before Phase 3. A Pixel is the most permissive device in the fleet, so a Phase 0 pass is evidence about a Pixel 10, not about Android: OEM variation and the no-`MANUAL_SENSOR` lens path (6.10) stay unmeasured until that matrix widens.
 - Thermal throttling at 4K30 HEVC with simultaneous preview encoding is the single biggest technical risk; Phase 0 exists to retire it.
-- CameraX applies manual keys through interop on a best-effort basis. Phase 0 verifies they are honoured on both reference devices; Camera2-direct is the escape hatch for the control path if they are not (ADR-0002).
+- CameraX applies manual keys through interop on a best-effort basis. Phase 0 verifies they are honoured on the reference device (ADR-0017); Camera2-direct is the escape hatch for the control path if they are not (ADR-0002).
 - Shipping v1 with open LAN access is acceptable for home and small-studio use; the Play Store listing should say so plainly so that office users know to wait for the pairing check.
 - Apple Local Network permission and App Store review of a local HTTP server (Phase 4): no known blocker, but the review notes must explain the feature.
 
