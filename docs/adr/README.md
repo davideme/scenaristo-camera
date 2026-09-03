@@ -11,14 +11,14 @@ Decisions that shape the Scenaristo Camera architecture, one per file, numbered 
 | [0003](0003-foreground-service-for-capture-and-server.md) | Run capture and the web server in a foreground service; screen-off recording on Android | Accepted | 6.8, 6.9 |
 | 0004 | Withdrawn (fragmented MP4 recording). The plan lives in ADR-0002 Option B and its 1.7 revisit pin; the number is not reused. | Withdrawn | 6.7 |
 | [0005](0005-exposure-control-own-metering-loop.md) | In-app metering, damped ISO loop, flicker-safe shutter ladder | Accepted | 6.2, 6.3 |
-| [0006](0006-local-web-server.md) | Ktor CIO, plain HTTP, single bind with request-time LAN checks, no mDNS | Proposed (builds on the security decisions in the PRD log) | 6.8 |
+| [0006](0006-local-web-server.md) | Ktor CIO, plain HTTP, single bind with request-time LAN checks, no mDNS | Accepted | 6.8 |
 | [0007](0007-control-protocol.md) | JSON over one WebSocket, revisioned snapshots, idempotent commands | Accepted | 6.8 |
-| [0008](0008-preview-transport.md) | MJPEG HTTP stream rendered natively by the browser; JPEG over WebSocket as fallback | Proposed, amends 6.8 | 6.8, 6.12 |
-| [0009](0009-web-ui-static-bundle.md) | Web UI as one static bundle (Vite + TypeScript + Preact) built into app resources; TS types generated from `:domain` | Proposed, confirms 8-Q7 | 6.8, 9 |
-| [0010](0010-platform-free-domain-defer-kmp.md) | `:domain` as a single-target Kotlin Multiplatform module; iOS target deferred | Proposed | 9 |
+| [0008](0008-preview-transport.md) | MJPEG HTTP stream rendered natively by the browser; JPEG over WebSocket as fallback | Accepted | 6.8, 6.12 |
+| [0009](0009-web-ui-static-bundle.md) | Web UI as one static bundle (Vite + TypeScript + Preact) built into app resources; TS types generated from `:domain` | Accepted | 6.8, 9 |
+| [0010](0010-platform-free-domain-defer-kmp.md) | `:domain` as a single-target Kotlin Multiplatform module; iOS target deferred | Accepted | 9 |
 | [0011](0011-per-lens-capability-gating.md) | Require `MANUAL_SENSOR` to record; degrade WB without `MANUAL_POST_PROCESSING` | Accepted | 6.4, 6.10, 8-Q1 |
 | [0012](0012-minimum-os-versions.md) | Minimum OS Android 14 / iOS 16, with a measurement trigger | Accepted | 6.10, 8 |
-| [0013](0013-multiplatform-strategy.md) | Multiplatform: native capture per platform, shared web UI and protocol, fixture-tested domain; KMP and Compose Multiplatform deferred | Proposed | 9, 8-Q7 |
+| [0013](0013-multiplatform-strategy.md) | Multiplatform: native capture per platform, shared web UI and protocol, fixture-tested domain; KMP and Compose Multiplatform deferred | Accepted | 9, 8-Q7 |
 
 ## Challenges to positions stated in the PRD
 
@@ -45,4 +45,4 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 
 ## PRD amendments
 
-All amendments listed by the ADRs above were applied to the PRD on 2026-09-03 (Draft v0.3). The PRD cites the ADR next to each amended passage. Passages citing a Proposed ADR (currently 0006, 0008, 0009, 0010, 0013) are provisional until that ADR is Accepted; when a Proposed ADR is rejected, revert the cited passage and mark the ADR Deprecated.
+All amendments listed by the ADRs above were applied to the PRD on 2026-09-03 (Draft v0.3). The PRD cites the ADR next to each amended passage. Every ADR the PRD cites is Accepted as of 2026-09-03. If a future Proposed ADR amends the PRD before acceptance, mark the passage provisional here; when such an ADR is rejected, revert the cited passage and mark the ADR Deprecated.

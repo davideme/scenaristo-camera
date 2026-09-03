@@ -1,6 +1,6 @@
 # ADR-0006: Serve the web interface from an embedded Ktor server over plain HTTP bound to LAN interfaces
 
-**Status:** Proposed. The open-LAN-access and plain-HTTP decisions this ADR builds on were taken by Davide on 2026-09-03 in the PRD decision log; what this ADR proposes is the server library, the binding rule, and the client model.
+**Status:** Accepted (2026-09-03, Davide). The open-LAN-access and plain-HTTP decisions this ADR builds on were taken in the PRD decision log the same day; this ADR settles the server library, the binding rule, and the client model.
 **Date:** 2026-09-03
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.8 (discovery, security), 8 decision log

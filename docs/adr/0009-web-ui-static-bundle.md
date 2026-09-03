@@ -1,6 +1,6 @@
 # ADR-0009: Build the web UI as one static bundle embedded unchanged in both apps
 
-**Status:** Proposed (confirms PRD 8-Q7 recommendation)
+**Status:** Accepted (2026-09-03, Davide; confirms PRD 8-Q7 recommendation)
 **Date:** 2026-09-03
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.8, 8-Q7, 9 (Phase 2, Phase 4)

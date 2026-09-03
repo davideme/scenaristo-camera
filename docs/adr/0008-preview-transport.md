@@ -1,6 +1,6 @@
 # ADR-0008: Preview is an MJPEG HTTP stream rendered natively by the browser
 
-**Status:** Proposed (revised 2026-09-03 after review: MJPEG over HTTP replaces JPEG over WebSocket)
+**Status:** Accepted (2026-09-03, Davide; revised the same day after review: MJPEG over HTTP replaces JPEG over WebSocket)
 **Date:** 2026-09-03
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.8 (preview), 6.12 (WebRTC P2), 8-Q4, 8-Q5, 9 (thermal risk)

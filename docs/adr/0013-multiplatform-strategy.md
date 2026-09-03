@@ -1,6 +1,6 @@
 # ADR-0013: Multiplatform strategy: native capture per platform, shared web UI, shared protocol, platform-free domain
 
-**Status:** Proposed (consolidates ADR-0002, ADR-0007, ADR-0009, ADR-0010)
+**Status:** Accepted (2026-09-03, Davide; consolidates ADR-0002, ADR-0007, ADR-0009, ADR-0010)
 **Date:** 2026-09-03
 **Deciders:** Davide Mendolia
 **PRD sections:** 9 (Phase 4), 6.8, 8-Q7
