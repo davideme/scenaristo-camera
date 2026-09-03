@@ -63,9 +63,17 @@ android sdk install build-tools/37.0.0
 point it at the path `android info` prints. See ADR-0014 for why `sdk.dir` rather than
 `ANDROID_HOME`.
 
-Useful beyond setup: `android run` (build, install and launch on a connected device),
-`android screen` (screenshots), `android docs search "<topic>"` (offline official docs),
-`android emulator create|start`.
+Useful beyond setup: `android screen` (screenshots), `android docs search "<topic>"` (offline
+official docs), `android emulator create|start`, and to install and launch on a connected device:
+
+```bash
+cd android && ./gradlew :app:assembleDebug
+android run --apks app/build/outputs/apk/debug/app-debug.apk \
+            --activity com.scenaristo.camera.MainActivity
+```
+
+`android run` does **not** locate the APK by itself — without `--apks` it fails with
+"No apks specified". Build first, then pass the path.
 
 ### 3.3 Android tooling elsewhere, and why CI differs
 
@@ -116,7 +124,7 @@ Run from `android/` unless stated otherwise.
 | All host tests | `./gradlew test :domain:jvmTest` |
 | Android lint | `./gradlew lint` |
 | Debug APK | `./gradlew :app:assembleDebug` |
-| Install and launch on a device | `android run` |
+| Install and launch on a device | `./gradlew :app:assembleDebug` then `android run --apks app/build/outputs/apk/debug/app-debug.apk --activity com.scenaristo.camera.MainActivity` |
 | Repo invariants | `../tools/check-adr-invariants.sh` |
 | `:domain` is platform-free | `../tools/check-domain-platform-free.sh` |
 | ADR index is consistent | `../tools/check-adr-index.sh` |
