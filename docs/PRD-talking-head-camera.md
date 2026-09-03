@@ -171,7 +171,7 @@ Confirmed in scope for v1 (decision 2026-09-03).
 - Detection: iOS — check available codec types on the movie output; Android — query `MediaCodecList` for a `video/hevc` encoder that reports hardware acceleration (API 29+).
 - Target bitrate: HEVC 4K30 ≈ 45 Mbps; H.264 4K30 ≈ 80 Mbps. Tunable P1.
 - Container: MP4 (`.mp4`) on both platforms. Keyframe interval 1 s.
-- **Crash resilience:** write fragmented MP4 (or periodic moov updates) so that a file truncated by a crash or dead battery is still playable up to the last fragment.
+- **Crash resilience:** write fragmented MP4 (or periodic moov updates) so that a file truncated by a crash or dead battery is still playable up to the last fragment. **The mechanism is decided in [spec-chapter-markers.md](spec-chapter-markers.md) CM-1**: fragmented write plus a soft-remux finalisation (OBS's "hybrid MP4"), which is also what makes chapter markers possible. Decide this in Phase 1; retrofitting it later means replacing the muxer in a shipped app.
 - Files saved to the system camera roll (iOS Photos) or `Movies/Scenaristo` (Android MediaStore). Filename: `Scenaristo_YYYY-MM-DD_HH-MM-SS.mp4`.
 - Codec in use is displayed on phone and web before recording.
 
@@ -242,7 +242,7 @@ The phone UI is intentionally minimal: preview, record button, the QR/URL panel,
 - Flicker detection to confirm grid frequency.
 - Bitrate presets (Efficient / Standard / High).
 - Countdown before record (3-2-1) shown on the phone and web so the talent knows when to start.
-- Marker: press a key in the browser to timestamp a good take in a sidecar file.
+- **Chapter markers from the browser** — press a key to mark take boundaries in a long recording; written into the MP4 as a chapter track plus a crash-safe sidecar. Specified in [spec-chapter-markers.md](spec-chapter-markers.md). Note that its container requirement lands in Phase 1, not Phase 3.
 
 ### 6.12 Future considerations (P2)
 
