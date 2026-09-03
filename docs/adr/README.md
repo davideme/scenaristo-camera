@@ -11,11 +11,11 @@ Decisions that shape the Scenaristo Camera architecture, one per file, numbered 
 | [0003](0003-foreground-service-for-capture-and-server.md) | Run capture and the web server in a foreground service; screen-off recording on Android | Accepted | 6.8, 6.9 |
 | 0004 | Withdrawn (fragmented MP4 recording). The plan lives in ADR-0002 Option B and its 1.7 revisit pin; the number is not reused. | Withdrawn | 6.7 |
 | [0005](0005-exposure-control-own-metering-loop.md) | In-app metering, damped ISO loop, flicker-safe shutter ladder | Accepted | 6.2, 6.3 |
-| [0006](0006-local-web-server.md) | Ktor CIO, plain HTTP, per-interface LAN binding, Host validation | Proposed; security scope Accepted | 6.8 |
+| [0006](0006-local-web-server.md) | Ktor CIO, plain HTTP, single bind with request-time LAN checks, no mDNS | Proposed (builds on the security decisions in the PRD log) | 6.8 |
 | [0007](0007-control-protocol.md) | JSON over one WebSocket, revisioned snapshots, idempotent commands | Accepted | 6.8 |
-| [0008](0008-preview-transport.md) | JPEG over WebSocket behind a transport abstraction | Proposed, confirms 6.8 | 6.8, 6.12 |
-| [0009](0009-web-ui-static-bundle.md) | Web UI as one static bundle (Vite + TypeScript + Preact) embedded in both apps | Proposed, confirms 8-Q7 | 6.8, 9 |
-| [0010](0010-platform-free-domain-defer-kmp.md) | Platform-free `:domain` module; defer Kotlin Multiplatform | Proposed | 9 |
+| [0008](0008-preview-transport.md) | MJPEG HTTP stream rendered natively by the browser; JPEG over WebSocket as fallback | Proposed, amends 6.8 | 6.8, 6.12 |
+| [0009](0009-web-ui-static-bundle.md) | Web UI as one static bundle (Vite + TypeScript + Preact) built into app resources; TS types generated from `:domain` | Proposed, confirms 8-Q7 | 6.8, 9 |
+| [0010](0010-platform-free-domain-defer-kmp.md) | `:domain` as a single-target Kotlin Multiplatform module; iOS target deferred | Proposed | 9 |
 | [0011](0011-per-lens-capability-gating.md) | Require `MANUAL_SENSOR` to record; degrade WB without `MANUAL_POST_PROCESSING` | Accepted | 6.4, 6.10, 8-Q1 |
 | [0012](0012-minimum-os-versions.md) | Minimum OS Android 14 / iOS 16, with a measurement trigger | Accepted | 6.10, 8 |
 | [0013](0013-multiplatform-strategy.md) | Multiplatform: native capture per platform, shared web UI and protocol, fixture-tested domain; KMP and Compose Multiplatform deferred | Proposed | 9, 8-Q7 |
@@ -31,8 +31,9 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | 6.3 "read the exposure offset from the device" | Android provides no metering feedback with AE off. Meter in-app from the analysis stream on both platforms. | 0005 |
 | 6.8 "Multiple browsers may connect; last write wins" | Without a revision, stale clients clobber fresh changes and a retried record message toggles recording off. Use commands with ids and revisioned snapshots. | 0007 |
 | 6.8 "Plain HTTP" (kept) | Consequence not stated in the PRD: no secure context, so WebCodecs is unavailable; preview transport is limited to JPEG/WebSocket now and WebRTC later. Decision stands. | 0006, 0008 |
-| 6.8 "bind to the LAN interface only" | There are several LAN interfaces (Wi-Fi, hotspot, tethering); bind per interface, rebind on change, and validate the `Host` header against DNS rebinding. | 0006 |
-| 6.7 "fragmented MP4 (or periodic moov updates)" and the crash-resilience acceptance criterion | Not achievable with the CameraX 1.6.2 stock `Recorder`. Accepted as an MVP loss; moves to P1 with ADR-0002 Option B as the plan. | 0002 |
+| 6.8 "bind to the LAN interface only" and "mDNS name advertised" | Bind once and enforce LAN-only per request (private remote address, IP-literal `Host`); `NsdManager` on API 34 cannot register a hostname, so mDNS is dropped from v1. | 0006 |
+| 6.8 "JPEG frames over WebSocket" | Browsers render MJPEG natively from an `<img>`; serve `multipart/x-mixed-replace` over HTTP and write no preview protocol. | 0008 |
+| 6.7 "fragmented MP4 (or periodic moov updates)" and the crash-resilience acceptance criterion | The CameraX 1.6.2 stock `Recorder` rewrites `moov` every second within a 400 KB reserve, so resilience is covered up to a take length Phase 0 measures; guaranteed resilience for any length is P1. | 0002 |
 | 6.7 "HEVC if a hardware encoder is present" | CameraX 1.6.2 offers no SDR codec selector; codec follows the device profile and is shown before recording. Enforced again at CameraX 1.7 via `setVideoMimeType`. | 0002 |
 | 6.6 "Level meter updates at ≥ 10 Hz" | CameraX reports amplitude every 200 ms. MVP ships 5 Hz. | 0002 |
 | 8-Q7 "Native Android (Kotlin, Camera2)" | Kotlin yes; Camera2 reached through CameraX 1.6.2 and `Camera2Interop`, not directly. Camera2-direct kept as the escape hatch. | 0002 |
@@ -44,4 +45,4 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 
 ## PRD amendments
 
-All amendments listed by the ADRs above were applied to the PRD on 2026-09-03 (Draft v0.3). The PRD cites the ADR next to each amended passage. When a Proposed ADR is rejected, revert the cited passage and mark the ADR Deprecated.
+All amendments listed by the ADRs above were applied to the PRD on 2026-09-03 (Draft v0.3). The PRD cites the ADR next to each amended passage. Passages citing a Proposed ADR (currently 0006, 0008, 0009, 0010, 0013) are provisional until that ADR is Accepted; when a Proposed ADR is rejected, revert the cited passage and mark the ADR Deprecated.

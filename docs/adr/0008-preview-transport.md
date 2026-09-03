@@ -1,75 +1,87 @@
-# ADR-0008: Preview is JPEG frames over the control WebSocket, behind a transport abstraction
+# ADR-0008: Preview is an MJPEG HTTP stream rendered natively by the browser
 
-**Status:** Proposed (confirms PRD 6.8 drafting position, records why alternatives are excluded)
+**Status:** Proposed (revised 2026-09-03 after review: MJPEG over HTTP replaces JPEG over WebSocket)
 **Date:** 2026-09-03
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.8 (preview), 6.12 (WebRTC P2), 8-Q4, 8-Q5, 9 (thermal risk)
 **Related ADRs:** ADR-0002, ADR-0006, ADR-0007
 
 ## Context
-The PRD drafts a 960×540, up to 15 fps, JPEG-over-WebSocket preview with < 500 ms glass-to-glass latency, adaptive under bandwidth pressure, never stealing encoder time from the 4K recording, and lists WebRTC as P2. Open Question 5 asks whether JPEG can meet the latency target or WebRTC is needed in v1. Two constraints from other ADRs narrow the field: the page is served over plain HTTP (ADR-0006), so WebCodecs is unavailable; and the thermal budget is the biggest risk (ADR-0002), so preview encoding cost matters as much as latency.
+The PRD drafts a 960×540, up to 15 fps JPEG preview with < 500 ms glass-to-glass latency, adaptive under bandwidth pressure, never stealing encoder time from the 4K recording, and lists WebRTC as P2. Two constraints from other ADRs narrow the field: the page is served over plain HTTP (ADR-0006), so WebCodecs is unavailable; and the thermal budget is the biggest risk (ADR-0002), so preview encoding cost matters as much as latency.
 
-Rough numbers for the JPEG path: a 960×540 frame at JPEG quality 70 is 50–100 KB; 15 fps is 0.75–1.5 MB/s, about 6–12 Mbit/s, which a healthy Wi-Fi 5 link carries but a congested 2.4 GHz link may not. Software JPEG encoding of that frame costs a few milliseconds on one core; at 15 fps that is well under 10 % of a core.
+The first draft of this ADR sent JPEG frames as binary WebSocket messages with a custom 12-byte header, a one-byte per-frame acknowledgement for backpressure, Blob-URL swapping on an image element, and a `PreviewTransport` interface on both sides. Review pointed out that browsers render a `multipart/x-mixed-replace` MJPEG stream natively from a plain `<img>` element, that Ktor writes such a stream from one route, and that the suspending write already provides backpressure, so every piece of that custom protocol was code the platform provides.
+
+Rough numbers: a 960×540 frame at JPEG quality 70 is 50–100 KB; 15 fps is 6–12 Mbit/s, fine on Wi-Fi 5, marginal on a congested 2.4 GHz link. `YuvImage.compressToJpeg` encodes through the platform's libjpeg-turbo and costs a few milliseconds per frame on one core.
 
 ## Decision
-We will ship v1 preview as **JPEG frames over the existing WebSocket** (binary frames, ADR-0007), produced from the `ImageAnalysis` NV21 stream (ADR-0002) via `YuvImage.compressToJpeg`, which takes NV21 directly so no conversion step is needed, displayed in the browser by swapping a Blob URL on an `<img>` (or drawing to a canvas for overlays). Behind a small `PreviewTransport` interface on both the phone and the web side, so a second transport can be added without touching the control protocol.
+We will serve the preview as an **MJPEG stream over HTTP**: a Ktor route `/preview.mjpg` responding with `multipart/x-mixed-replace` through `respondBytesWriter`, and the web UI renders it with `<img src="/preview.mjpg">`. No custom framing, no acknowledgement protocol, no Blob handling, no transport interface.
 
-Adaptation rules:
-- The server sends the next frame only after the client acknowledges the previous one (a one-byte binary ack), giving natural backpressure; it never queues more than one frame per client.
-- Quality steps 80 → 60 → 40 and frame rate 15 → 10 → 5 fps when the round-trip ack time exceeds 150 ms for two consecutive frames; steps back up after 3 s of headroom.
-- When the device thermal state is `serious` or worse, preview drops to 5 fps regardless of network (PRD 8-Q4).
-- Each frame carries a 12-byte header: frame sequence, capture timestamp (ms), and flags, so the client can measure latency and the phone can report "connection quality" in the state document.
+- **Frames** come from the `ImageAnalysis` NV21 stream (ADR-0002) through `YuvImage.compressToJpeg` (NV21 in, no conversion) into a per-client `Channel(CONFLATED)`, so a slow client always receives the newest frame and never a queue.
+- **Backpressure** is the suspending write on the response channel; TCP does the rest.
+- **Adaptation:** the producer caps at 15 fps; if a client's write blocks for more than 150 ms twice in a row, that client's quality steps 80 → 60 → 40, stepping back after 3 s of headroom. When the thermal state is `serious` or worse, the producer drops to 5 fps for all clients (PRD 8-Q4).
+- **Latency measurement** is done in Phase 0 with a clapper; the state document (ADR-0007) reports the producer's current fps and quality as "connection quality". There is no per-frame timestamp channel.
+- **Overlays** (rule of thirds, eye line) are an absolutely positioned SVG over the image, never burned in.
+- The control WebSocket (ADR-0007) carries text only; preview does not share it.
 
-Framing overlays (rule of thirds, eye line) are drawn client-side over the image, never burned into the JPEG.
+**Fallback:** if Phase 0 shows an iPhone browser cannot render the stream (WebKit has a history of MJPEG regressions), the fallback is JPEG frames as binary WebSocket messages with the client swapping a Blob URL, adopted then and only then.
 
 ## Options Considered
 
-### Option A: JPEG over WebSocket (chosen)
+### Option A: MJPEG over HTTP (chosen)
 | Dimension | Assessment |
 |---|---|
-| Complexity | Low |
-| Risk | Low; measurable in Phase 0 |
-| Effort | Days |
+| Complexity | Lowest: one route, one `<img>` |
+| Risk | Low-Medium: iOS Safari rendering must be checked once |
+| Effort | A day |
 | Reversibility | High |
 
-**Pros:** Works in every browser over plain HTTP; no native library; trivial to reason about; per-frame backpressure gives adaptation for free; the same frames feed metering.
-**Cons:** 10× the bandwidth of a video codec; CPU encode adds some heat; 15 fps ceiling is the practical limit.
+**Pros:** Zero client code; the browser decodes, repaints, and reconnects; backpressure and "newest frame wins" come from a conflated channel and a suspending write; the same route serves iOS later.
+**Cons:** Worst-case latency is bounded by socket buffers rather than by one frame in flight; no per-frame timestamps; a second connection alongside the control socket.
 
-### Option B: H.264 elementary stream over WebSocket decoded with WebCodecs
+### Option B: JPEG over WebSocket with custom header and ack (first draft)
 | Dimension | Assessment |
 |---|---|
 | Complexity | Medium |
-| Risk | Blocked |
+| Risk | Low |
+| Effort | Days, on both sides, again on iOS |
+| Reversibility | High |
+
+**Pros:** Exactly one frame in flight; per-frame latency numbers; single connection.
+**Cons:** Frame codec, ack state machine, Blob lifecycle, text/binary demux, and a header spec, all replacing what `<img>` gives for free. Kept as the fallback.
+
+### Option C: H.264 over WebSocket decoded with WebCodecs
+Blocked: WebCodecs requires a secure context; unavailable on `http://` LAN origins (ADR-0006).
+
+### Option D: Fragmented MP4 into Media Source Extensions
+| Dimension | Assessment |
+|---|---|
+| Complexity | Medium-High |
+| Risk | Medium: iPhone Safari limited to `ManagedMediaSource` |
 | Effort | Medium |
 | Reversibility | High |
 
-**Pros:** Hardware encode on the phone (second `MediaCodec` instance at 540p costs almost nothing), ~1 Mbit/s, 30 fps, ~100 ms latency.
-**Cons:** WebCodecs requires a secure context; unavailable on `http://` LAN origins. Dead until ADR-0006 changes.
+**Pros:** Hardware encode; low bandwidth; low latency is achievable with one fragment per frame.
+**Cons:** Needs a second encoder session and a fragmented muxer the MVP does not otherwise own (ADR-0002 Option A), plus iPhone-specific MSE handling. Worth revisiting together with WebRTC.
 
-### Option C: Fragmented MP4 over WebSocket into Media Source Extensions
-**Pros:** Hardware encode, works on plain HTTP in desktop browsers.
-**Cons:** MSE buffering adds 0.5–1.5 s of latency by design; iPhone Safari support is limited to `ManagedMediaSource` on recent versions; the PRD requires phone-sized browsers to work. Latency target likely missed.
-
-### Option D: WebRTC (P2 in the PRD)
+### Option E: WebRTC (P2 in the PRD)
 | Dimension | Assessment |
 |---|---|
 | Complexity | High |
 | Risk | Medium |
-| Effort | Weeks; libwebrtc adds ~20–30 MB to the APK |
+| Effort | Weeks; native libwebrtc dependency |
 | Reversibility | Medium |
 
-**Pros:** Best latency and bandwidth; hardware codecs; works over plain HTTP in current browsers (to be verified, ADR-0006 action item).
-**Cons:** Signalling, ICE on multi-interface hosts, a large native dependency, and a second concurrent encoder session all before v1 has proven the capture engine. Right upgrade path, wrong first step.
+**Pros:** Best latency and bandwidth; hardware codecs; congestion control built in; `RTCPeerConnection` works on `http://` origins. Signalling rides on the existing control socket.
+**Cons:** ICE on multi-interface hosts and a large native dependency before the capture engine is proven. Right upgrade path, wrong first step.
 
 ## Trade-off Analysis
-With WebCodecs excluded by the HTTP decision and MSE failing the latency and mobile-Safari requirements, the realistic v1 choice is JPEG or WebRTC. JPEG meets the stated latency target on a healthy network with days of work and no native dependency; its cost is bandwidth and modest CPU, both of which Phase 0 measures. WebRTC remains the P2 path and the transport interface keeps it cheap to add.
+With WebCodecs excluded and MSE and WebRTC both requiring encoder and muxer work the MVP does not own, the choice is between two JPEG deliveries. MJPEG over HTTP is the one with no protocol to write or maintain, and its single real risk (iPhone rendering) is a one-hour Phase 0 check with a defined fallback.
 
 ## Consequences
-- Easier: preview works in every browser on day one; thermal contribution is measurable and bounded by the fps cap.
-- Harder: preview looks like 15 fps MJPEG, which is acceptable for framing but not for judging motion; congested 2.4 GHz networks will see 5 fps.
-- Revisit when: Phase 0 measures > 500 ms glass-to-glass on a typical home network, or JPEG encoding raises steady-state temperature measurably, or WebRTC is scheduled.
+- Easier: the preview is a route and a tag; nothing to specify in `docs/protocol`; iOS reuses the route unchanged.
+- Harder: no per-frame latency telemetry; a congested 2.4 GHz network shows 5 fps and lower quality.
+- Revisit when: Phase 0 measures > 500 ms glass-to-glass on a typical home network or an iPhone browser fails to render; or WebRTC is scheduled.
 
 ## Action Items
-1. [ ] Phase 0: measure glass-to-glass latency and phone temperature delta with preview on versus off during a 10-minute 4K30 HEVC recording.
-2. [ ] Compare `YuvImage.compressToJpeg` against an NDK libjpeg-turbo build if CPU cost exceeds 10 % of a core.
-3. [ ] Define the binary frame header in `docs/protocol/v1.md`.
+1. [ ] Phase 0: render the stream in Safari on an iPhone and an iPad, and in Chrome, Firefox, and Edge on a laptop; record results here.
+2. [ ] Phase 0: measure glass-to-glass latency with a clapper and the phone temperature delta with preview on versus off during a 10-minute 4K30 recording.

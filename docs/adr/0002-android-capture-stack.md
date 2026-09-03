@@ -13,7 +13,7 @@ Checked on 2026-09-03 against CameraX 1.6.2 (stable, 26 Aug 2026) and 1.7.0-alph
 
 - **1.5.0** added `SessionConfig` with feature groups and a deterministic frame-rate API: `CameraInfo.getSupportedFrameRateRanges(sessionConfig)` plus `SessionConfig.Builder.setFrameRateRange`, so [30, 30] is a guaranteed range rather than a hint. `ImageAnalysis` can output NV21 directly.
 - **1.6.0** moved CameraX onto CameraPipe (the Pixel camera stack, no opt-out), made a Media3 muxer the default for `VideoCapture`, added `UHD_RECORDING` and `VIDEO_STABILIZATION` feature groups with `isFeatureGroupSupported`, and made frame rate set through interop respected.
-- **1.6 muxer detail:** `Recorder` writes through Media3 `MediaMuxerCompat`, which wraps the non-fragmented `Mp4Muxer`; `moov` is written at close and the source shows no periodic write or recovery path. The "crash resilience" release note refers to fixed corruption bugs, not to a file that survives a missing close.
+- **1.6 muxer detail (corrected after review):** `Recorder` writes through Media3 `MediaMuxerCompat`, which wraps the non-fragmented `Mp4Muxer` with defaults. Media3's `Mp4Writer` reserves a 400 KB `free` box after `ftyp` and rewrites `moov` there every 1 s of media time (`MOOV_BOX_UPDATE_INTERVAL_US`), keeping the `mdat` size current, until `moov` outgrows the reserve, after which it falls back to writing `moov` at the end on close. A force-killed recording is therefore playable up to the last rewrite as long as the take is short enough for `moov` to fit the reserve; sample tables for 4K30 video plus AAC grow by a few hundred bytes per second, so the covered length is on the order of ten to fifteen minutes and must be measured. The 1.6 "crash resilience" release note refers to this behaviour.
 - **1.6 codec detail:** no public way to force HEVC for SDR; the codec follows the device encoder profiles for the selected quality. It can be read before recording via `Recorder.getVideoCapabilities(cameraInfo).getProfiles(quality)`.
 - **1.6 audio detail:** amplitude reported every 200 ms through `RecordingStats.getAudioStats()`; no PCM access; no input-device selection; audio source selectable by `MediaRecorder.AudioSource` constant only.
 - **1.7.0-alpha02/03:** `Recorder.Builder.setVideoMimeType` / `setAudioMimeType` and `getSupportedVideoMimeTypes` (experimental); legacy `Camera2Interop`, `Camera2CameraControl`, `Camera2CameraInfo`, `CaptureRequestOptions` deprecated in favour of a configurator API and Kotlin DSL.
@@ -23,7 +23,7 @@ Against that, Camera2-direct costs the most code, and CameraX's stream-combinati
 ## Decision
 We will build the Android capture engine on **CameraX 1.6.2, pinned**, with the stock `Recorder`:
 
-- **Use cases:** `Preview` (phone screen), `VideoCapture<Recorder>` (file output via `MediaStoreOutputOptions`), `ImageAnalysis` (NV21, ≈960×540, `STRATEGY_KEEP_ONLY_LATEST`) for metering and the web preview. All bound to a `LifecycleOwner` owned by the foreground service (ADR-0003), through a `SessionConfig` with required feature group `UHD_RECORDING` and `setFrameRateRange(30, 30)`; if `isFeatureGroupSupported` fails for UHD, fall back to FHD as PRD 6.1 allows.
+- **Use cases:** `Preview` (phone screen), `VideoCapture<Recorder>` (file output via `MediaStoreOutputOptions`), `ImageAnalysis` (NV21, ≈960×540, `STRATEGY_KEEP_ONLY_LATEST`) for metering and the web preview. `Preview` is rendered on the phone by the `CameraXViewfinder` composable from `androidx.camera:camera-compose`. All use cases are bound to the foreground service, which extends `LifecycleService` (ADR-0003), through a `SessionConfig` with required feature group `UHD_RECORDING` and `setFrameRateRange(30, 30)`; if `isFeatureGroupSupported` fails for UHD, fall back to FHD as PRD 6.1 allows.
 - **Manual control:** `CONTROL_AE_MODE_OFF`, `SENSOR_EXPOSURE_TIME`, `SENSOR_SENSITIVITY`, `SENSOR_FRAME_DURATION`, `CONTROL_AWB_MODE_OFF`, `COLOR_CORRECTION_MODE_TRANSFORM_MATRIX`, `COLOR_CORRECTION_GAINS`, `LENS_OPTICAL_STABILIZATION_MODE OFF` set through `Camera2Interop` at bind time and updated at runtime through `Camera2CameraControl.setCaptureRequestOptions`. `CaptureResult`s are read through the interop session capture callback for the ISO echo check (ADR-0005) and `STATISTICS_FACES`. We never use `ImageCapture`, exposure compensation, torch, or AE-affecting focus actions, so CameraX's own 3A has no reason to overwrite the keys. All interop code lives in one class, `ManualControls`, because the API is replaced in 1.7.
 - **Encoding:** `Recorder.Builder().setQualitySelector(UHD, fallback FHD).setTargetVideoEncodingBitRate(45 Mbps)`; codec is whatever the device profile provides and is read and shown before recording (PRD 6.7 readout stays). Stabilisation off via `setVideoStabilizationEnabled(false)` and the OIS interop key.
 - **Audio:** `withAudioEnabled()`; level meter from `RecordingStats.audioStats.audioAmplitude` at 5 Hz; clipping shown when amplitude ≥ 0.99 for two consecutive samples; active input read from `AudioManager.getActiveRecordingConfigurations()` for the readout.
@@ -33,15 +33,15 @@ We will build the Android capture engine on **CameraX 1.6.2, pinned**, with the 
 
 | PRD requirement | MVP status |
 |---|---|
-| 6.7 crash-resilient file | Not provided. Force-kill leaves an unplayable file. PRD acceptance "25 s playable of 30 s" and the edge-case user story move to P1. Plan in Option B below. |
+| 6.7 crash-resilient file | Provided by the stock `Recorder` up to the take length at which `moov` outgrows the 400 KB reserve (Phase 0 measures it; expected on the order of 10–15 min). Beyond that length a force-kill leaves an unplayable file. Guaranteed resilience for any length stays P1. |
 | 6.7 HEVC whenever hardware exists | Codec follows the device profile. Readout kept. Metric "100 % HEVC on capable devices" suspended until 1.7. |
 | 6.6 level meter ≥ 10 Hz | 5 Hz. |
 | 6.6 input priority | System routing; readout only. |
 | Encoder details (GOP, B-frames, profile) | Not settable. |
 
-**Revisit pin:** when CameraX 1.7.0 reaches stable. Checklist: adopt `setVideoMimeType` with `getSupportedVideoMimeTypes` to enforce HEVC; migrate `ManualControls` to the new interop configurator API; re-check whether `Recorder` output is fragmented or otherwise survives a force-kill; if not, evaluate Option B below for the crash requirement. Do not bump the CameraX version before that review.
+**Revisit pin:** when CameraX 1.7.0 reaches stable. Checklist: adopt `setVideoMimeType` with `getSupportedVideoMimeTypes` to enforce HEVC; migrate `ManualControls` to the new interop configurator API; re-check whether `Recorder` exposes a fragmented or otherwise length-independent crash-safe output; if not and the measured coverage is too short for real takes, the only library-supported path is Option C for the recording pipeline, because Option B is not a supported extension point (see below). Do not bump the CameraX version before that review.
 
-The Gradle layout stays `:domain` (pure Kotlin, ADR-0010), `:capture` (CameraX, `ManualControls`, audio stats, analysis frame fan-out), `:server` (ADR-0006, ADR-0007), `:app` (Compose, service, wiring). `:capture` exposes an interface so Options B and C remain drop-in.
+The Gradle layout stays `:domain` (single-target Kotlin Multiplatform module, ADR-0010), `:capture` (CameraX, `ManualControls`, audio stats, analysis frame fan-out), `:server` (ADR-0006, ADR-0007), `:app` (Compose, `LifecycleService`, wiring). `:capture` exposes an interface so Option C remains drop-in.
 
 ## Options Considered
 
@@ -56,16 +56,16 @@ The Gradle layout stays `:domain` (pure Kotlin, ADR-0010), `:capture` (CameraX, 
 **Pros:** Weeks less code; guaranteed frame-rate range and UHD feature group; CameraPipe quirk handling on Samsung; `ImageAnalysis` NV21 feeds metering and JPEG preview directly.
 **Cons:** The accepted losses above; codec and container are not ours to choose until 1.7.
 
-### Option B: CameraX 1.6.2 with a custom `VideoOutput`
+### Option B: CameraX 1.6.2 with a custom `VideoOutput` (not a supported extension point)
 | Dimension | Assessment |
 |---|---|
-| Complexity | Medium |
-| Risk | Medium: `VideoOutput` is advanced API without the stability promise of the rest |
-| Effort | Medium: own `MediaCodec`, Media3 `FragmentedMp4Muxer`, own `AudioRecord` |
-| Reversibility | High |
+| Complexity | High |
+| Risk | High: only `onSurfaceRequested(SurfaceRequest)` is public; `getMediaSpec`, `getStreamInfo`, `onSourceStateChanged`, `getMediaCapabilities`, `getEncoderProfilesResolver`, `isSourceStreamRequired`, `onValidateConfig`, `isQualitySelectorDefault` and the three-argument `onSurfaceRequested` are `@RestrictTo(Scope.LIBRARY)` |
+| Effort | High: own `MediaCodec`, Media3 `FragmentedMp4Muxer`, own `AudioRecord`, and no way to declare quality or observe source state |
+| Reversibility | Low-Medium |
 
 **Pros:** Recovers HEVC selection, fragmented MP4, a real level meter and input selection, while keeping CameraX session management. For the fragmented file: Media3 `FragmentedMp4Muxer` (H.265, H.264, AV1, AAC; `setFragmentDurationMs`; no out-of-order B-frames, so configure the encoder with `KEY_MAX_B_FRAMES = 0`), fragment duration 1 000 ms aligned with the keyframe interval, `fsync` per fragment, and an editor import test (Premiere, Resolve, Final Cut, CapCut, iMovie) before shipping. iOS gets the same shape from `AVAssetWriter.movieFragmentInterval`.
-**Cons:** Owns encoder, muxer, and audio, which is most of the code Option A avoids. The natural next step if 1.7 does not close the crash-resilience gap.
+**Cons:** Owns encoder, muxer, and audio, which is most of the code Option A avoids, and because the rest of the interface is library-restricted a third-party output cannot set UHD or take part in feature-group resolution, so in practice this collapses into Option C with CameraX supplying only a `Surface`. Not a fallback; recorded so nobody rediscovers it.
 
 ### Option C: Camera2 + `MediaCodec` direct (first draft of this ADR)
 | Dimension | Assessment |
@@ -96,6 +96,6 @@ The MVP has to prove that locked shutter, app-driven ISO, locked WB, and the bro
 1. [ ] Pin `androidx.camera:*:1.6.2` in the version catalog with a comment pointing at this ADR's revisit pin.
 2. [ ] Phase 0: verify through the session capture callback that `SENSOR_EXPOSURE_TIME`, `SENSOR_SENSITIVITY`, and `SENSOR_FRAME_DURATION` echo the requested values on Pixel and Samsung while recording UHD at [30, 30].
 3. [ ] Phase 0: log the codec chosen by the device profile for UHD on both reference devices; record here.
-4. [ ] Phase 0: force-kill a recording at 30 s and record whether the file plays; record here (expected: no).
-5. [ ] Amend PRD 6.6 (level meter 5 Hz), 6.7 (crash resilience to P1, HEVC "when the device profile provides it" until 1.7), and 6.1 (OIS off).
+4. [ ] Phase 0: force-kill a recording at 30 s and confirm the file plays to about 29 s (expected: yes); then find the take length at which `moov` outgrows the 400 KB reserve by force-killing at increasing durations, and record the covered length here and in PRD 6.7.
+5. [x] Amend PRD 6.6 (level meter 5 Hz), 6.7 (crash resilience covered up to a measured length, HEVC "when the device profile provides it" until 1.7), and 6.1 (OIS off).
 6. [ ] Create a tracking issue "CameraX 1.7 revisit" with the checklist from the revisit pin.

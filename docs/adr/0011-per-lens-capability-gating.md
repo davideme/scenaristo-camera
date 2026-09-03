@@ -54,7 +54,7 @@ Option A follows the product's own priority order: flicker is non-negotiable, co
 - Revisit when: Phase 0 grey-card results on the generic curve; or an OEM is found to declare `manualSensor` but ignore `SENSOR_EXPOSURE_TIME` (then add a runtime verification that the `CaptureResult` echoes the requested exposure time and treat mismatch as `manualSensor` false).
 
 ## Action Items
-1. [ ] Mark Open Question 1 as decided in the PRD decision log, referencing this ADR.
+1. [x] Mark Open Question 1 as decided in the PRD decision log, referencing this ADR.
 2. [ ] Implement the probe and the `:domain` gating function with fixtures for Pixel and Samsung reference devices.
 3. [ ] Phase 0: grey-card test of the generic Kelvin curve at 3200 K and 5600 K on both reference devices.
 4. [ ] Add the `CaptureResult` echo check for exposure time and sensitivity to the probe.

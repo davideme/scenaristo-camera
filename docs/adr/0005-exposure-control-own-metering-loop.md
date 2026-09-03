@@ -65,7 +65,7 @@ Option B is cheaper but fails the core promise on real devices. Between A and C,
 - Revisit when: Phase 0 shows visible pumping that the damping cannot remove, a reference device reports faces unreliably with AE off, or CameraX overrides the interop AE keys on a reference device (then ADR-0002 Option C for the control path).
 
 ## Action Items
-1. [ ] Amend PRD 6.3 wording as stated above and add "shutter in use" to the status readouts in 6.8.
+1. [x] Amend PRD 6.3 wording as stated above and add "shutter in use" to the status readouts in 6.8.
 2. [ ] Phase 0: record the ISO trace for a step change in light and verify settle time and overshoot on both reference devices.
 3. [ ] Phase 0: measure typical lux at a window-side desk with the reference devices' base ISO to confirm how often the ladder engages.
 4. [ ] Decide the noise threshold per device (PRD default ISO 800) from Phase 0 samples.

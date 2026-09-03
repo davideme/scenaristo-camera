@@ -39,5 +39,5 @@ Raising a floor after launch is painful; lowering it is cheap. Starting high dur
 - Revisit when: before Phase 3 (public beta), using Play Console device-catalogue numbers for API 31–33 among phones with a `MANUAL_SENSOR` main camera. If that share is material, lower to API 31 and add one reference device on Android 12.
 
 ## Action Items
-1. [ ] Add the rationale above to the PRD decision log entry.
+1. [x] Add the rationale above to the PRD decision log entry.
 2. [ ] Before Phase 3: pull Play Console device-catalogue data for API 31–33 and record the excluded share in this ADR.

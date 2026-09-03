@@ -8,7 +8,7 @@
 | **Platforms** | Android first (min Android 14), then iOS (min iOS 16) |
 | **Scope** | v1 (capture engine + local web control) |
 
-> **Status of assumptions.** Technical positions are recorded as Architecture Decision Records in `docs/adr/` (index: `docs/adr/README.md`); this document cites them as (ADR-NNNN). Preview transport is JPEG over WebSocket (ADR-0008), crash-resilient files are deferred to P1 (6.7), and behaviour on lenses without manual-control capabilities is decided (ADR-0011). Audio scope, platform order, minimum OS versions, web-interface security, and the Android capture stack were decided on 2026-09-03; see the decision log in section 8.
+> **Status of assumptions.** Technical positions are recorded as Architecture Decision Records in `docs/adr/` (index: `docs/adr/README.md`); this document cites them as (ADR-NNNN). Preview transport is an MJPEG HTTP stream (ADR-0008), crash resilience is covered up to a take length measured in Phase 0 (6.7), and behaviour on lenses without manual-control capabilities is decided (ADR-0011). Audio scope, platform order, minimum OS versions, web-interface security, and the Android capture stack were decided on 2026-09-03; see the decision log in section 8.
 
 ---
 
@@ -67,7 +67,7 @@ Ordered by priority.
 - As a user whose phone cannot record 4K/30 or lacks manual exposure control, I want a clear message about what the app can and cannot do on this device rather than silent degradation.
 - As a user in Japan (two mains frequencies in one country), I want to be able to override the shutter choice so that automatic region detection does not cause flicker.
 - As a user whose browser loses the connection mid-take, I want the recording to continue on the phone so that a Wi-Fi blip does not ruin a take.
-- As a user who accidentally closes the app or whose phone dies mid-recording, I want the partial file to be playable so that the take is not lost entirely. *(P1; not in the Android MVP, see 6.7.)*
+- As a user who accidentally closes the app or whose phone dies mid-recording, I want the partial file to be playable so that the take is not lost entirely. *(Android MVP: covered up to a take length measured in Phase 0; any length is P1. See 6.7.)*
 
 ## 6. Requirements
 
@@ -172,31 +172,31 @@ Confirmed in scope for v1 (decision 2026-09-03).
 - Detection: iOS — check available codec types on the movie output; Android — read the codec from the CameraX video capabilities for the selected quality, and query `MediaCodecList` for a hardware `video/hevc` encoder for the capability report and the 1.7 enforcement.
 - Target bitrate: HEVC 4K30 ≈ 45 Mbps; H.264 4K30 ≈ 80 Mbps. Tunable P1.
 - Container: MP4 (`.mp4`) on both platforms. Keyframe interval 1 s where the stack allows setting it (iOS); the Android MVP uses the CameraX default.
-- **Crash resilience (P1, not in the Android MVP):** a file truncated by a crash or dead battery should be playable up to the last fragment (fragmented MP4 or periodic moov updates). CameraX 1.6.2 writes a standard MP4 with the index at close and gives no access to the muxer, so the Android MVP cannot provide this; revisited at CameraX 1.7 or with a custom video output (ADR-0002). iOS can use `AVAssetWriter` fragment intervals from the start.
+- **Crash resilience:** a file truncated by a crash or dead battery should be playable up to the last second. Android MVP: the CameraX 1.6.2 muxer rewrites the file index every second inside a fixed 400 KB reserve, so this holds for takes up to a length Phase 0 measures (expected on the order of 10–15 minutes) and is recorded here once known; longer takes are unplayable after a kill, and resilience for any length is P1 (ADR-0002). iOS can use `AVAssetWriter` fragment intervals from the start.
 - Files saved to the system camera roll (iOS Photos) or `Movies/Scenaristo` (Android MediaStore). Filename: `Scenaristo_YYYY-MM-DD_HH-MM-SS.mp4`.
 - Codec in use is displayed on phone and web before recording.
 
 **Acceptance criteria**
 - Given a device whose UHD encoder profile declares HEVC, then the recorded file's video track is `hvc1`/`hev1`. From CameraX 1.7: given hardware HEVC, then HEVC.
 - Given the device profile declares H.264, then the track is `avc1` and the UI said so before recording.
-- (P1) Given the app is force-killed 30 s into a recording, then the file plays for at least the first 25 s. Not required for the Android MVP.
+- Given the app is force-killed 30 s into a recording, then the file plays for at least the first 25 s. (P1: the same holds at any take length.)
 
 ### 6.8 Local web interface (P0)
 
 The phone runs an HTTP + WebSocket server on the local network. Any modern browser (Chrome, Safari, Firefox, Edge, current and previous major version) on the same network can open it.
 
 **Discovery and connection**
-- Phone shows the URL (`http://<ip>:<port>`) and a QR code on its screen. mDNS name (`scenaristo.local`) advertised where the platform supports it; the IP URL is the reliable path.
+- Phone shows the URL (`http://<ip>:<port>`) and a QR code on its screen. No mDNS name in v1: Android 14 offers no public way to register a hostname, so the IP URL is the only path (ADR-0006).
 - iOS requests Local Network permission; the app explains why.
 - If no Wi-Fi is available, the app explains that the phone's hotspot can be used and shows the same URL.
 
 **Security**
 - **v1: open LAN access** (decision 2026-09-03). Any client on the local network that can reach the URL can view the preview and control the camera. The phone shows how many clients are connected so an unexpected viewer is visible.
 - **Later version (P1): pairing check.** On first connection from a new browser, both the phone and the browser display the same short code (a number or an emoji sequence). The user confirms on the phone that the codes match before the browser is granted control. Confirmed browsers are remembered until the app is reinstalled or the user revokes them from the phone. This proves the person at the browser can also see the phone, without typing secrets.
-- Plain HTTP in both versions (self-signed TLS on LAN causes browser warnings and helps nobody). Consequence: the page is not a secure context, so browser APIs that require one (WebCodecs among them) are unavailable to the web UI. The interface must never be reachable off-LAN: bind per LAN interface (Wi-Fi client, hotspot, USB tethering), never to a public address, never on cellular or VPN interfaces, and reject requests whose `Host` header is not a bound address or `scenaristo.local`, which defends against DNS rebinding from a website on the same LAN. (ADR-0006)
+- Plain HTTP in both versions (self-signed TLS on LAN causes browser warnings and helps nobody). Consequence: the page is not a secure context, so browser APIs that require one (WebCodecs among them) are unavailable to the web UI. The interface must never be reachable off-LAN: the server rejects any request whose remote address is not a private LAN address and any request whose `Host` header is not an IP literal, which defends against DNS rebinding from a website on the same LAN; cellular interfaces receive no inbound connections. (ADR-0006)
 
 **Preview**
-- Downscaled preview, default 960 × 540 at up to 15 fps, JPEG frames over WebSocket. Quality and frame rate degrade automatically under bandwidth pressure. Target glass-to-glass latency < 500 ms on a healthy Wi-Fi network.
+- Downscaled preview, default 960 × 540 at up to 15 fps, delivered as an MJPEG HTTP stream that the browser renders natively (ADR-0008). Quality and frame rate degrade automatically under bandwidth pressure. Target glass-to-glass latency < 500 ms on a healthy Wi-Fi network.
 - Preview is separate from the recording pipeline: recording is always full resolution and frame rate regardless of preview quality or whether a browser is connected.
 - Preview shows framing overlays (rule-of-thirds, eye-line guide) toggleable from the web UI.
 - P2: WebRTC transport for lower latency and better compression.
@@ -215,8 +215,8 @@ The phone runs an HTTP + WebSocket server on the local network. Any modern brows
 **Acceptance criteria**
 - Given the phone shows a QR code, when a laptop on the same Wi-Fi scans it, then the web UI loads with a live preview within 5 seconds.
 - Given a second browser on the same network opens the URL, then it sees the same preview and state, and the phone's connected-client count reads 2.
-- Given a request from outside the LAN interfaces, including on a cellular or VPN interface, then the server does not answer (it is not bound there).
-- Given a request whose `Host` header is not a bound address or `scenaristo.local`, then the server answers 403.
+- Given a request from a non-private remote address, then the server answers 403.
+- Given a request whose `Host` header is not an IP literal, then the server answers 403.
 - Given the user changes WB on the phone, then the web UI reflects it within 200 ms, and vice versa.
 - Given recording is started from the browser, when Wi-Fi is turned off on the laptop, then the phone keeps recording and the file is complete on stop.
 - Given a 4K/30 recording is running, then preview frames continue and recorded frame rate stays at 30 (preview must not steal encoder time).
@@ -288,7 +288,7 @@ Analytics are opt-in and local-first; no metric requires a backend in v1.
 | Platform order | Android first. iOS follows once the Android capture engine is proven. |
 | Minimum OS | Android 14 (API 34), iOS 16. Rationale: the smallest test matrix while one developer proves the capture engine; no capture API used needs API 34. Revisit before public beta with Play Console device data (ADR-0012). |
 | Web interface security | v1 ships with open LAN access. A later version adds a pairing check: a number or emoji code shown on both phone and browser, confirmed on the phone. Specified in 6.8 and listed as P1. |
-| Android capture stack | CameraX 1.6.2, pinned, with the stock Recorder. Losses accepted for the MVP: no crash-resilient file, codec follows the device profile, level meter at 5 Hz, audio input by system routing. Revisit at CameraX 1.7 (ADR-0002). |
+| Android capture stack | CameraX 1.6.2, pinned, with the stock Recorder. Losses accepted for the MVP: crash resilience only up to a measured take length, codec follows the device profile, level meter at 5 Hz, audio input by system routing. Revisit at CameraX 1.7 (ADR-0002). |
 | Lenses without manual-control capabilities (was blocking question 1) | Refuse recording on lenses without `MANUAL_SENSOR`; degrade white balance through locked platform AWB modes on lenses without `MANUAL_POST_PROCESSING` (ADR-0011). |
 
 **Blocking (answer before build starts)**
@@ -298,7 +298,7 @@ Analytics are opt-in and local-first; no metric requires a backend in v1.
 2. **Kelvin → gains calibration on Android.** Decided direction (ADR-0011): one generic curve, normalised per device at 5600 K from the platform daylight gains; a per-device table only if Phase 0 grey-card tests miss ±300 K. — *Engineering*
 3. **Custom AE loop stability.** How aggressive can ISO adjustment be before it is visible on camera? Needs testing on real devices. — *Engineering*
 4. **Thermal behaviour at 4K30 HEVC.** How long can target devices sustain recording plus preview encoding before throttling? Determines whether the preview needs to drop to 5 fps when the phone is hot. — *Engineering*
-5. **Preview transport.** Decided for v1: JPEG over WebSocket behind a transport abstraction (ADR-0008); Phase 0 measures latency and thermal cost. WebRTC stays P2; WebCodecs is excluded by plain HTTP (6.8). — *Engineering*
+5. **Preview transport.** Decided for v1: MJPEG over HTTP rendered by the browser's own image element (ADR-0008); Phase 0 checks iPhone Safari rendering and measures latency and thermal cost. WebRTC stays P2; WebCodecs is excluded by plain HTTP (6.8). — *Engineering*
 6. **Mixed-grid country list.** Confirm the list of countries needing the prominent toggle. — *Product*
 7. **Tech stack.** Decided: Kotlin with CameraX 1.6.2 reaching Camera2 through interop (ADR-0002); web UI as one static bundle served unchanged by both apps (ADR-0009); protocol specified independently of either app (ADR-0007); multiplatform strategy in ADR-0013. — *Engineering*
 8. **Pairing code format.** Number (4–6 digits) or emoji sequence for the P1 pairing check? Emoji is friendlier and harder to shoulder-surf across languages; digits are easier to read aloud to an assistant. — *Product / Design*

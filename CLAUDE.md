@@ -6,7 +6,7 @@ Talking-head recording app: opinionated capture defaults (4K30, flicker-free shu
 
 - `docs/PRD-talking-head-camera.md`: the product requirements. Section numbers (6.1, 6.8, 8-Q1, ...) are referenced from ADRs, commits, and PRs.
 - `docs/adr/`: Architecture Decision Records. `README.md` there is the index and lists open challenges to the PRD. `0000-template.md` is the template.
-- `docs/protocol/`: the phone-to-browser protocol specification and JSON Schemas (to be created; see ADR-0007). This is the contract shared by Android, iOS, and the web UI.
+- `docs/protocol/`: the phone-to-browser protocol specification and fixtures (to be created; see ADR-0007). The message types themselves are the `@Serializable` classes in `:domain`; TypeScript and JSON Schema are generated from them, never hand-written.
 - Multiplatform strategy: ADR-0013 says what is shared (web bundle, protocol, fixtures) and what is native (capture, phone UI).
 - Planned code layout (ADR-0002, ADR-0009, ADR-0010): `android/` with Gradle modules `:domain`, `:capture` (CameraX), `:server`, `:app`; `web/` for the static browser UI; `ios/` later.
 
@@ -42,6 +42,6 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 - Product decisions (scope, priority, defaults as experienced by users) are Davide's; propose, do not decide. Technical decisions go through ADRs.
 - The PRD's acceptance criteria are the definition of done for capture behaviour; cite them in tests.
 - Reference devices for Phase 0 are one Pixel and one Samsung (PRD section 9). Anything that only works on one of them is a bug or an ADR, not a feature.
-- Keep `:domain` free of `android.*` and `java.*` imports (ADR-0010).
+- `:domain` is a single-target Kotlin Multiplatform module; all of its code lives in `commonMain` so the compiler keeps it platform-free (ADR-0010).
 - CameraX is pinned at 1.6.2 (ADR-0002). Do not bump it; the 1.7 upgrade is a scheduled review with its own checklist in that ADR. All `Camera2Interop` usage stays inside the `ManualControls` class in `:capture`.
 - Do not commit or push unless asked. Branches are created by the workflow; do not create new ones.

@@ -16,13 +16,13 @@ We will share what is platform-neutral and write natively what touches hardware:
 
 | Layer | Android | iOS | Shared? |
 |---|---|---|---|
-| Capture engine (camera session, exposure/WB application, encoder, muxer, audio) | Kotlin, Camera2, MediaCodec, Media3 muxer | Swift, AVFoundation, `AVAssetWriter` | No. Ported by hand in Phase 4. |
-| Domain logic (grid table, exposure controller maths, Kelvin mapping, capability gating, state document, warnings) | Pure-Kotlin `:domain` | Swift port or KMP framework, decided in Phase 4 | Behaviour shared via golden fixture tests; code sharing optional (ADR-0010). |
+| Capture engine (camera session, exposure/WB application, recording, audio) | Kotlin, CameraX 1.6.2 (`Recorder`, `ImageAnalysis`, `Camera2Interop`) | Swift, AVFoundation, `AVAssetWriter` | No. Ported by hand in Phase 4. |
+| Domain logic (grid table, exposure controller maths, Kelvin mapping, capability gating, state document, warnings) | `:domain`, a single-target Kotlin Multiplatform module | Add an iOS target, or port to Swift; decided in Phase 4 | Behaviour shared via golden fixture tests; code sharing is a one-line target addition (ADR-0010). |
 | Phone-to-browser protocol | Ktor server | Network.framework or equivalent | Yes: one spec with JSON Schemas and fixtures (ADR-0007). |
-| Web remote UI | Static bundle in `assets/` | Same bundle in the app bundle | Yes, byte-identical (ADR-0009). |
+| Web remote UI | Static bundle in app resources | Same bundle in the app bundle | Yes, byte-identical (ADR-0009). |
 | Phone UI | Jetpack Compose | SwiftUI | No. It is small; native is cheaper than interop. |
 
-Cross-platform app frameworks (Flutter, React Native) are rejected: the native plugin would be the whole product. Kotlin Multiplatform for `:domain` and Compose Multiplatform for the phone UI are deferred to Phase 4 planning, not rejected; ADR-0010 keeps `:domain` free of JVM-only APIs so that adopting KMP is a build change.
+Cross-platform app frameworks (Flutter, React Native) are rejected: the native plugin would be the whole product. `:domain` is already a Kotlin Multiplatform module with one target (ADR-0010); adding the iOS target, and Compose Multiplatform for the phone UI, are deferred to Phase 4 planning, not rejected.
 
 ## Options Considered
 

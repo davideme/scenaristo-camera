@@ -12,7 +12,7 @@ PRD 6.9 states: "The app must stay in the foreground to record (both OSes suspen
 The screen is also a heat source. The PRD names thermal throttling at 4K30 as the biggest risk and requires the screen to stay awake while foregrounded.
 
 ## Decision
-We will run the camera session, encoder, muxer, audio capture, and the HTTP/WebSocket server inside a single foreground service with types `camera|microphone`, started from the activity while it is visible. The service owns a `LifecycleOwner` to which the CameraX use cases are bound (ADR-0002); the activity only attaches and detaches its `PreviewView` surface. The activity is a thin client of the service; it can be destroyed and recreated without affecting a recording or connected browsers. The service holds a `PARTIAL_WAKE_LOCK` and a `WIFI_MODE_FULL_HIGH_PERF` Wi-Fi lock while a browser is connected or a recording is running. The phone screen stays awake only while the activity is visible; the user may lock the phone once the browser is connected, and recording continues.
+We will run the CameraX session (`Preview`, `VideoCapture` with the stock `Recorder`, `ImageAnalysis`, ADR-0002) and the HTTP/WebSocket server inside a single foreground service with types `camera|microphone`, started from the activity while it is visible. The service extends `androidx.lifecycle.LifecycleService`, so it is the `LifecycleOwner` the use cases are bound to with no hand-written lifecycle registry. It exposes the `Preview` use case's `SurfaceRequest`; the activity renders it with the `CameraXViewfinder` composable from `androidx.camera:camera-compose` and nothing else crosses the boundary. The activity is a thin client of the service; it can be destroyed and recreated without affecting a recording or connected browsers. The service holds a `PARTIAL_WAKE_LOCK` and a `WIFI_MODE_FULL_HIGH_PERF` Wi-Fi lock while a browser is connected or a recording is running. The phone screen stays awake only while the activity is visible; the user may lock the phone once the browser is connected, and recording continues.
 
 PRD 6.9 is amended to: "On Android, recording and remote control continue with the screen locked once started from the app. On iOS the app must stay in the foreground."
 
@@ -53,6 +53,6 @@ Option B costs a notification and a permission declaration and removes the large
 - Revisit when: an OEM is found to stop camera foreground services on screen-off (log it per device in the capability report, ADR-0011).
 
 ## Action Items
-1. [ ] Amend PRD 6.9 as stated above.
+1. [x] Amend PRD 6.9 as stated above.
 2. [ ] Phase 0: verify a 10-minute screen-off 4K30 recording completes on both reference devices and compare peak temperature with screen-on.
 3. [ ] Design the notification content: recording state, elapsed time, connected clients, stop action.
