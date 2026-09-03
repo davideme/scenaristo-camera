@@ -55,6 +55,7 @@ Ordered by priority.
 - As a solo creator, I want to choose "natural light" or "artificial light" and pick from a short list of white balance presets so that skin tones look right without a colour picker.
 - As a solo creator, I want a recording timer and remaining-storage readout on the laptop so that I know the take is running and will not be cut off.
 - As a solo creator, I want a warning when the room is too dark or too bright for a clean image so that I fix lighting before recording, not after.
+- As a solo creator, I want my voice recorded from the best microphone I have plugged in, with a level meter I can see, so that I do not discover a silent or clipped take afterwards.
 
 ### Producer
 - As a producer, I want to see and set shutter, ISO, white balance, lens, and codec from the browser so that I control the camera precisely.
@@ -83,7 +84,7 @@ Ordered by priority.
 | Stabilisation | Off | Phone is on a tripod; stabilisation crops and can wobble. P1 toggle. |
 | Orientation | Landscape | Portrait supported. Web UI shows orientation. |
 | Camera | Rear main (wide) | Front camera selectable. |
-| Audio | 48 kHz AAC stereo or mono, from the best available input | See 6.6 (assumption). |
+| Audio | 48 kHz AAC stereo or mono, from the best available input | See 6.6. |
 | Colour | SDR, Rec.709, 8-bit | HDR explicitly off. |
 
 **Acceptance criteria**
