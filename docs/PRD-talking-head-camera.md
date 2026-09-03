@@ -172,7 +172,7 @@ Confirmed in scope for v1 (decision 2026-09-03).
 - Detection: iOS — check available codec types on the movie output; Android — read the codec from the CameraX video capabilities for the selected quality, and query `MediaCodecList` for a hardware `video/hevc` encoder for the capability report and the 1.7 enforcement.
 - Target bitrate: HEVC 4K30 ≈ 45 Mbps; H.264 4K30 ≈ 80 Mbps. Tunable P1.
 - Container: MP4 (`.mp4`) on both platforms. Keyframe interval 1 s where the stack allows setting it (iOS); the Android MVP uses the CameraX default.
-- **Crash resilience:** a file truncated by a crash or dead battery should be playable up to the last second. Android MVP: the CameraX 1.6.2 muxer rewrites the file index every second inside a fixed 400 KB reserve, so this holds for takes up to a length Phase 0 measures (expected on the order of 10–15 minutes) and is recorded here once known; longer takes are unplayable after a kill, and resilience for any length is P1 (ADR-0002). iOS can use `AVAssetWriter` fragment intervals from the start. **Open conflict:** [spec-chapter-markers.md](spec-chapter-markers.md) CM-1 decides the mechanism as fragmented write plus soft-remux finalisation in Phase 1, which requires the app to own its muxer; ADR-0002 (Accepted the same day) chose the CameraX stock `Recorder`, which gives no muxer access. One of the two must give: either CM-1 is deferred to the CameraX 1.7 revisit, or a superseding ADR replaces the recording pipeline (ADR-0002 Option C). To be decided by Davide before Phase 1.
+- **Crash resilience:** a file truncated by a crash or dead battery should be playable up to the last second. Android MVP: the CameraX 1.6.2 muxer rewrites the file index every second inside a fixed 400 KB reserve, so this holds for takes up to a length Phase 0 measures (expected on the order of 10–15 minutes) and is recorded here once known; longer takes are unplayable after a kill, and resilience for any length is P1 (ADR-0002). iOS can use `AVAssetWriter` fragment intervals from the start. [spec-chapter-markers.md](spec-chapter-markers.md) CM-1 (fragmented write plus soft-remux finalisation, which needs an app-owned muxer) is **deferred to the CameraX 1.7 revisit** (decision 2026-09-03, Davide); until then the mechanism is the one above.
 - Files saved to the system camera roll (iOS Photos) or `Movies/Scenaristo` (Android MediaStore). Filename: `Scenaristo_YYYY-MM-DD_HH-MM-SS.mp4`.
 - Codec in use is displayed on phone and web before recording.
 
@@ -245,7 +245,7 @@ The phone UI is intentionally minimal: preview, record button, the QR/URL panel,
 - Flicker detection to confirm grid frequency.
 - Bitrate presets (Efficient / Standard / High).
 - Countdown before record (3-2-1) shown on the phone and web so the talent knows when to start.
-- **Chapter markers from the browser** — press a key to mark take boundaries in a long recording; written into the MP4 as a chapter track plus a crash-safe sidecar. Specified in [spec-chapter-markers.md](spec-chapter-markers.md). Note that its container requirement lands in Phase 1, not Phase 3.
+- **Chapter markers from the browser** — press a key to mark take boundaries in a long recording; written into the MP4 as a chapter track plus a crash-safe sidecar. Specified in [spec-chapter-markers.md](spec-chapter-markers.md). Its container requirement (CM-1) is deferred to the CameraX 1.7 revisit in ADR-0002 (decision 2026-09-03), so chapter markers ship no earlier than that revisit.
 
 ### 6.12 Future considerations (P2)
 

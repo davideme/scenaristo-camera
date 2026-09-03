@@ -7,7 +7,7 @@
 | **Author** | Davide Mendolia |
 | **Parent** | [PRD: Scenaristo Camera — Talking-Head Recording App](PRD-talking-head-camera.md) |
 | **Priority in parent** | **P1 (nice-to-have).** Replaces the one-line P1 in PRD §6.11: *"Marker: press a key in the browser to timestamp a good take in a sidecar file."* |
-| **Phase** | Parent Phase 3, **with one dependency that lands in Phase 1** (see §8) |
+| **Phase** | Parent Phase 3. The Phase 1 container dependency (CM-1, §8) was **deferred to the CameraX 1.7 revisit on 2026-09-03** (see ADR-0002); chapter markers ship no earlier than that revisit. |
 
 > **Priorities below are relative to shipping this feature**, not to the parent PRD. The feature as a whole is a P1 there.
 
@@ -79,6 +79,8 @@ A third, worth noting only because it constrains a future feature: chapter times
 
 ---
 **CM-1 — Hybrid MP4 container (fragmented write, soft-remux finalisation)**
+
+> **Decision 2026-09-03 (Davide):** deferred to the CameraX 1.7 revisit in ADR-0002. The MVP records with the CameraX stock `Recorder`, whose Media3 muxer rewrites `moov` every second within a fixed reserve and gives no muxer access; the parent PRD §6.7 describes that behaviour. Everything below stands as the specification for when CM-1 is picked up.
 
 The recording muxer writes fragmented MP4 during capture and finalises with a soft remux on stop, exactly as described in §4. This subsumes and supersedes the parent PRD's §6.7 line *"write fragmented MP4 (or periodic moov updates) so that a file truncated by a crash is still playable"* — the "or" is now decided, and decided in favour of the option that also carries chapters.
 
@@ -217,7 +219,7 @@ The trigger decision for this spec was keyboard shortcut only, but parent §6.8 
 
 The feature belongs in the parent PRD's **Phase 3 (Android polish and P1)** — with one exception that matters more than the rest of the schedule.
 
-**CM-1 must be decided in Phase 1, not Phase 3.** The parent PRD already requires a crash-resilient container in §6.7 and leaves the mechanism open ("fragmented MP4 *or* periodic moov updates"). If Phase 1 picks periodic-moov, or ships a plain fragmented file with no finalisation step, then adding chapters in Phase 3 means replacing the muxer in a shipped app — the single most dangerous component to swap, since every recording flows through it. Choosing hybrid MP4 in Phase 1 costs Phase 1 almost nothing extra (the fragmented write is required either way; the soft remux is a bounded addition) and turns Phase 3's work into UI plus a chapter track.
+**CM-1 must be decided in Phase 1, not Phase 3.** *(Superseded 2026-09-03: deferred to the CameraX 1.7 revisit, see ADR-0002.)* The parent PRD already requires a crash-resilient container in §6.7 and leaves the mechanism open ("fragmented MP4 *or* periodic moov updates"). If Phase 1 picks periodic-moov, or ships a plain fragmented file with no finalisation step, then adding chapters in Phase 3 means replacing the muxer in a shipped app — the single most dangerous component to swap, since every recording flows through it. Choosing hybrid MP4 in Phase 1 costs Phase 1 almost nothing extra (the fragmented write is required either way; the soft remux is a bounded addition) and turns Phase 3's work into UI plus a chapter track.
 
 | Phase | Work | Exit criterion |
 |---|---|---|

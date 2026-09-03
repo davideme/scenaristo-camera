@@ -47,7 +47,7 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 
 | Documents | Conflict | Resolution needed |
 |---|---|---|
-| ADR-0002 vs `docs/spec-chapter-markers.md` CM-1 | CM-1 requires an app-owned fragmented muxer with soft-remux finalisation in Phase 1; ADR-0002 chose the CameraX stock `Recorder` with no muxer access. | Davide: defer CM-1 to the CameraX 1.7 revisit, or write a superseding ADR adopting ADR-0002 Option C for the recording pipeline. |
+| ADR-0002 vs `docs/spec-chapter-markers.md` CM-1 | CM-1 requires an app-owned fragmented muxer with soft-remux finalisation in Phase 1; ADR-0002 chose the CameraX stock `Recorder` with no muxer access. | **Resolved 2026-09-03 (Davide):** CM-1 deferred to the CameraX 1.7 revisit; added to the ADR-0002 revisit checklist. |
 
 ## PRD amendments
 
