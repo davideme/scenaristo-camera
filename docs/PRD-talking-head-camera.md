@@ -8,7 +8,7 @@
 | **Platforms** | Android first (min Android 14), then iOS (min iOS 16) |
 | **Scope** | v1 (capture engine + local web control) |
 
-> **Assumptions still open.** Preview transport (JPEG over WebSocket), fragmented MP4 for crash resilience, and the minimum Android camera hardware level are drafting positions, listed in **Open Questions**. Audio scope, platform order, minimum OS versions, and web-interface security were decided on 2026-09-03; see the decision log in section 8.
+> **Assumptions still open.** Preview transport (JPEG over WebSocket), fragmented MP4 for crash resilience, and the behaviour on lenses that lack manual-control capabilities are drafting positions, listed in **Open Questions**. Audio scope, platform order, minimum OS versions, and web-interface security were decided on 2026-09-03; see the decision log in section 8.
 
 ---
 
@@ -225,10 +225,10 @@ The phone UI is intentionally minimal: preview, record button, the QR/URL panel,
 
 ### 6.10 Device capability handling (P0)
 
-- On first launch and on each lens switch, probe: 4K/30 support, manual exposure (shutter + ISO), manual WB gains, hardware HEVC, available lenses.
-- Show a one-screen capability report ("This phone: 4K30 ✓, manual shutter ✓, manual WB ≈ approximated, HEVC ✓").
-- Android devices below `FULL` hardware level generally lack manual exposure. The app runs with the platform's AE and AWB and labels the affected controls as "Not supported on this device" rather than pretending.
-- Minimum OS (decision 2026-09-03): Android 14 (API 34), iOS 16. Android 14 removes the need for the API 29 hardware-acceleration check fallback and narrows the device pool to phones that generally report `FULL` or `LEVEL_3` camera hardware; the hardware-level floor itself is still open (Open Question 1).
+- On first launch and on each lens switch, probe **per lens**: 4K/30 support, manual shutter and ISO (Android: `MANUAL_SENSOR` capability; iOS: custom exposure mode support), manual WB gains (Android: `MANUAL_POST_PROCESSING`; iOS: locked white balance with device gains), and hardware HEVC.
+- Show a one-screen capability report ("Main camera: 4K30 ✓, manual shutter ✓, manual WB ≈ approximated, HEVC ✓. Ultrawide: manual shutter ✗").
+- On Android, gate each control on the capability flag of the active lens, not on the hardware level (`LIMITED` / `FULL` / `LEVEL_3`) and not on the OS version. A lens without the flag gets the behaviour decided in Open Question 1. Controls that are unavailable are labelled "Not supported on this lens" rather than pretending.
+- Minimum OS (decision 2026-09-03): Android 14 (API 34), iOS 16. The OS floor does not guarantee manual controls; those depend on the per-lens flags above, which the phone maker declares and which do not change with OS updates.
 
 ### 6.11 Nice-to-have (P1)
 
@@ -286,7 +286,7 @@ Analytics are opt-in and local-first; no metric requires a backend in v1.
 | Web interface security | v1 ships with open LAN access. A later version adds a pairing check: a number or emoji code shown on both phone and browser, confirmed on the phone. Specified in 6.8 and listed as P1. |
 
 **Blocking (answer before build starts)**
-1. **Minimum Android camera hardware level.** Require `FULL` for manual shutter, ISO, and WB gains, or also support `LIMITED` devices with a degraded mode where the affected controls are disabled? With Android 14 as the floor the `LIMITED` share is small; recommend `FULL` required. — *Engineering*
+1. **Behaviour on lenses without manual-control capabilities.** Manual shutter and ISO require the Camera2 `MANUAL_SENSOR` capability; Kelvin white balance requires `MANUAL_POST_PROCESSING`. Both are declared per lens by the phone maker's camera driver and do not change with the Android version, so the Android 14 floor does not settle this. A phone can have them on the main camera and not on the ultrawide or telephoto. Decide, for each flag, whether to (a) refuse to record on that lens and steer the user to one that has it, or (b) ship a degraded mode using platform auto-exposure or auto white balance with the affected controls disabled and labelled. Recommendation: (a) for `MANUAL_SENSOR`, because flicker-free shutter is the product's core promise and a take with rolling bands is worse than no take; (b) for `MANUAL_POST_PROCESSING`, using the platform AWB fallback already in 6.4. — *Engineering / Product*
 
 **Non-blocking (resolve during implementation)**
 2. **Kelvin → gains calibration on Android.** Per-device curve, generic approximation, or platform AWB modes only? Depends on how far off a generic curve is on the top 10 target devices. — *Engineering*
@@ -311,7 +311,7 @@ No hard external deadline is known. Suggested phasing:
 | **4 — iOS** | Port the capture engine to AVFoundation on iOS 16+, reuse the web UI and server design. | iOS reaches parity with the Android beta. |
 
 **Dependencies and risks**
-- Android manual-control support varies by OEM even on Android 14; the reference device list should be chosen before Phase 0 and include at least one Samsung and one Pixel.
+- Android manual-control support varies by OEM and by lens, independent of OS version. The reference device list should be chosen before Phase 0 and include a Pixel (LEVEL_3, all flags), a Samsung (main camera typically has `MANUAL_SENSOR`, secondary lenses often do not), and one device from an OEM known to restrict Camera2 manual controls despite offering them in its own camera app.
 - Thermal throttling at 4K30 HEVC with simultaneous preview encoding is the single biggest technical risk; Phase 0 exists to retire it.
 - Shipping v1 with open LAN access is acceptable for home and small-studio use; the Play Store listing should say so plainly so that office users know to wait for the pairing check.
 - Apple Local Network permission and App Store review of a local HTTP server (Phase 4): no known blocker, but the review notes must explain the feature.
