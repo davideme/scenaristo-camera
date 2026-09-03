@@ -3,8 +3,9 @@
 # Green means the code compiles, host tests and protocol fixtures pass, the web
 # bundle builds, and the repository invariants hold. It does NOT mean the app
 # records correctly. An emulator has no real camera, no MANUAL_SENSOR and no
-# hardware HEVC encoder, so capture behaviour is verified on a physical Pixel
-# and Samsung by the PR author, recorded in the pull request's hardware table.
+# hardware HEVC encoder, so capture behaviour is verified by the PR author on
+# the physical reference device -- a Pixel 10 (ADR-0017) -- and recorded in the
+# pull request's hardware table.
 #
 # Every step below is a Gradle task, an npm script, or a script in tools/, so a
 # contributor can reproduce any failure locally. Nothing here calls `android`,

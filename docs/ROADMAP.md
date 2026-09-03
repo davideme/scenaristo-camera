@@ -16,29 +16,35 @@ or PRD section it came from, not shipped code.
 
 ## Phase 0 — Android spike
 
-**Exit criterion (PRD section 9):** a flicker-free 10-minute 4K30 clip on both reference devices,
-no throttling, interop keys honoured throughout.
+**Exit criterion (ADR-0017, amending PRD section 9):** a flicker-free 10-minute 4K30 clip on the
+reference device, no throttling, interop keys honoured throughout, previewed in a macOS browser.
 
-Reference devices are one Pixel and one Samsung. PRD section 9 also suggests a third device from
-an OEM known to restrict Camera2 manual controls; **Davide decided on 2026-09-03 not to add one
-now**, on the basis that the project uses `Camera2Interop` only and waits for CameraX 1.7 rather
-than dropping to Camera2 direct. Phase 0's exit criterion therefore runs against two devices and
-is not provisional on a third.
+**The reference matrix is one phone and one browser: a Pixel 10, and a MacBook running Safari and
+Chrome.** Davide decided on 2026-09-03 that Phase 0 runs against the hardware that exists rather
+than waiting on a second phone; a Samsung and the restrictive-OEM device PRD section 9 suggests
+become the pre-beta matrix, and the iOS Safari preview check moves to Phase 4. The reasoning, and
+the three things this leaves unmeasured, are in [ADR-0017](adr/0017-phase-0-verification-matrix.md).
+That ADR is `Proposed`; the issues below are already written against it.
 
-> ⚠️ That position narrows ADR-0002, which currently keeps Camera2-direct (its Option C) as the
-> escape hatch if interop proves unreliable. If a Phase 0 measurement fails, the recorded response
-> is now **wait for CameraX 1.7**, not switch to Option C. Reconciling ADR-0002's text is a
-> follow-up ADR once Phase 0 reports.
+A Phase 0 pass is therefore evidence about a Pixel 10, not about Android. Three gaps ride along and
+must not be closed by assumption: ADR-0011's per-lens gating stays fixture-tested (no lens without
+`MANUAL_SENSOR` exists in the matrix), ADR-0008's iOS fallback trigger cannot fire, and ADR-0012's
+API 34 floor has no device that runs it.
+
+> ⚠️ Davide also decided on 2026-09-03 that if a Phase 0 measurement fails, the recorded response
+> is **wait for CameraX 1.7**, not switch to Camera2 direct. That narrows ADR-0002, which still
+> keeps Camera2-direct (its Option C) as the escape hatch if interop proves unreliable.
+> Reconciling ADR-0002's text is a follow-up ADR once Phase 0 reports.
 
 | Issue | Work | Traces to |
 |---|---|---|
-| #20 | Verify `Camera2Interop` manual keys echo on both reference devices | ADR-0002 action 2 |
-| #21 | Record the UHD codec each device's encoder profile selects | ADR-0002 action 3 |
+| #20 | Verify `Camera2Interop` manual keys echo on the Pixel 10 | ADR-0002 action 2 |
+| #21 | Record the UHD codec the device's encoder profile selects | ADR-0002 action 3 |
 | #22 | Measure the take length at which a force-killed recording stops being playable | ADR-0002 action 4, PRD 6.7 |
 | #23 | Measure thermal headroom at 4K30 with simultaneous preview encoding | PRD 8-Q4, section 9 |
 | #24 | Grey-card the Kelvin-to-gains curve at 3200 K and 5600 K | ADR-0011 action 3, PRD 6.4 |
 | #25 | Tune the damped ISO loop against the PRD 6.3 criteria | PRD 8-Q3, ADR-0005 |
-| #26 | Measure MJPEG preview latency and verify iPhone Safari rendering | PRD 8-Q5, ADR-0008 |
+| #26 | Measure MJPEG preview latency and verify macOS browser rendering | PRD 8-Q5, ADR-0008 |
 
 ## Phase 1 — Android capture engine and phone UI
 
@@ -58,7 +64,8 @@ is not provisional on a third.
 
 ## Phase 2 — Web control
 
-**Exit criterion:** a solo creator completes a take from a laptop without touching the phone.
+**Exit criterion:** a solo creator completes a take from a laptop without touching the phone. The
+reference laptop is a MacBook (ADR-0017); other browsers are checked, not developed against.
 
 | Issue | Story | PRD | Notes |
 |---|---|---|---|
@@ -81,6 +88,10 @@ from the bootstrap by ADR-0014).
 
 Scope: PRD 6.11, plus the CameraX 1.7 revisit (ADR-0002) and, gated behind it,
 [docs/spec-chapter-markers.md](spec-chapter-markers.md) CM-1. Play Store submission.
+
+**#29 widens the reference matrix and must close before the beta opens** — a second OEM device,
+the iOS Safari preview check, and the real secondary-lens fixture ADR-0011 has been doing without.
+Phase 0 measured one Pixel 10; a public beta is the first time that stops being enough (ADR-0017).
 
 ## Phase 4 — iOS
 

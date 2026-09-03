@@ -110,8 +110,13 @@ The emulator has no real camera, no `MANUAL_SENSOR`, no hardware HEVC encoder an
 behaviour. It is useful for `:domain`, `:server` and non-camera UI, and for nothing else this app
 is about.
 
-Reference devices are one Pixel and one Samsung (PRD section 9). Anything that works on only one
-of them is a bug or an ADR, not a feature.
+Reference devices are one Pixel 10 and a MacBook running Safari and Chrome (ADR-0017, amending PRD
+section 9). There is no second phone and no iOS device, so a Phase 0 result is evidence about a
+Pixel 10 and about WebKit on macOS — say that, rather than implying fleet-wide or iOS coverage. The
+second OEM device and the iOS Safari check arrive before public beta; see ADR-0017.
+
+Once a second phone is in the matrix, anything that works on only one of them is a bug or an ADR,
+not a feature.
 
 ## 4. Build, test, run
 

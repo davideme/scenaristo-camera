@@ -37,7 +37,8 @@ Does anything here contradict an Accepted ADR or a technical statement in the PR
       `./tools/check-domain-platform-free.sh` pass
 
 **Hardware** — required if this touches capture (PRD 6.1–6.7, 6.9, 6.10). CI cannot
-verify any of it: the runner has no camera. See ADR-0016.
+verify any of it: the runner has no camera. See ADR-0016. The reference device is a
+Pixel 10, and the reference remote client is a MacBook browser (ADR-0017).
 
 | Device | Android | Lens | What was observed |
 |---|---|---|---|

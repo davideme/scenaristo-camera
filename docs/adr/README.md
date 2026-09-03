@@ -33,6 +33,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0014](0014-build-toolchain.md) | Gradle 9.7.1 / AGP 9.4.0 / Kotlin 2.4.10 on Java 17; `android` CLI provisions the SDK; wrapper committed; `targetSdk` stated explicitly | Proposed | 6.1, 6.10, 8-Q7, 9 |
 | [0015](0015-domain-module-build-shape.md) | `:domain` with two JVM-family targets under the Android KMP library plugin; platform-freeness enforced by compiler plus lint. Supersedes 0010 | Proposed | 9, 6.2, 6.3, 6.4, 6.10 |
 | [0016](0016-continuous-integration.md) | PRs gated on compilation, host tests and repo invariants; device verification stays manual | Proposed | 6.1-6.7, 6.10, 9 |
+| [0017](0017-phase-0-verification-matrix.md) | Phase 0 runs on one reference device (Pixel 10) with a MacBook browser; second phone and iOS Safari deferred | Proposed | 9, 8-Q5, 6.8, 6.10 |
 
 ## Challenges to positions stated in the PRD
 
@@ -56,6 +57,8 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | 8 Open Question 1 (blocking) | Answered: refuse recording on lenses without `MANUAL_SENSOR`; degrade WB via locked AWB modes without `MANUAL_POST_PROCESSING`. | 0011 |
 | 8 Decision log "Minimum OS: Android 14" | No rationale recorded and no capture API needs API 34. Kept for the smaller test matrix, with a Play Console measurement before public beta. | 0012 |
 | 8-Q7 tech stack | Decided: Kotlin + CameraX 1.6.2, Compose, Ktor, static web bundle. Cross-platform UI frameworks rejected for the capture path. | 0002, 0006, 0009 |
+| 9 Phase 0 "two Android reference devices (one Pixel, one Samsung)" and its "on both devices" exit criterion; 9 dependencies "the reference device list ... include a Pixel, a Samsung, and one device from an OEM known to restrict Camera2 manual controls" | The hardware that exists is one Pixel 10 and one MacBook. Phase 0's two target risks (interop keys, thermal headroom) are single-device properties; OEM variation first bites at public beta. Run Phase 0 on the Pixel 10 and make the Samsung plus the restrictive-OEM device the pre-beta matrix. | 0017 |
+| 8-Q5 "Phase 0 checks iPhone Safari rendering" | There is no iPhone or iPad. macOS Safari is WebKit and covers the MJPEG decode path; iOS media policy is a Phase 4 question about a Phase 4 platform. Phase 0 checks macOS Safari and Chrome. | 0017 |
 | ADR-0009 "a Gradle `Exec` task in `:app` runs `npm run build`" | `web/` uses pnpm 10, pinned via `packageManager`. ADR-0009's decision is unchanged; only the command is. Read every `npm run build` in ADR-0009 as `pnpm run build`. | 0014 |
 
 ## Open conflicts
@@ -63,8 +66,12 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | Documents | Conflict | Resolution needed |
 |---|---|---|
 | ADR-0015 vs ADR-0010 | ADR-0010 specifies a single `androidTarget()` and justifies it by compiler-enforced platform-freeness. AGP 9 removed that API, and a single target enforces nothing (measured 2026-09-03: `android.*` and `java.*` both compile in `commonMain`). ADR-0015 proposes two JVM-family targets plus a lint. | **Awaiting Davide.** ADR-0015 is Proposed; ADR-0010 is marked Superseded pending its acceptance. |
+| ADR-0017 vs ADR-0002, 0003, 0005, 0008, 0011, 0016 | Those ADRs phrase their Phase 0 action items "on both reference devices" and ADR-0016's context states the reference devices are a Pixel and a Samsung. ADR-0017 narrows the device scope of ADR-0002 (2, 3, 4), ADR-0003 (2), ADR-0005 (2, 3), ADR-0008 (1) and ADR-0011 (3) to one Pixel 10 plus a macOS browser. No decision in those ADRs changes. | **Awaiting Davide.** ADR-0017 is Proposed; the Accepted ADRs are left unedited until it is decided. |
 | ADR-0002 vs `docs/spec-chapter-markers.md` CM-1 | CM-1 requires an app-owned fragmented muxer with soft-remux finalisation in Phase 1; ADR-0002 chose the CameraX stock `Recorder` with no muxer access. | **Resolved 2026-09-03 (Davide):** CM-1 deferred to the CameraX 1.7 revisit; added to the ADR-0002 revisit checklist. |
 
 ## PRD amendments
 
-All amendments listed by the ADRs above were applied to the PRD on 2026-09-03 (Draft v0.3). The PRD cites the ADR next to each amended passage. Every ADR the PRD cites is Accepted as of 2026-09-03. If a future Proposed ADR amends the PRD before acceptance, mark the passage provisional here; when such an ADR is rejected, revert the cited passage and mark the ADR Deprecated.
+All amendments listed by the ADRs above were applied to the PRD on 2026-09-03 (Draft v0.3), **except
+ADR-0017's**: section 9 and 8-Q5 still describe a two-device Phase 0 and an iPhone Safari check, and
+are amended when ADR-0017 is Accepted (its action item 1). `docs/ROADMAP.md`, the milestone and the
+Phase 0 issues already run on one Pixel 10 and a MacBook. The PRD cites the ADR next to each amended passage. Every ADR the PRD cites is Accepted as of 2026-09-03. If a future Proposed ADR amends the PRD before acceptance, mark the passage provisional here; when such an ADR is rejected, revert the cited passage and mark the ADR Deprecated.
