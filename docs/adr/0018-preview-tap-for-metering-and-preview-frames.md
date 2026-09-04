@@ -168,7 +168,12 @@ the extra GPU pass breaks the thermal budget, Option B is the fallback and this 
        tests.
 3. [ ] Re-run #20's key-echo measurement against this session shape, while recording, for a full
        take length — the numbers so far were taken without analysis and without recording.
-4. [ ] Measure the tap's thermal and frame-rate cost as part of #23, against the same baseline.
+4. [~] Measure the tap's thermal and frame-rate cost as part of #23, against the same baseline.
+       **Frame rate measured 2026-09-04 while recording 4K on the Pixel 10: 997 tapped frames in
+       33.5 s, 29.7 fps**, against 30.0 fps with the session bound but not recording. So the pass
+       holds rate with the encoder running, which is what the trade-off analysis above was unsure
+       of. Still open: the thermal half. That run was about two minutes long, nowhere near the
+       10-minute soak #23 needs, and no thermal status was sampled.
 5. [ ] Add "re-run the #20 stream-combination probe" to the CameraX 1.7 checklist (#27) and to
        every subsequent upgrade.
 6. [ ] Feed the "bind and read back, never trust a capability query" rule into ADR-0011's probe
