@@ -183,7 +183,7 @@ Confirmed in scope for v1 (decision 2026-09-03).
 
 ### 6.8 Local web interface (P0)
 
-The phone runs an HTTP + WebSocket server on the local network. Any modern browser (Chrome, Safari, Firefox, Edge, current and previous major version) on the same network can open it.
+The phone runs an HTTP + WebSocket server on the local network. Any modern browser (Chrome, Safari, Firefox, Edge, current and previous major version) on the same network can open it. The layout of the *Controls* and *Preview* sections below is specified in [spec-phone-and-remote-ui.md](spec-phone-and-remote-ui.md); its §10 lists the amendment this section needs, and its §8 the three additive protocol fields it assumes.
 
 **Discovery and connection**
 - Phone shows the URL (`http://<ip>:<port>`) and a QR code on its screen. No mDNS name in v1: Android 14 offers no public way to register a hostname, so the IP URL is the only path (ADR-0006).
@@ -224,7 +224,7 @@ The phone runs an HTTP + WebSocket server on the local network. Any modern brows
 
 ### 6.9 On-device UI (P0)
 
-The phone UI is intentionally minimal: preview, record button, the QR/URL panel, and a settings sheet exposing the same controls as the web UI. Screen stays awake while the app is foregrounded. On Android, capture and the web server run in a foreground service: once a recording or a browser session has been started from the app, the user may lock the phone and both continue, and the persistent notification shows recording state, elapsed time, and connected clients (ADR-0003). On iOS the app must stay in the foreground to record, and the UI states this.
+The phone UI is intentionally minimal: preview, record button, the QR/URL panel, and a settings sheet exposing the same controls as the web UI. Its layout, states, copy and tokens are specified in [spec-phone-and-remote-ui.md](spec-phone-and-remote-ui.md), which also records why battery and thermal state are absent from the phone's own chrome. Screen stays awake while the app is foregrounded. On Android, capture and the web server run in a foreground service: once a recording or a browser session has been started from the app, the user may lock the phone and both continue, and the persistent notification shows recording state, elapsed time, and connected clients (ADR-0003). On iOS the app must stay in the foreground to record, and the UI states this.
 
 ### 6.10 Device capability handling (P0)
 
