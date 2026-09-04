@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -121,16 +122,55 @@ private fun EchoRunner() {
     var tapFrames by remember { mutableIntStateOf(0) }
     var tapFps by remember { mutableStateOf("—") }
     val tap = remember {
-        var first = 0L
         var count = 0
+        // A window, not a cumulative average: #23 asks whether the rate *drops*
+        // as the phone heats, and an average over ten minutes hides exactly that.
+        var windowStart = 0L
+        var windowCount = 0
         PreviewTapProcessor { image ->
             image.close()
             count++
-            val now = System.nanoTime()
-            if (first == 0L) first = now
-            val seconds = (now - first) / 1_000_000_000.0
-            if (seconds > 0.5) tapFps = "%.1f".format(count / seconds)
             tapFrames = count
+            val now = System.nanoTime()
+            if (windowStart == 0L) windowStart = now
+            windowCount++
+            val seconds = (now - windowStart) / 1_000_000_000.0
+            if (seconds >= 5.0) {
+                tapFps = "%.1f".format(windowCount / seconds)
+                windowStart = now
+                windowCount = 0
+            }
+        }
+    }
+
+    // PRD 8-Q4 and #23: the transitions are the measurement, not the final value.
+    val thermal = remember { mutableStateListOf<String>() }
+    var thermalNow by remember { mutableStateOf("?") }
+
+    // The phone records its own soak. A 10-minute run cannot be watched over USB
+    // while the cable is also charging the battery -- charge heat is exactly the
+    // confound #23 does not want -- so every 30 s the rate and thermal state are
+    // appended here and the whole run is readable from one screenshot afterwards.
+    val samples = remember { mutableStateListOf<String>() }
+    LaunchedEffect(Unit) {
+        val power = context.getSystemService(android.os.PowerManager::class.java)
+        val started = System.currentTimeMillis()
+        var last = -1
+        var nextSample = 30_000L
+        while (true) {
+            val status = power.currentThermalStatus
+            val elapsedMs = System.currentTimeMillis() - started
+            val elapsed = elapsedMs / 1000
+            if (status != last) {
+                thermal += "%d:%02d %s".format(elapsed / 60, elapsed % 60, thermalName(status))
+                last = status
+            }
+            thermalNow = thermalName(status)
+            if (elapsedMs >= nextSample) {
+                samples += "%d:%02d %s fps %s".format(elapsed / 60, elapsed % 60, tapFps, thermalName(status))
+                nextSample += 30_000L
+            }
+            kotlinx.coroutines.delay(1_000)
         }
     }
     val session = remember { ManualSession(DEFAULT_REQUEST, tap = tap) }
@@ -277,10 +317,23 @@ private fun EchoRunner() {
 
         Text(status, style = MaterialTheme.typography.bodySmall)
         Text(
-            "tap: $tapFrames frames, $tapFps fps",
+            "tap: $tapFrames frames, $tapFps fps (5s window)",
             style = MaterialTheme.typography.bodyMedium,
             fontFamily = FontFamily.Monospace,
         )
+        Text(
+            "thermal: $thermalNow — ${thermal.joinToString(" → ")}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+        )
+        if (samples.isNotEmpty()) {
+            Text(
+                // Newest first: a soak that ends badly ends at the top.
+                samples.takeLast(24).reversed().joinToString("   "),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
@@ -355,6 +408,18 @@ private fun shortReason(error: Throwable?): String {
         ?.joinToString(" + ") { it.trim().substringAfterLast('.').substringBefore('@') }
     val head = message.substringAfter("IllegalArgumentException: ").substringBefore(".")
     return listOfNotNull(head, configs).joinToString(" — ")
+}
+
+/** PowerManager's THERMAL_STATUS_* constants, named for a report a human reads. */
+private fun thermalName(status: Int): String = when (status) {
+    android.os.PowerManager.THERMAL_STATUS_NONE -> "none"
+    android.os.PowerManager.THERMAL_STATUS_LIGHT -> "light"
+    android.os.PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+    android.os.PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+    android.os.PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+    android.os.PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+    android.os.PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+    else -> "unknown($status)"
 }
 
 private fun hasCameraPermission(context: Context): Boolean =
