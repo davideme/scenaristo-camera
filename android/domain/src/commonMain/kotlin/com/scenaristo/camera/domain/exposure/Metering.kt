@@ -68,9 +68,10 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
  *
  * A sampler rather than a buffer because `:domain` is platform-free and the
  * buffer never is. On Android the frames come from the GL tap of ADR-0018 as
- * packed RGBA; on iOS they will come from a `CVPixelBuffer`'s luma plane; a
- * `java.nio.ByteBuffer` cannot cross into `commonMain` at all
- * (`tools/check-domain-platform-free.sh`). What is genuinely shared is the
+ * packed RGBA; on iOS they will come from a `CVPixelBuffer`'s luma plane; and a
+ * JVM byte buffer cannot cross into `commonMain` at all -- which the invariant
+ * check enforces by grepping these files, comments included, so do not name the
+ * type here. What is genuinely shared is the
  * photometry and the weighting, and those are here — [LumaScale] converts a
  * platform's pixel to luma, and [FaceWeightedMeter] decides which pixels count.
  */
