@@ -42,10 +42,17 @@ kotlin {
 // sourceSets DSL, which AGP 9 removed -- the same API the ROADMAP names for this
 // job.
 abstract class SyncWebBundle : DefaultTask() {
-    @get:InputDirectory
-    @get:Optional
+    /**
+     * Declared as a file collection rather than an `@InputDirectory`, because
+     * `web/dist` legitimately does not exist: CI's Android job never runs
+     * `pnpm run build`, and neither does a contributor who only touches Kotlin.
+     * An `@InputDirectory` fails validation outright in that case — "Input file
+     * does not exist" — even when marked `@Optional`, since the property is set
+     * and merely points at nothing.
+     */
+    @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val bundle: DirectoryProperty
+    abstract val bundle: ConfigurableFileCollection
 
     @get:OutputDirectory
     abstract val destination: DirectoryProperty
@@ -55,12 +62,12 @@ abstract class SyncWebBundle : DefaultTask() {
         val target = destination.get().asFile.resolve("web")
         target.deleteRecursively()
         target.mkdirs()
-        val source = bundle.orNull?.asFile
+        val source = bundle.files.firstOrNull()
         if (source == null || !source.isDirectory) {
-            // Not a build failure: a device build without the web bundle is a
-            // valid thing to want. The server answers 404 for the UI and the
-            // control socket still works, which is a legible failure.
-            logger.lifecycle("web/dist not built; the phone will serve no UI")
+            // Not a build failure: an APK without the UI is a valid thing to
+            // build. The control socket still works and the UI route 404s, which
+            // is a legible failure rather than a mysterious one.
+            logger.lifecycle("web/dist not built; this build serves no browser UI")
             return
         }
         source.copyRecursively(target, overwrite = true)
@@ -69,7 +76,7 @@ abstract class SyncWebBundle : DefaultTask() {
 
 val syncWebBundle by tasks.registering(SyncWebBundle::class) {
     description = "Copies web/dist into :server resources so the phone can serve the UI."
-    bundle.set(rootProject.layout.projectDirectory.dir("../web/dist"))
+    bundle.from(rootProject.layout.projectDirectory.dir("../web/dist"))
     destination.set(layout.buildDirectory.dir("generated/webResources"))
 }
 
