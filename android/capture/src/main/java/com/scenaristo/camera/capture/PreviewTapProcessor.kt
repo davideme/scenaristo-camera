@@ -39,6 +39,19 @@ import java.nio.ByteOrder
  * (ADR-0018's revisit trigger, #27) — not one release later.
  */
 class PreviewTapProcessor(
+    /**
+     * The size being recorded, which is what the tapped frames are cropped to
+     * match (ADR-0018).
+     *
+     * This is **not** the viewfinder's surface size, and the difference is the
+     * whole point: on the Pixel 10 the preview surface is 4:3 portrait while the
+     * recording is 3840x2160, so cropping to the viewfinder would send the
+     * browser a different framing from the take — someone framing themselves
+     * remotely would be cropped in the file. PRD 6.1 fixes the recording at UHD,
+     * so the default is the honest one; a caller that changes resolution passes
+     * the new size.
+     */
+    private val recordingSize: Size = Size(3840, 2160),
     /** Longest edge of the frames handed to [onFrame]; 960x540 is ADR-0008's preview size. */
     private val readerLongEdge: Int = 960,
     /**
@@ -111,7 +124,7 @@ class PreviewTapProcessor(
                 }
             }
             outputs[output] = createWindowSurface(surface)
-            ensureReader(output.size)
+            ensureReader()
         }
     }
 
@@ -229,7 +242,7 @@ class PreviewTapProcessor(
      * and sizing second means the frames the browser gets are already the
      * recording's shape, and nothing downstream has to know about the difference.
      */
-    private fun ensureReader(recordingSize: Size) {
+    private fun ensureReader() {
         if (reader != null || inputSize.width == 0) return
 
         val region = PreviewCrop.centredCrop(
