@@ -156,11 +156,16 @@ the extra GPU pass breaks the thermal budget, Option B is the fallback and this 
 
 ## Action Items
 
-1. [ ] Implement the `SurfaceProcessor`: EGL context, external-OES shader, `SurfaceTexture`
+1. [x] Implement the `SurfaceProcessor`: EGL context, external-OES shader, `SurfaceTexture`
        plumbing, transform matrix via `SurfaceOutput.updateTransformMatrix`, render to the
-       viewfinder surface and to an owned `ImageReader`.
-2. [ ] Crop to the recording's aspect ratio in that pass, and add a test that fails if the tapped
-       frame's aspect ratio differs from `VideoCapture.resolutionInfo`'s.
+       viewfinder surface and to an owned `ImageReader`. **Measured 2026-09-04 on the Pixel 10: the
+       session binds at 3840×2160 with the effect attached and the pass delivers 30.0 fps over 802
+       frames** — the rate the shader has to hold. Caveat: measured while streaming, **not while
+       recording**, so the 4K encoder was not running beside it. Action item 4 is where that gets
+       settled.
+2. [x] Crop to the recording's aspect ratio in that pass, and add a test that fails if the tapped
+       frame's aspect ratio differs from `VideoCapture.resolutionInfo`'s. `PreviewCrop`, six host
+       tests.
 3. [ ] Re-run #20's key-echo measurement against this session shape, while recording, for a full
        take length — the numbers so far were taken without analysis and without recording.
 4. [ ] Measure the tap's thermal and frame-rate cost as part of #23, against the same baseline.
