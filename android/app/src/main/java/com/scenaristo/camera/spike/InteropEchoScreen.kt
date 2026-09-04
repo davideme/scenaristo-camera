@@ -191,6 +191,7 @@ private fun EchoRunner() {
     var cameraId by remember { mutableStateOf("?") }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var report by remember { mutableStateOf<LensEchoReport?>(null) }
+    var recordingState by remember { mutableStateOf("idle") }
     var support by remember { mutableStateOf("") }
 
     val latest: State<List<KeyEcho>> = session.latestEchoes.collectAsState()
@@ -337,6 +338,11 @@ private fun EchoRunner() {
             fontFamily = FontFamily.Monospace,
         )
         Text(
+            "rec: $recordingState",
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+        )
+        Text(
             "thermal: $thermalNow — ${thermal.joinToString(" → ")}",
             style = MaterialTheme.typography.bodyMedium,
             fontFamily = FontFamily.Monospace,
@@ -354,12 +360,29 @@ private fun EchoRunner() {
             Button(
                 onClick = {
                     if (recording == null) {
-                        recording = startRecording(context, session)
                         report = null
+                        recordingState = "starting…"
+                        recording = startRecording(context, session) { event ->
+                            when (event) {
+                                is VideoRecordEvent.Status -> {
+                                    val s = event.recordingStats.recordedDurationNanos / 1_000_000_000
+                                    val mib = event.recordingStats.numBytesRecorded / (1024 * 1024)
+                                    recordingState = "recording %d:%02d, %d MiB".format(s / 60, s % 60, mib)
+                                }
+                                is VideoRecordEvent.Finalize -> {
+                                    // The recorder can end a take on its own. Reflect
+                                    // that, rather than leaving a button claiming to
+                                    // be recording something that stopped minutes ago.
+                                    recordingState = "ENDED: ${finalizeReason(event)}"
+                                    recording = null
+                                    report = session.report(cameraId, "Rear main (wide)")
+                                }
+                                else -> Unit
+                            }
+                        }
                     } else {
                         recording?.stop()
                         recording = null
-                        report = session.report(cameraId, "Rear main (wide)")
                     }
                 },
             ) {
@@ -446,15 +469,53 @@ private fun hasCameraPermission(context: Context): Boolean =
  * The file is evidence for the issue: its metadata is what PRD 6.1's "3840x2160
  * at 30.00 fps constant" is checked against.
  */
-private fun startRecording(context: Context, session: ManualSession): Recording {
+private fun startRecording(
+    context: Context,
+    session: ManualSession,
+    onEvent: (VideoRecordEvent) -> Unit,
+): Recording {
     val file = File(context.getExternalFilesDir(null), "interop-echo-${System.currentTimeMillis()}.mp4")
     return session.recorder
         .prepareRecording(context, FileOutputOptions.Builder(file).build())
-        .start(ContextCompat.getMainExecutor(context)) { event ->
-            if (event is VideoRecordEvent.Finalize && event.hasError()) {
-                android.util.Log.e("InteropEcho", "recording failed: ${event.error}", event.cause)
-            }
-        }
+        .start(ContextCompat.getMainExecutor(context), onEvent)
+}
+
+/**
+ * Why a recording ended, in words.
+ *
+ * Two timed runs were mis-reported before this existed. One stopped at the
+ * device's 120 s screen timeout and the UI claimed it was still recording for
+ * another nine minutes; another ended 3.4 MB short of 2 GiB and left no evidence
+ * of whether that was a file-size cap or a human pressing stop. A measurement
+ * harness that cannot say why it stopped measuring is worse than none, because
+ * its numbers look fine.
+ */
+private fun finalizeReason(event: VideoRecordEvent.Finalize): String {
+    val error = when (event.error) {
+        VideoRecordEvent.Finalize.ERROR_NONE -> "stopped normally"
+        VideoRecordEvent.Finalize.ERROR_UNKNOWN -> "UNKNOWN"
+        VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED -> "FILE_SIZE_LIMIT_REACHED"
+        VideoRecordEvent.Finalize.ERROR_INSUFFICIENT_STORAGE -> "INSUFFICIENT_STORAGE"
+        VideoRecordEvent.Finalize.ERROR_SOURCE_INACTIVE -> "SOURCE_INACTIVE (camera unbound — screen off?)"
+        VideoRecordEvent.Finalize.ERROR_INVALID_OUTPUT_OPTIONS -> "INVALID_OUTPUT_OPTIONS"
+        VideoRecordEvent.Finalize.ERROR_ENCODING_FAILED -> "ENCODING_FAILED"
+        VideoRecordEvent.Finalize.ERROR_RECORDER_ERROR -> "RECORDER_ERROR"
+        VideoRecordEvent.Finalize.ERROR_NO_VALID_DATA -> "NO_VALID_DATA"
+        VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED -> "DURATION_LIMIT_REACHED"
+        VideoRecordEvent.Finalize.ERROR_RECORDING_GARBAGE_COLLECTED -> "RECORDING_GARBAGE_COLLECTED"
+        else -> "error ${event.error}"
+    }
+    val stats = event.recordingStats
+    val seconds = stats.recordedDurationNanos / 1_000_000_000.0
+    val mib = stats.numBytesRecorded / (1024.0 * 1024.0)
+    val cause = event.cause?.message?.let { " — $it" } ?: ""
+    return "%s after %d:%02d, %.0f MiB%s".format(
+        error,
+        (seconds / 60).toInt(),
+        (seconds % 60).toInt(),
+        mib,
+        cause,
+    )
 }
 
 private fun copyToClipboard(context: Context, text: String) {
