@@ -36,7 +36,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,6 +57,7 @@ import com.scenaristo.camera.capture.KeyEcho
 import com.scenaristo.camera.capture.LensEchoReport
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
+import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.capture.SessionSupportProbe
 import com.scenaristo.camera.capture.markdown
 import java.io.File
@@ -111,11 +114,27 @@ private fun EchoRunner() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Analysis is dropped when the device refuses UHD + analysis, which the Pixel
-    // 10 does (#20). The keys ride on Preview either way, so the echo measurement
-    // survives; what does not survive is ADR-0005's metering and ADR-0008's
-    // preview source, and that is a decision, not a fallback.
-    var session by remember { mutableStateOf(ManualSession(DEFAULT_REQUEST)) }
+    // Frames come from the GL tap rather than ImageAnalysis (ADR-0018). The
+    // counter is the measurement that matters here: binding proved the session is
+    // accepted, and only a frame rate proves a real shader keeps up with a 4K
+    // encode running beside it.
+    var tapFrames by remember { mutableIntStateOf(0) }
+    var tapFps by remember { mutableStateOf("—") }
+    val tap = remember {
+        var first = 0L
+        var count = 0
+        PreviewTapProcessor { image ->
+            image.close()
+            count++
+            val now = System.nanoTime()
+            if (first == 0L) first = now
+            val seconds = (now - first) / 1_000_000_000.0
+            if (seconds > 0.5) tapFps = "%.1f".format(count / seconds)
+            tapFrames = count
+        }
+    }
+    val session = remember { ManualSession(DEFAULT_REQUEST, tap = tap) }
+    DisposableEffect(Unit) { onDispose { tap.release() } }
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
     var status by remember { mutableStateOf("Binding…") }
     var cameraId by remember { mutableStateOf("?") }
@@ -240,27 +259,11 @@ private fun EchoRunner() {
 
         status = try {
             provider.bindToLifecycle(lifecycleOwner, selector, session.sessionConfig)
-            "Bound with analysis. manualSensor=${caps.hasManualSensor} " +
+            "Bound with the preview tap. manualSensor=${caps.hasManualSensor} " +
                 "manualPostProcessing=${caps.hasManualPostProcessing} uhd30=${caps.supportsUhd30}"
         } catch (e: IllegalArgumentException) {
-            // Record this verbatim: it is a Phase 0 result, not a bug. Then retry
-            // without ImageAnalysis so #20's own question -- do the keys echo --
-            // is still answered on a session this device accepts.
-            val withoutAnalysis = ManualSession(DEFAULT_REQUEST, includeAnalysis = false)
-            session = withoutAnalysis
-            runCatching {
-                provider.unbindAll()
-                withoutAnalysis.preview.setSurfaceProvider { surfaceRequest = it }
-                provider.bindToLifecycle(lifecycleOwner, selector, withoutAnalysis.sessionConfig)
-                withoutAnalysis.videoCapture.resolutionInfo?.resolution
-            }.fold(
-                onSuccess = { resolution ->
-                    "NO ANALYSIS: bound preview+video at $resolution after \"${e.message}\". " +
-                        "manualSensor=${caps.hasManualSensor} " +
-                        "manualPostProcessing=${caps.hasManualPostProcessing}"
-                },
-                onFailure = { "BIND FAILED — ${e.message}; and without analysis: ${it.message}" },
-            )
+            // Record verbatim: a refusal here is a Phase 0 result, not a bug.
+            "BIND FAILED — ${e.message}"
         }
     }
 
@@ -273,6 +276,11 @@ private fun EchoRunner() {
         }
 
         Text(status, style = MaterialTheme.typography.bodySmall)
+        Text(
+            "tap: $tapFrames frames, $tapFps fps",
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
