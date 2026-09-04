@@ -33,7 +33,8 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 
 ## Tooling and skills
 
-- Setup, build, test and PR conventions: `CONTRIBUTING.md`. Read it before running a build command. Android tooling here is Google's `android` CLI; there is **no `sdkmanager`, `adb`, `avdmanager` or system `gradle`** on the maintainer's machine, and CI runners are the opposite. Do not copy setup instructions between the two (ADR-0014).
+- Setup, build, test and PR conventions: `CONTRIBUTING.md`. Read it before running a build command. Android tooling here is Google's `android` CLI; there is **no `sdkmanager`, `avdmanager` or system `gradle`** on the maintainer's machine, and CI runners are the opposite. Do not copy setup instructions between the two (ADR-0014).
+- **`adb` is not on `PATH`, but it exists.** `android sdk install platform-tools` puts it at `$(android info sdk)/platform-tools/adb`. ADR-0014's "no `adb`" describes the machine before that step ran. Nothing in CI may call it (ADR-0016); everything you run against a phone does — `logcat`, `am`, `getprop`, force-stopping a recording.
 - Build from `android/`: `./gradlew build`. `:domain` tests run as `./gradlew :domain:jvmTest`.
 - The `commonTest` / `withHostTest {}` build warning is expected and deliberate (ADR-0015). Do not "fix" it.
 - Repo invariants are enforced by `tools/check-adr-invariants.sh`, `tools/check-domain-platform-free.sh` and `tools/check-adr-index.sh`, all of which run in CI. If one fails, the message names the ADR.
@@ -44,7 +45,9 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 
 - Product decisions (scope, priority, defaults as experienced by users) are Davide's; propose, do not decide. Technical decisions go through ADRs.
 - The PRD's acceptance criteria are the definition of done for capture behaviour; cite them in tests.
+- **The reference Pixel 10 is usually reachable over Wi-Fi**, as `<ip>:5555` in `adb devices`. Confirm which phone answered (`adb -s <serial> shell getprop ro.product.model`) before writing a result down: every device result here is a claim about one specific handset. A green CI run is evidence about compilation and host tests and about nothing a camera does (ADR-0016).
 - The Phase 0 reference matrix is one phone and one browser: a Pixel 10 and a MacBook (ADR-0017, PRD section 9). There is no Samsung, no iPhone and no iPad. Do not write a checklist, test or doc line that assumes a second device, and do not describe a Pixel 10 result as Android-wide or a macOS Safari result as iOS coverage. Widening the matrix is a later phase and a superseding ADR.
 - `:domain` is a single-target Kotlin Multiplatform module; all of its code lives in `commonMain` so the compiler keeps it platform-free (ADR-0010).
 - CameraX is pinned at 1.6.2 (ADR-0002). Do not bump it; the 1.7 upgrade is a scheduled review with its own checklist in that ADR. All `Camera2Interop` usage stays inside the `ManualControls` class in `:capture`.
-- Do not commit or push unless asked. Branches are created by the workflow; do not create new ones.
+- **Features are stacked: one branch and one pull request per reviewable change.** The workflow creates the session's first branch; create further `claude/<slug>-<6hex>` branches to stack on it rather than letting one branch carry several changes, which the review bar rejects (`CONTRIBUTING.md` section 7). A change that depends on an unmerged one branches from it and opens against it as base; an independent change branches from `main`. When a lower pull request merges, rebase what sat on top of it.
+- Do not commit or push unless asked.

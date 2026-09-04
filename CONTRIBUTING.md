@@ -46,9 +46,19 @@ so Corepack will use the right one; `corepack enable` if you do not have pnpm al
 ### 3.2 Android tooling, macOS — the `android` CLI
 
 This project's macOS setup uses Google's unified `android` CLI. **There is no `sdkmanager`,
-`avdmanager`, `adb`, standalone `gradle`, or Android Studio requirement.** Instructions elsewhere
-that begin "run `sdkmanager`" do not apply, and the package ids are path-style
-(`platforms/android-37.0`, not `platforms;android-37`).
+`avdmanager`, standalone `gradle`, or Android Studio requirement**, and no `adb` on `PATH`.
+Instructions elsewhere that begin "run `sdkmanager`" do not apply, and the package ids are
+path-style (`platforms/android-37.0`, not `platforms;android-37`).
+
+`adb` is unlisted rather than absent: `android sdk install platform-tools` below is what installs
+it. Reach for it only where the `android` CLI does not reach — `logcat`, `am`, `getprop`,
+force-stopping a recording — and keep it in a variable rather than on `PATH`, so nothing written
+here grows a dependency CI does not have:
+
+```bash
+ADB="$(android info sdk)/platform-tools/adb"
+"$ADB" devices -l
+```
 
 ```bash
 android --version        # expect 1.0.16251017 or newer
@@ -118,6 +128,10 @@ The emulator has no real camera, no `MANUAL_SENSOR`, no hardware HEVC encoder an
 behaviour. It is useful for `:domain`, `:server` and non-camera UI, and for nothing else this app
 is about.
 
+The Pixel 10 is usually paired over Wi-Fi and appears as `<ip>:5555`. Confirm which phone answered
+before writing a result down — `"$ADB" -s <serial> shell getprop ro.product.model` — because every
+device result in this repository is a claim about one specific handset.
+
 Reference devices are one Pixel 10 and a MacBook running Safari and Chrome (ADR-0017, PRD
 section 9). There is no second phone and no iOS device, so a Phase 0 result is evidence about a
 Pixel 10 and about WebKit on macOS — say that, rather than implying fleet-wide or iOS coverage. The
@@ -162,8 +176,11 @@ change it justifies, and only Davide sets a status to `Accepted` — open yours 
 
 ## 6. Branches, commits, pull requests
 
-- **Branches** target `main`. Agent branches are `claude/<slug>-<6hex>` and are created by the
-  workflow; an agent must not create its own.
+- **Branches** are `claude/<slug>-<6hex>`. The workflow creates the session's first one; **stack
+  the rest** rather than piling several changes onto one branch, which section 7 rejects. A change
+  that depends on an unmerged one branches from it and opens its pull request against it as base;
+  an independent change branches from `main`. When a lower pull request merges, rebase what sat on
+  top of it.
 - **Pull request titles are Conventional Commits.** `main` uses squash merges, so the PR title
   becomes the commit subject on `main` — the title is the thing that has to conform, and commits
   on your branch are working notes that the squash discards.
