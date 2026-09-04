@@ -1,0 +1,26 @@
+{
+  "type": "state",
+  "rev": 7,
+  "state": {
+    "settings": {
+      "grid": "HZ_50",
+      "shutterHz": 100,
+      "iso": 400,
+      "whiteBalanceKelvin": 3200,
+      "lensId": "0"
+    },
+    "recording": {
+      "recording": true,
+      "startedAtMs": 1788500000000
+    },
+    "device": {
+      "batteryPercent": 63,
+      "charging": false,
+      "thermal": "FAIR",
+      "storageMinutesRemaining": 84
+    },
+    "warnings": ["TOO_DARK"],
+    "clients": 2,
+    "serverTimeMs": 1788500123456
+  }
+}

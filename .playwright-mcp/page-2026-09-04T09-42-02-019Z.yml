@@ -1,0 +1,255 @@
+- generic [active] [ref=f3e1]:
+  - banner [ref=f3e2]:
+    - generic [ref=f3e3]:
+      - link "scenaristo, inicio" [ref=f3e4] [cursor=pointer]:
+        - /url: /es
+        - generic [ref=f3e5]: scenaristo
+      - navigation [ref=f3e6]:
+        - link "Funciones" [ref=f3e7] [cursor=pointer]:
+          - /url: /es/features
+        - link "Podcast" [ref=f3e8] [cursor=pointer]:
+          - /url: /es/podcast
+        - link "Shorts" [ref=f3e9] [cursor=pointer]:
+          - /url: /es/shorts
+        - link "Gaming" [ref=f3e10] [cursor=pointer]:
+          - /url: /es/gaming
+        - link "Modelos" [ref=f3e11] [cursor=pointer]:
+          - /url: /es/models
+        - link "Comparar" [ref=f3e12] [cursor=pointer]:
+          - /url: /compare
+          - text: CompararEN
+      - link "Descargar gratis" [ref=f3e14] [cursor=pointer]:
+        - /url: /es/download
+  - main [ref=f3e15]:
+    - generic [ref=f3e18]:
+      - generic [ref=f3e19]: Funciones
+      - heading "El montaje, reconstruido alrededor de las palabras." [level=1] [ref=f3e20]
+      - paragraph [ref=f3e21]:
+        - text: En el vídeo hablado, la transcripción
+        - emphasis [ref=f3e22]: es
+        - text: ya la lista de decisiones de montaje. Scenaristo la trata así y mantiene una línea de tiempo real al alcance para los momentos que piden un fotograma, no una frase.
+    - generic [ref=f3e24]:
+      - generic [ref=f3e25]:
+        - generic [ref=f3e26]: Montaje basado en texto
+        - heading "La transcripción es el editor." [level=2] [ref=f3e27]
+        - paragraph [ref=f3e28]: Cada palabra lleva su propia marca de tiempo, así que el documento y el material son dos vistas del mismo montaje. Selecciona una frase, pulsa suprimir y el material se cierra. Los cortes caen en los límites de palabra con un breve fundido encadenado, así que no suena ningún chasquido.
+        - list [ref=f3e29]:
+          - listitem [ref=f3e30]:
+            - generic [ref=f3e33]: Haz clic en una palabra para llevar allí el punto de reproducción al instante.
+          - listitem [ref=f3e34]:
+            - generic [ref=f3e38]: Un solo historial de deshacer abarca texto y línea de tiempo a la vez.
+          - listitem [ref=f3e39]:
+            - generic [ref=f3e43]: Léelo como un artículo o cambia a una disposición de página tipo guion.
+          - listitem [ref=f3e44]:
+            - generic [ref=f3e49]: Busca en la transcripción para saltar directamente a cualquier frase.
+          - listitem [ref=f3e50]:
+            - generic [ref=f3e54]: Empieza a montar antes de que termine. La transcripción llega en segundo plano, así que una grabación larga se puede montar desde el primer minuto transcrito.
+      - generic [ref=f3e56]:
+        - 'button "Ver a tamaño completo: Una grabación de 92 minutos dispuesta como un artículo editable en el lector de transcripción, 9610 palabras con sincronía por palabra." [ref=f3e57]'
+        - generic [ref=f3e58]: Lector editorial · 9610 palabras · sincronía por palabra
+    - generic [ref=f3e60]:
+      - generic [ref=f3e61]:
+        - generic [ref=f3e62]: Híbrido por diseño
+        - heading "Una línea de tiempo real para los momentos al fotograma." [level=2] [ref=f3e63]
+        - paragraph [ref=f3e64]: "Casi todos los cortes ocurren en el texto. Pero cuando uno cae a mitad de una respiración, la línea de tiempo clásica está ahí mismo: ajusta un límite al fotograma, corta una zona sin habla, mueve un punto de corte. Y muestra el vídeo que estás haciendo, no la grabación que importaste: el material cortado sencillamente no se dibuja, así que cada corte se lee como una junta entre clips y la regla marca el tiempo de salida."
+        - list [ref=f3e65]:
+          - listitem [ref=f3e66]:
+            - generic [ref=f3e70]: Pistas de vídeo, audio y texto, alineadas en el mismo punto de reproducción. Arrastra en cualquier punto de ellas para recorrerlas.
+          - listitem [ref=f3e71]:
+            - generic [ref=f3e75]: Forma de onda y zoom para ajustes precisos, al fotograma.
+          - listitem [ref=f3e76]:
+            - generic [ref=f3e80]: Un fundido encadenado en cualquier corte. Añádelo o quítalo en la junta misma, y la reproducción y la exportación rinden el mismo fundido.
+      - generic [ref=f3e82]:
+        - 'button "Ver a tamaño completo: La vista de línea de tiempo con las palabras tachadas reflejadas como cortes cerrados en las pistas de vídeo y audio, y la transcripción sincronizada en la barra lateral." [ref=f3e83]'
+        - generic [ref=f3e84]: Vista de línea de tiempo · barra de transcripción sincronizada
+    - generic [ref=f3e86]:
+      - generic [ref=f3e87]:
+        - generic [ref=f3e88]: El resto de la caja de herramientas
+        - heading "Funciones tranquilas que hacen trabajo de verdad." [level=2] [ref=f3e89]
+      - generic [ref=f3e90]:
+        - generic [ref=f3e91]:
+          - heading "Eliminación suave con tachado" [level=3] [ref=f3e95]
+          - paragraph [ref=f3e96]: Prueba un corte antes de confirmarlo. El texto tachado sigue visible pero atenuado; la reproducción y la exportación lo saltan; un clic lo devuelve sin pérdidas.
+          - generic [ref=f3e97]: No destructivo
+        - generic [ref=f3e98]:
+          - heading "Muletillas y silencios, limpiados" [level=3] [ref=f3e103]
+          - paragraph [ref=f3e104]: "Cada \"eh\", \"o sea\" y pausa demasiado larga queda marcado, y el vocabulario de muletillas sigue el idioma de la grabación: una grabación en español recibe una lista española. Revísalas una a una o tacha el conjunto entero con un solo clic."
+          - generic [ref=f3e105]: En bloque o una a una
+        - generic [ref=f3e106]:
+          - heading "Subtítulos de regalo" [level=3] [ref=f3e110]
+          - paragraph [ref=f3e111]: Exporta SRT y VTT desde la transcripción corregida y ya cortada, con los bloques agrupados en la puntuación natural, o incrústalos en la imagen para los Shorts. Tus subtítulos coinciden exactamente con el montaje final, sin una segunda pasada.
+          - generic [ref=f3e112]: SRT · VTT
+        - generic [ref=f3e113]:
+          - heading "Correction mode" [level=3] [ref=f3e117]
+          - paragraph [ref=f3e118]: Corrige un nombre mal transcrito sin tocar un fotograma (Correction mode, modo corrección). Un modo aparte mantiene bien separadas las correcciones de texto y los cortes.
+          - generic [ref=f3e119]: Solo texto
+        - generic [ref=f3e120]:
+          - heading "Etiquetas de varios hablantes" [level=3] [ref=f3e126]
+          - paragraph [ref=f3e127]: Entrevistas y mesas redondas se dividen en turnos que renombras en la propia transcripción, con cada voz distinguida de forma coherente en todo el archivo. Dile cuántas voces hay, o déjalo decidir; probar otro número rehace solo la pasada de hablantes.
+          - generic [ref=f3e128]: Diarización en local
+        - generic [ref=f3e129]:
+          - heading "Normalización de volumen" [level=3] [ref=f3e133]
+          - paragraph [ref=f3e134]: Masteriza el audio a un objetivo (Podcast −16 LUFS, un valor propio, o el objetivo social de −14 LUFS aplicado automáticamente a las exportaciones de vídeo), dentro de ±0.5 LU, con techo de pico y el resultado medido informado de vuelta.
+          - generic [ref=f3e135]: EBU R128 · LUFS
+        - generic [ref=f3e136]:
+          - heading "Capítulos" [level=3] [ref=f3e141]
+          - paragraph [ref=f3e142]:
+            - text: Fija capítulos sobre palabras de la transcripción. Exporta una lista
+            - code [ref=f3e143]: 00:00
+            - text: para pegar en YouTube y tramas ID3
+            - code [ref=f3e144]: CHAP
+            - text: que las aplicaciones de pódcast muestran de forma nativa. Los capítulos se mueven con tus cortes.
+          - generic [ref=f3e145]: YouTube · ID3 CHAP
+        - generic [ref=f3e146]:
+          - heading "Pasa a tu programa de edición" [level=3] [ref=f3e150]
+          - paragraph [ref=f3e151]: Exporta una línea de tiempo FCPXML 1.11 con cortes, fundidos encadenados y marcadores de capítulo intactos, para rematar en Final Cut Pro, Premiere o DaVinci Resolve. No se recodifica ningún material.
+          - generic [ref=f3e152]: Exportación FCPXML
+        - generic [ref=f3e153]:
+          - heading "Export All, en una pasada" [level=3] [ref=f3e158]
+          - paragraph [ref=f3e159]: Saca un MP4 a la resolución de origen, codificado según la especificación H.264 que recomiendan las plataformas, o MP3/WAV para pódcast, o agrupa vídeo, subtítulos y capítulos tras una sola ventana con un nombre común. La duración es el origen menos tus cortes.
+          - generic [ref=f3e160]: MP4 · MP3 · WAV
+        - generic [ref=f3e161]:
+          - heading "Quédate con la mejor toma" [level=3] [ref=f3e165]
+          - paragraph [ref=f3e166]: "Graba la misma frase hasta que salga bien: un análisis encuentra cada intento. Revisa cada grupo en la transcripción, escucha las tomas una junto a otra, elige la buena y acepta para tachar el resto. Propuestas, no cambios, hasta que tú lo digas."
+          - generic [ref=f3e167]: Detección de tomas
+        - generic [ref=f3e168]:
+          - heading "Clips y exportación vertical" [level=3] [ref=f3e172]
+          - paragraph [ref=f3e173]: "Selecciona un tramo, pulsa ⌘⇧K y expórtalo como MP4 9:16 o 1:1 con un SRT resincronizado: superposición de recorte, guías de zona segura y encuadre automático en local incluidos."
+          - generic [ref=f3e174]: 9:16 · 1:1 · ⌘⇧K
+        - generic [ref=f3e175]:
+          - heading "Subtítulos incrustados" [level=3] [ref=f3e179]
+          - paragraph [ref=f3e180]: Compón los subtítulos en los fotogramas para la reproducción automática sin sonido, con un estilo de legibilidad fija idéntico al SRT aparte, previsualizados exactamente como se van a publicar.
+          - generic [ref=f3e181]: Subtítulos abiertos
+        - generic [ref=f3e182]:
+          - heading "Deliverable Modes" [level=3] [ref=f3e187]
+          - paragraph [ref=f3e188]: "En la primera importación di qué estás haciendo (Deliverable Modes, formatos de entrega: Podcast, Long-form o Short-form) y los ajustes de exportación y la disposición adecuados quedan puestos de una vez. Siempre modificable, nunca impuesto de nuevo."
+          - generic [ref=f3e189]: Podcast · Long-form · Short-form
+        - generic [ref=f3e190]:
+          - heading "Un proyecto, un archivo" [level=3] [ref=f3e195]
+          - paragraph [ref=f3e196]:
+            - text: Un proyecto es un único archivo
+            - code [ref=f3e197]: .scenar
+            - text: . Haz copia, duplícalo, muévelo como cualquier documento. Cada edición es una capa no destructiva dentro de él, nunca un cambio en tu material de origen.
+          - generic [ref=f3e198]: .scenar · no destructivo
+    - generic [ref=f3e200]:
+      - generic [ref=f3e201]:
+        - generic [ref=f3e202]: Bajo el capó
+        - heading "En local, y honestos al respecto." [level=2] [ref=f3e203]
+        - paragraph [ref=f3e204]:
+          - text: La transcripción se apoya en modelos de voz abiertos de primer nivel, descargados a demanda y fijados por suma de comprobación. En el instalador no viene nada incluido. Elige el rápido por defecto, o pasa a un modelo más pesado cuando haga falta precisión. Mira la
+          - link "familia de modelos completa" [ref=f3e205] [cursor=pointer]:
+            - /url: /es/models
+          - text: .
+      - generic [ref=f3e206]:
+        - generic [ref=f3e207]:
+          - heading "Importación" [level=3] [ref=f3e208]
+          - paragraph [ref=f3e209]: MP4, MOV, MKV y WebM (VP9/Opus) para vídeo. MP3, WAV, AAC y M4A para audio. Arrastrar y soltar; el clip llega a la línea de tiempo antes incluso de que empiece la transcripción.
+        - generic [ref=f3e210]:
+          - heading "Modelos de transcripción" [level=3] [ref=f3e211]
+          - paragraph [ref=f3e212]: No viene nada incluido. El modelo Parakeet por defecto y todas las alternativas se descargan a demanda con sumas de comprobación fijadas, así la aplicación sigue siendo pequeña y solo bajas lo que usas.
+        - generic [ref=f3e213]:
+          - heading "macOS" [level=3] [ref=f3e214]
+          - paragraph [ref=f3e215]: macOS 14 Sonoma o posterior en Apple silicon. 8 GB de memoria mínimo, 16 GB recomendados. La codificación y la decodificación van por los motores multimedia del sistema, así que las exportaciones son rápidas sin una granja de renderizado. Los proyectos viven en una biblioteca con Recents y Save As, y la transcripción va en segundo plano con progreso en directo en archivos largos.
+        - generic [ref=f3e216]:
+          - heading "Windows" [level=3] [ref=f3e217]
+          - paragraph [ref=f3e218]:
+            - text: El mismo editor en Windows 10 x64, con instalador firmado y archivos de proyecto portables que también se abren en macOS. 8 GB de memoria mínimo, 16 GB recomendados; GPU dedicada recomendada, no obligatoria.
+            - link "Descargar para Windows" [ref=f3e219] [cursor=pointer]:
+              - /url: /es/download#windows
+            - text: .
+    - generic [ref=f3e222]:
+      - generic [ref=f3e223]: Pruébalo en tu próxima grabación
+      - heading "Ve tu montaje antes de tocar una línea de tiempo." [level=2] [ref=f3e224]: Ve tu montaje antes detocar una línea de tiempo.
+      - generic [ref=f3e225]:
+        - link "Descargar gratis" [ref=f3e226] [cursor=pointer]:
+          - /url: /es/download
+        - link "Ver la comparación" [ref=f3e227] [cursor=pointer]:
+          - /url: /compare
+      - paragraph [ref=f3e228]: Gratis hoy · sin cuenta
+  - contentinfo [ref=f3e229]:
+    - generic [ref=f3e230]:
+      - generic [ref=f3e231]:
+        - generic [ref=f3e232]:
+          - link "scenaristo, inicio" [ref=f3e233] [cursor=pointer]:
+            - /url: /es
+            - generic [ref=f3e234]: scenaristo
+          - paragraph [ref=f3e235]: El editor de vídeo donde la transcripción es el montaje. Todo en local, rápido y pensado para quien prefiere no aprender un programa de edición.
+        - generic [ref=f3e236]:
+          - heading "Producto" [level=3] [ref=f3e237]
+          - link "Funciones" [ref=f3e238] [cursor=pointer]:
+            - /url: /es/features
+          - link "Entrega de podcast" [ref=f3e239] [cursor=pointer]:
+            - /url: /es/podcast
+          - link "Entrega de Shorts" [ref=f3e240] [cursor=pointer]:
+            - /url: /es/shorts
+          - link "Vídeos gaming" [ref=f3e241] [cursor=pointer]:
+            - /url: /es/gaming
+          - link "Modelos" [ref=f3e242] [cursor=pointer]:
+            - /url: /es/models
+          - link "Comparar" [ref=f3e243] [cursor=pointer]:
+            - /url: /compare
+          - link "Novedades" [ref=f3e244] [cursor=pointer]:
+            - /url: /changelog
+          - link "Descargar" [ref=f3e245] [cursor=pointer]:
+            - /url: /es/download
+        - generic [ref=f3e246]:
+          - heading "Plataformas" [level=3] [ref=f3e247]
+          - link "macOS" [ref=f3e248] [cursor=pointer]:
+            - /url: /es/download
+          - link "Windows" [ref=f3e249] [cursor=pointer]:
+            - /url: /es/download#windows
+          - link "Requisitos del sistema" [ref=f3e250] [cursor=pointer]:
+            - /url: /es/features#requirements
+        - generic [ref=f3e251]:
+          - heading "Acerca de" [level=3] [ref=f3e252]
+          - link "El planteamiento" [ref=f3e253] [cursor=pointer]:
+            - /url: /es#how
+          - link "frente a Descript" [ref=f3e254] [cursor=pointer]:
+            - /url: /vs/descript
+          - link "Descargar" [ref=f3e255] [cursor=pointer]:
+            - /url: /es/download
+        - generic [ref=f3e256]:
+          - heading "Apoyo" [level=3] [ref=f3e257]
+          - link "Invítame a un café" [ref=f3e258] [cursor=pointer]:
+            - /url: https://ko-fi.com/davideme
+          - link "GitHub Sponsors" [ref=f3e259] [cursor=pointer]:
+            - /url: https://github.com/sponsors/davideme
+          - link "Contacto" [ref=f3e260] [cursor=pointer]:
+            - /url: mailto:hello@scenaristo.com
+      - generic [ref=f3e261]:
+        - generic [ref=f3e262]: © 2026 Scenaristo. Todos los derechos reservados.
+        - generic [ref=f3e263]: Pensado para la palabra hablada · en local por defecto
+      - navigation "Language" [ref=f3e264]:
+        - link "English (US)" [ref=f3e265] [cursor=pointer]:
+          - /url: /features/
+        - link "English (UK)" [ref=f3e266] [cursor=pointer]:
+          - /url: /en-gb/features/
+        - link "Français" [ref=f3e267] [cursor=pointer]:
+          - /url: /fr/features/
+        - link "Italiano" [ref=f3e268] [cursor=pointer]:
+          - /url: /it/features/
+        - link "Español" [ref=f3e269] [cursor=pointer]:
+          - /url: /es/features/
+        - link "Nederlands" [ref=f3e270] [cursor=pointer]:
+          - /url: /nl/features/
+        - link "日本語" [ref=f3e271] [cursor=pointer]:
+          - /url: /ja/features/
+        - link "한국어" [ref=f3e272] [cursor=pointer]:
+          - /url: /ko/features/
+        - link "Dansk" [ref=f3e273] [cursor=pointer]:
+          - /url: /da/features/
+        - link "Svenska" [ref=f3e274] [cursor=pointer]:
+          - /url: /sv/features/
+        - link "Íslenska" [ref=f3e275] [cursor=pointer]:
+          - /url: /is/features/
+        - link "Suomi" [ref=f3e276] [cursor=pointer]:
+          - /url: /fi/features/
+  - region "Language" [ref=f3e277]:
+    - link "View this page in English (UK)" [ref=f3e278] [cursor=pointer]:
+      - /url: http://localhost:4399/en-gb/features/
+    - button "Not now" [ref=f3e279] [cursor=pointer]
+  - generic [ref=f3e282]:
+    - button [ref=f3e283]
+    - button [ref=f3e289]
+    - button [ref=f3e293]
+    - button [ref=f3e298]
