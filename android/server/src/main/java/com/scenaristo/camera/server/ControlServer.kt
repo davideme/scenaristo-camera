@@ -15,6 +15,7 @@ import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
+import io.ktor.server.http.content.staticResources
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.host
 import io.ktor.server.response.respond
@@ -84,6 +85,10 @@ class ControlServer(
                 timeoutMillis = 4_000
             }
             routing {
+                // The UI itself, from the bundle inside the APK (ADR-0009). This
+                // is what makes the remote zero-install: the laptop types an IP
+                // and gets a page, with nothing to download and no store.
+                staticResources("/", "web") { default("index.html") }
                 get("/preview.mjpg") {
                     if (!admit(call)) return@get
                     streamPreview(call)

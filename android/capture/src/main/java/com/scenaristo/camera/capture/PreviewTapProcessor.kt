@@ -81,8 +81,34 @@ class PreviewTapProcessor(
     private var readerSurface: EGLSurface = EGL14.EGL_NO_SURFACE
 
     private val texMatrix = FloatArray(16)
+
+    /** Our crop, in the coordinate space CameraX's own matrix produces. */
     private val cropMatrix = FloatArray(16)
+
+    /**
+     * CameraX's matrix for the current frame, borrowed for our reader.
+     *
+     * Deriving rotation ourselves from `TransformationInfo` was wrong: the
+     * matrix CameraX builds carries the sensor-to-buffer transform and any
+     * mirroring as well as the display rotation, and re-deriving one of those
+     * three by hand leaves the other two behind. The browser then sees the scene
+     * turned on its side while the phone shows it upright — which is exactly
+     * what happened.
+     */
+    private val cameraXMatrix = FloatArray(16)
     private val outMatrix = FloatArray(16)
+
+    /**
+     * How far the buffer has to be turned to look upright, from CameraX's
+     * transformation info.
+     *
+     * CameraX applies this to its own surfaces through `updateTransformMatrix`.
+     * Our reader is not one of its surfaces, so without applying it here the
+     * browser gets the sensor's native orientation while the phone shows an
+     * upright picture — which is exactly the bug this fixes.
+     */
+    private var rotationDegrees = 0
+    private var haveCameraXMatrix = false
 
     private val vertices: ByteBuffer = ByteBuffer.allocateDirect(VERTICES.size * 4)
         .order(ByteOrder.nativeOrder())
@@ -101,6 +127,20 @@ class PreviewTapProcessor(
                 setOnFrameAvailableListener({ handler.post(::drawFrame) }, handler)
             }
             surfaceTexture = texture
+
+            request.setTransformationInfoListener({ it.run() }) { info ->
+                handler.post {
+                    if (info.rotationDegrees == rotationDegrees) return@post
+                    val quarterTurnChanged = (info.rotationDegrees / 90) % 2 != (rotationDegrees / 90) % 2
+                    rotationDegrees = info.rotationDegrees
+                    // A quarter turn swaps the reader's own width and height, so
+                    // the frames stay the recording's shape rather than becoming
+                    // its transpose.
+                    if (quarterTurnChanged) releaseReader()
+                    ensureReader()
+                    rebuildReaderMatrix()
+                }
+            }
 
             val surface = Surface(texture)
             request.provideSurface(surface, { it.run() }) { result ->
@@ -137,19 +177,23 @@ class PreviewTapProcessor(
 
         for ((output, eglSurface) in outputs) {
             // CameraX knows what its own surface expects -- rotation, mirroring,
-            // and the crop rect from any ViewPort. Take its matrix as given
-            // rather than composing our own on top of it.
+            // and the crop rect from any ViewPort.
             output.updateTransformMatrix(outMatrix, texMatrix)
             drawTo(eglSurface, outMatrix, output.size, texture.timestamp)
+            // Keep the last one as the base for our own surface: it is the same
+            // camera, the same frame and the same upright orientation, and the
+            // only thing our reader wants differently is the crop.
+            System.arraycopy(outMatrix, 0, cameraXMatrix, 0, 16)
+            haveCameraXMatrix = true
         }
 
         // Our reader is the one that must match the recording's framing, because
         // its frames are what the browser shows and what the meter weighs
         // (ADR-0018). CameraX has no opinion about this surface, so the crop is
         // ours to apply.
-        if (readerSurface != EGL14.EGL_NO_SURFACE) {
+        if (readerSurface != EGL14.EGL_NO_SURFACE && haveCameraXMatrix) {
             reader?.let { r ->
-                Matrix.multiplyMM(outMatrix, 0, texMatrix, 0, cropMatrix, 0)
+                Matrix.multiplyMM(outMatrix, 0, cameraXMatrix, 0, cropMatrix, 0)
                 drawTo(readerSurface, outMatrix, Size(r.width, r.height), texture.timestamp)
             }
         }
@@ -245,26 +289,22 @@ class PreviewTapProcessor(
     private fun ensureReader() {
         if (reader != null || inputSize.width == 0) return
 
+        // The crop is computed against the *rotated* input, because a quarter
+        // turn swaps which axis is long. Getting this the wrong way round crops
+        // the correct amount off the wrong edge, which looks like a framing
+        // choice rather than a bug.
+        val upright = uprightInputSize()
         val region = PreviewCrop.centredCrop(
-            inputSize.width,
-            inputSize.height,
+            upright.width,
+            upright.height,
             recordingSize.width,
             recordingSize.height,
         )
-        Matrix.setIdentityM(cropMatrix, 0)
-        Matrix.translateM(cropMatrix, 0, region.offsetX, region.offsetY, 0f)
-        Matrix.scaleM(cropMatrix, 0, region.scaleX, region.scaleY, 1f)
-
-        val (croppedWidth, croppedHeight) = PreviewCrop.croppedSize(inputSize.width, inputSize.height, region)
+        val (croppedWidth, croppedHeight) = PreviewCrop.croppedSize(upright.width, upright.height, region)
         val scale = readerLongEdge.toFloat() / maxOf(croppedWidth, croppedHeight)
         val width = (croppedWidth * scale).toInt().coerceAtLeast(2) and 1.inv()
         val height = (croppedHeight * scale).toInt().coerceAtLeast(2) and 1.inv()
 
-        // RGBA_8888 rather than PRIVATE: PRIVATE is GPU-only, and these frames
-        // exist to be read — the JPEG encoder for the browser preview (ADR-0008)
-        // and the metering loop (ADR-0005) both need the pixels on the CPU. The
-        // usage flags say the surface is a GL render target that the CPU then
-        // reads, which is exactly what this pass does.
         reader = ImageReader.newInstance(
             width,
             height,
@@ -275,13 +315,44 @@ class PreviewTapProcessor(
         ).also { r ->
             r.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
-                // acquireLatestImage drops anything older, which is ADR-0008's
-                // newest-frame-wins. The callback owns closing it.
                 onFrame(image)
             }, handler)
             readerSurface = createWindowSurface(r.surface)
         }
-        Log.d(TAG, "tap reader ${width}x$height from ${inputSize.width}x${inputSize.height}, crop=$region")
+        rebuildReaderMatrix()
+        Log.d(TAG, "tap reader ${width}x$height, rotation=$rotationDegrees, crop=$region")
+    }
+
+    /** The input as it will look once turned upright; a quarter turn swaps the axes. */
+    private fun uprightInputSize(): Size =
+        if ((rotationDegrees / 90) % 2 == 1) Size(inputSize.height, inputSize.width) else inputSize
+
+    /**
+     * The crop alone. Rotation is whatever CameraX's matrix already did.
+     *
+     * It is expressed against the *upright* input, because that is the space
+     * CameraX's matrix leaves the image in: a quarter turn swaps which axis is
+     * long, and cropping the pre-rotation axes takes the right amount off the
+     * wrong edge.
+     */
+    private fun rebuildReaderMatrix() {
+        val upright = uprightInputSize()
+        val region = PreviewCrop.centredCrop(
+            upright.width,
+            upright.height,
+            recordingSize.width,
+            recordingSize.height,
+        )
+        Matrix.setIdentityM(cropMatrix, 0)
+        Matrix.translateM(cropMatrix, 0, region.offsetX, region.offsetY, 0f)
+        Matrix.scaleM(cropMatrix, 0, region.scaleX, region.scaleY, 1f)
+    }
+
+    private fun releaseReader() {
+        if (readerSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, readerSurface)
+        readerSurface = EGL14.EGL_NO_SURFACE
+        reader?.close()
+        reader = null
     }
 
     private fun createExternalTexture(): Int {

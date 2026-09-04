@@ -45,3 +45,22 @@ val protocolFixtures: String =
 tasks.withType<Test>().configureEach {
     systemProperty("scenaristo.protocol.fixtures", protocolFixtures)
 }
+
+// ADR-0009: the TypeScript protocol types are generated from these classes and
+// never hand-written, because two hand-maintained copies drift the first time
+// someone is in a hurry -- and the drift shows up as a browser quietly ignoring
+// a field rather than as an error. The generator walks kotlinx-serialization
+// descriptors, so it needs no code-generation dependency.
+val generateProtocolTypes by tasks.registering(JavaExec::class) {
+    group = "build"
+    description = "Regenerates web/src/protocol.ts from the :domain @Serializable classes."
+    mainClass.set("com.scenaristo.camera.domain.tooling.GenerateProtocolTypes")
+    val output = rootProject.layout.projectDirectory.file("../web/src/protocol.ts")
+    args(output.asFile.absolutePath)
+    outputs.file(output)
+    dependsOn(tasks.named("jvmMainClasses"))
+    classpath(
+        kotlin.targets.getByName("jvm").compilations.getByName("main").output.allOutputs,
+        kotlin.targets.getByName("jvm").compilations.getByName("main").runtimeDependencyFiles,
+    )
+}
