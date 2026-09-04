@@ -71,6 +71,9 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.video)
     implementation(libs.kotlinx.coroutines.android)
+    // LifecycleService is the LifecycleOwner the camera use cases bind to, so
+    // the foreground service needs no hand-written lifecycle registry (ADR-0003).
+    implementation(libs.androidx.lifecycle.service)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
