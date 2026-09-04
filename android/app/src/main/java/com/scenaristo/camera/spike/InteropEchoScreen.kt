@@ -137,18 +137,40 @@ private fun EchoRunner() {
         // processor renders nothing; what is being tested is whether the session
         // is accepted, not whether pixels arrive. Printed first because it is the
         // load-bearing result and the table below is long.
-        val binds = StringBuilder("Real binds (stub SurfaceProcessor):\n")
-        for (r in results.filter { "effect(" in it.candidate.label }) {
+        val binds = StringBuilder("Vararg binds (CameraX resolves the combination itself):\n")
+        for ((label, useCases, varies) in SessionSupportProbe.varargCandidates()) {
+            val outcome = runCatching {
+                provider.unbindAll()
+                provider.bindToLifecycle(lifecycleOwner, selector, *useCases.toTypedArray())
+            }
+            binds.append("- $label ($varies): ")
+                .append(
+                    if (outcome.isSuccess) {
+                        "BOUND ${SessionSupportProbe.resolutionsOf(useCases)}"
+                    } else {
+                        "REFUSED: ${shortReason(outcome.exceptionOrNull())}"
+                    },
+                )
+                .append("\n")
+        }
+        binds.append("\nSessionConfig binds, with the resolutions CameraX assigned:\n")
+        for (r in results) {
             val outcome = runCatching {
                 provider.unbindAll()
                 provider.bindToLifecycle(lifecycleOwner, selector, r.candidate.config)
             }
             binds.append("- ${r.candidate.label}: ")
-                .append(if (outcome.isSuccess) "BOUND" else "REFUSED (${outcome.exceptionOrNull()?.message})")
+                .append(
+                    if (outcome.isSuccess) {
+                        "BOUND ${SessionSupportProbe.resolutions(r.candidate.config)}"
+                    } else {
+                        "REFUSED: ${shortReason(outcome.exceptionOrNull())}"
+                    },
+                )
                 .append("\n")
         }
         provider.unbindAll()
-        support = binds.toString() + "\n" + SessionSupportProbe.markdown(caps.cameraId, results)
+        support = binds.toString()
 
         status = try {
             provider.bindToLifecycle(lifecycleOwner, selector, session.sessionConfig)
@@ -245,6 +267,20 @@ private fun EchoRunner() {
             }
         }
     }
+}
+
+/**
+ * The first sentence of a bind failure plus the surface configs it names. The
+ * full message runs to a dozen lines of FeatureSettings and pushes the later
+ * candidates off screen, and the configs are the part that says why.
+ */
+private fun shortReason(error: Throwable?): String {
+    val message = error?.message ?: return "unknown"
+    val configs = Regex("New configs: \\[(.*?)\\]").find(message)?.groupValues?.get(1)
+        ?.split(",")
+        ?.joinToString(" + ") { it.trim().substringAfterLast('.').substringBefore('@') }
+    val head = message.substringAfter("IllegalArgumentException: ").substringBefore(".")
+    return listOfNotNull(head, configs).joinToString(" — ")
 }
 
 private fun hasCameraPermission(context: Context): Boolean =

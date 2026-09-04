@@ -45,6 +45,20 @@ object SessionSupportProbe {
 
     data class Result(val candidate: Candidate, val supported: Boolean)
 
+    /**
+     * What CameraX actually assigned after a bind. `isSessionConfigSupported` is
+     * CameraX's own model and appears to answer before a `ResolutionSelector` is
+     * resolved, so for anything resolution-dependent the only honest test is to
+     * bind and read the streams back.
+     */
+    fun resolutions(config: SessionConfig): String {
+        val video = config.useCases.filterIsInstance<VideoCapture<*>>()
+            .firstNotNullOfOrNull { it.resolutionInfo?.resolution }
+        val analysis = config.useCases.filterIsInstance<ImageAnalysis>()
+            .firstNotNullOfOrNull { it.resolutionInfo?.resolution }
+        return "video=${video ?: "-"} analysis=${analysis ?: "-"}"
+    }
+
     private fun preview() = Preview.Builder().build()
 
     private fun video() = VideoCapture.withOutput(Recorder.Builder().build())
@@ -210,6 +224,54 @@ object SessionSupportProbe {
             ),
         ),
     )
+
+    /**
+     * The pre-SessionConfig way to bind: hand `bindToLifecycle` the use cases and
+     * let CameraX resolve the combination, including inserting its own internal
+     * stream sharing when the native combination is unsupported.
+     *
+     * This is a different code path from a `SessionConfig` with a *required*
+     * feature group, which fails loudly by design rather than falling back. The
+     * resolutions are read back after binding because "it bound" is not the
+     * question -- whether the recorder actually got UHD is.
+     */
+    fun varargCandidates(): List<Triple<String, List<androidx.camera.core.UseCase>, String>> = listOf(
+        Triple(
+            "vararg: preview + video(UHD) + analysis@960x540",
+            listOf(preview(), videoAt(Quality.UHD), analysisAt(Size(960, 540))),
+            "quality on the Recorder, analysis bounded small",
+        ),
+        Triple(
+            "vararg: preview + video(UHD) + analysis(default)",
+            listOf(preview(), videoAt(Quality.UHD), analysis()),
+            "same, analysis unbounded",
+        ),
+        Triple(
+            "vararg: video(UHD) + analysis@960x540, no preview",
+            listOf(videoAt(Quality.UHD), analysisAt(Size(960, 540))),
+            "two surfaces only; phone viewfinder would draw the analysis frames",
+        ),
+        Triple(
+            "vararg: video(UHD) + analysis@640x480, no preview",
+            listOf(videoAt(Quality.UHD), analysisAt(Size(640, 480))),
+            "same, smaller",
+        ),
+        Triple(
+            "vararg: preview + video(default) + analysis@960x540",
+            listOf(preview(), video(), analysisAt(Size(960, 540))),
+            "no quality demand; what does the Recorder pick?",
+        ),
+    )
+
+    fun resolutionsOf(useCases: List<androidx.camera.core.UseCase>): String {
+        val video = useCases.filterIsInstance<VideoCapture<*>>()
+            .firstNotNullOfOrNull { it.resolutionInfo?.resolution }
+        val analysis = useCases.filterIsInstance<ImageAnalysis>()
+            .firstNotNullOfOrNull { it.resolutionInfo?.resolution }
+        val preview = useCases.filterIsInstance<Preview>()
+            .firstNotNullOfOrNull { it.resolutionInfo?.resolution }
+        return "video=${video ?: "-"} preview=${preview ?: "-"} analysis=${analysis ?: "-"}"
+    }
 
     fun run(cameraInfo: CameraInfo): List<Result> =
         candidates().map { Result(it, cameraInfo.isSessionConfigSupported(it.config)) }
