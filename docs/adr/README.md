@@ -34,6 +34,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0015](0015-domain-module-build-shape.md) | `:domain` with two JVM-family targets under the Android KMP library plugin; platform-freeness enforced by compiler plus lint. Supersedes 0010 | Proposed | 9, 6.2, 6.3, 6.4, 6.10 |
 | [0016](0016-continuous-integration.md) | PRs gated on compilation, host tests and repo invariants; device verification stays manual | Proposed | 6.1-6.7, 6.10, 9 |
 | [0017](0017-phase-0-verification-matrix.md) | Phase 0 runs on one reference device (Pixel 10) with a MacBook browser; second phone and iOS Safari deferred | Accepted | 9, 8-Q5, 6.8, 6.10 |
+| [0018](0018-preview-tap-for-metering-and-preview-frames.md) | Metering and preview frames come from a `CameraEffect` tap on the preview stream; no `ImageAnalysis` alongside UHD recording | Accepted | 6.1, 6.3, 6.5, 6.8, 6.10 |
 
 ## Challenges to positions stated in the PRD
 
@@ -66,6 +67,7 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | Documents | Conflict | Resolution needed |
 |---|---|---|
 | ADR-0015 vs ADR-0010 | ADR-0010 specifies a single `androidTarget()` and justifies it by compiler-enforced platform-freeness. AGP 9 removed that API, and a single target enforces nothing (measured 2026-09-03: `android.*` and `java.*` both compile in `commonMain`). ADR-0015 proposes two JVM-family targets plus a lint. | **Awaiting Davide.** ADR-0015 is Proposed; ADR-0010 is marked Superseded pending its acceptance. |
+| ADR-0018 vs ADR-0005, ADR-0008 | Both source frames from `ImageAnalysis`; Phase 0 (#20) measured that a UHD recording and `ImageAnalysis` cannot coexist on the Pixel 10 in any of nine configurations. ADR-0018 keeps both decisions intact and changes only the frame source to a `CameraEffect` tap on the preview stream. | **Resolved 2026-09-04 (Davide):** ADR-0018 Accepted. ADR-0005 and ADR-0008 keep their decisions and their text; only the frame source changes, and ADR-0018 governs it until a CameraX release makes UHD + `ImageAnalysis` bindable (#27). |
 | ADR-0017 vs ADR-0002, 0003, 0005, 0008, 0011, 0016 | Those ADRs phrase their Phase 0 action items "on both reference devices" and ADR-0016's context states the reference devices are a Pixel and a Samsung. ADR-0017 narrows the device scope of ADR-0002 (2, 3, 4), ADR-0003 (2), ADR-0005 (2, 3), ADR-0008 (1) and ADR-0011 (3) to one Pixel 10 plus a macOS browser. No decision in those ADRs changes. | **Resolved 2026-09-03 (Davide):** ADR-0017 Accepted. Their action items are ticked against one device; their own text is left unedited, and ADR-0017 governs the device scope until #29 widens the matrix and supersedes it. |
 | ADR-0002 vs `docs/spec-chapter-markers.md` CM-1 | CM-1 requires an app-owned fragmented muxer with soft-remux finalisation in Phase 1; ADR-0002 chose the CameraX stock `Recorder` with no muxer access. | **Resolved 2026-09-03 (Davide):** CM-1 deferred to the CameraX 1.7 revisit; added to the ADR-0002 revisit checklist. |
 
