@@ -181,6 +181,23 @@ change it justifies, and only Davide sets a status to `Accepted` — open yours 
   that depends on an unmerged one branches from it and opens its pull request against it as base;
   an independent change branches from `main`. When a lower pull request merges, rebase what sat on
   top of it.
+- **A stack merges bottom-up, and GitHub will not stop you getting this wrong.** Merge the lowest
+  pull request first, then the one above it, and so on. If you want to merge them out of order,
+  **retarget the upper pull request to `main` first** — its "Edit" button changes the base.
+
+  The failure this prevents has already happened once, in #56. It was open against #49's branch;
+  #49 was squashed onto `main` first, which left #56 pointing at a branch `main` would never take
+  again. Merging it then wrote its commits to a dead branch. GitHub marked it **merged**, the
+  checks were green, the issue auto-closed — and not one line of it was in the product. It was
+  found days later only because a feature that depended on it did nothing.
+
+  So after merging any stacked pull request, **check that the code is actually on `main`** rather
+  than trusting the merged badge:
+
+  ```bash
+  git fetch origin main && git log origin/main --oneline -5
+  git ls-tree -r origin/main --name-only | grep <a file the PR added>
+  ```
 - **Pull request titles are Conventional Commits.** `main` uses squash merges, so the PR title
   becomes the commit subject on `main` — the title is the thing that has to conform, and commits
   on your branch are working notes that the squash discards.
