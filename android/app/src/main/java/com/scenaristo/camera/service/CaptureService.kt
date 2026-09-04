@@ -53,6 +53,7 @@ import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
 import com.scenaristo.camera.domain.protocol.DeviceStatus
 import com.scenaristo.camera.domain.protocol.RecordingState
+import com.scenaristo.camera.domain.protocol.SettingsPatch
 import com.scenaristo.camera.domain.protocol.Session
 import com.scenaristo.camera.domain.protocol.ThermalState
 import com.scenaristo.camera.domain.protocol.State as ProtocolState
@@ -471,6 +472,27 @@ class CaptureService : LifecycleService() {
                 Command(
                     id = "phone-" + System.currentTimeMillis(),
                     name = if (start) CommandName.RECORD_START else CommandName.RECORD_STOP,
+                ),
+            )
+            _state.value = session.state
+        }
+    }
+
+    /**
+     * A white balance preset chosen on the phone (PRD 6.4, UI-4).
+     *
+     * Through the server's command path like the record button, so the phone is
+     * one more client of ADR-0007's single writer -- which also means the
+     * recording guard applies to it for free: `Session` nacks a settings change
+     * while recording, so the phone cannot walk past its own locked control.
+     */
+    fun setWhiteBalance(kelvin: Int) {
+        lifecycleScope.launch {
+            server.applyLocal(
+                Command(
+                    id = "phone-wb-" + System.currentTimeMillis(),
+                    name = CommandName.SETTINGS_SET,
+                    args = SettingsPatch(whiteBalanceKelvin = kelvin),
                 ),
             )
             _state.value = session.state

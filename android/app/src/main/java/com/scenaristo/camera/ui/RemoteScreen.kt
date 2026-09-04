@@ -96,6 +96,7 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
         val codec by (service.codecLabel.collectAsState())
         val state by (service.state.collectAsState())
         var showConnect by remember { mutableStateOf(false) }
+        var showLight by remember { mutableStateOf(false) }
 
         CameraScreen(
             surfaceRequest = surfaceRequest,
@@ -103,7 +104,17 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
             codec = codec,
             onToggleRecording = service::toggleRecording,
             onConnect = { showConnect = true },
+            onLight = { showLight = true },
         )
+
+        if (showLight) {
+            LightSheet(
+                kelvin = state.settings.whiteBalanceKelvin,
+                locked = state.recording.recording,
+                onPick = { service.setWhiteBalance(it) },
+                onDismiss = { showLight = false },
+            )
+        }
 
         if (showConnect) {
             ConnectSheet(
