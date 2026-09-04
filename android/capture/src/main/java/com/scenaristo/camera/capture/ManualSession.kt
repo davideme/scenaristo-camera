@@ -27,7 +27,22 @@ import kotlinx.coroutines.flow.asStateFlow
  * request, so the recording and the analysis stream inherit one locked sensor
  * state instead of each carrying its own copy.
  */
-class ManualSession(private val request: ManualControls.Request) {
+class ManualSession(
+    private val request: ManualControls.Request,
+    /**
+     * Whether to bind `ImageAnalysis` alongside the recording.
+     *
+     * False is not a preference, it is a measured constraint: on the Pixel 10
+     * (#20, 2026-09-04) UHD recording and `ImageAnalysis` are not a supported
+     * stream combination — not through the feature group, not through
+     * `QualitySelector`, and not with the analysis stream bounded to 960x540 or
+     * 640x480. That breaks the premise ADR-0005 and ADR-0008 share, so the
+     * resolution is an ADR, not a default flipped here. Until then this flag
+     * exists so the interop keys can still be measured on a session the device
+     * will actually accept.
+     */
+    private val includeAnalysis: Boolean = true,
+) {
 
     val preview: Preview = Preview.Builder()
         .also { ManualControls.applyTo(it, request, ::record) }
@@ -52,7 +67,9 @@ class ManualSession(private val request: ManualControls.Request) {
      * 24-30, so the frame duration the sensor reports is comparable to what was
      * requested (PRD 6.1).
      */
-    val sessionConfig: SessionConfig = SessionConfig.Builder(preview, videoCapture, imageAnalysis)
+    val sessionConfig: SessionConfig = SessionConfig.Builder(
+        listOfNotNull(preview, videoCapture, imageAnalysis.takeIf { includeAnalysis }),
+    )
         .setRequiredFeatureGroup(GroupableFeatures.UHD_RECORDING)
         .setFrameRateRange(Range(30, 30))
         .build()
