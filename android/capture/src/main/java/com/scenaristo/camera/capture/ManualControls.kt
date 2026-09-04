@@ -9,11 +9,15 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
 import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.ExtendableBuilder
+import com.scenaristo.camera.domain.exposure.IsoRange
 
 /**
  * The single place `Camera2Interop` is allowed to appear.
@@ -99,6 +103,62 @@ object ManualControls {
                 },
             )
     }
+
+    /**
+     * Changes the exposure on a bound camera, without rebinding.
+     *
+     * [applyTo] sets the keys when a use case is *built*, which is where the
+     * session's opening state comes from and is no use to a loop that moves ISO
+     * six times a second (ADR-0005). This is the runtime path, and CameraX merges
+     * these over the ones the extender set.
+     *
+     * `CONTROL_AE_MODE_OFF` is repeated here rather than assumed. The extender
+     * set it, and it is the precondition for the sensor honouring anything else,
+     * so the runtime request states it too instead of depending on which set of
+     * options wins a merge.
+     */
+    fun apply(cameraControl: CameraControl, request: Request) {
+        Camera2CameraControl.from(cameraControl).setCaptureRequestOptions(
+            CaptureRequestOptions.Builder()
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
+                .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, request.exposureTimeNs)
+                .setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, request.sensitivity)
+                .setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, request.frameDurationNs)
+                .build(),
+        )
+    }
+
+    /**
+     * What the sensor says it actually used, or null on a result that carries
+     * neither key.
+     *
+     * This is the echo ADR-0005 makes the loop wait for before metering again.
+     * [echoes] answers a different question -- "did every key survive" -- and
+     * keeps its own shape because ADR-0002 action item 2 reports on all six.
+     */
+    fun reported(result: CaptureResult): Request? {
+        val exposureTimeNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: return null
+        val sensitivity = result.get(CaptureResult.SENSOR_SENSITIVITY) ?: return null
+        return Request(
+            exposureTimeNs = exposureTimeNs,
+            sensitivity = sensitivity,
+            frameDurationNs = result.get(CaptureResult.SENSOR_FRAME_DURATION) ?: 0L,
+        )
+    }
+
+    /**
+     * The ISO range this lens reports, which bounds everything the loop may ask
+     * for (ADR-0005, ADR-0011).
+     *
+     * Null when the lens does not declare one, which for a lens that passed
+     * ADR-0011's `MANUAL_SENSOR` gate should not happen -- the capability implies
+     * the key. A caller that gets null has a device worth reporting, not a
+     * default worth inventing.
+     */
+    fun isoRange(cameraInfo: CameraInfo): IsoRange? =
+        Camera2CameraInfo.from(cameraInfo)
+            .getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+            ?.let { IsoRange(min = it.lower, max = it.upper) }
 
     /**
      * The requested and reported value of every key ADR-0002 action item 2 lists.
