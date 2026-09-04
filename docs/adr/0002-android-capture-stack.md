@@ -109,7 +109,22 @@ The MVP has to prove that locked shutter, app-driven ISO, locked WB, and the bro
 
    The two quantised values are the sensor's own step, far inside tolerance: 4934 ns off 1/50 s is 0.05 % of a 50 Hz half-cycle, and the frame duration reads as 29.994 fps against PRD 6.1's "30.00 fps constant".
 
-   **Ticked for one of the two devices this item names.** There is no Samsung (ADR-0017); #29 re-runs this before the beta. Main lens only — secondary lenses are not covered. And the session had no `ImageAnalysis`, because the reference device refuses it alongside UHD (ADR-0018); frames came from the preview tap.
+   **Per lens, measured 2026-09-04.** The reference device exposes only **two** camera devices, back and front: its ultrawide and telephoto are physical cameras behind the back logical camera and cannot be selected as lenses at all. Lens choice there is a zoom ratio, and the HAL picks the sensor — so the sweep pins each sensor explicitly with `setPhysicalCameraId` rather than trusting zoom to reach it. Each was bound as its own UHD30 session and the bound resolution read back:
+
+   | Sensor | 35 mm equiv | Bound at | Frames | Verdict |
+   |---|---|---|---|---|
+   | logical `0`, unpinned | 24 mm | 3840x2160 | 171 | all keys honoured |
+   | physical `2` (main wide) | 24 mm | 3840x2160 | 170 | all keys honoured |
+   | physical `3` (ultrawide) | 14 mm | 3840x2160 | 169 | all keys honoured |
+   | physical `4` (telephoto) | 104 mm | 3840x2160 | 170 | all keys honoured |
+
+   Every sensor reports `MANUAL_SENSOR` and `MANUAL_POST_PROCESSING`, so ADR-0011's gate never fires on this device. Exposure quantisation widens away from the main lens — −247 ppm on the wide, −482 on the ultrawide, −576 on the telephoto — all far inside tolerance.
+
+   **One result sits exactly on a tolerance boundary and should not be read as comfortable.** The telephoto reports ISO 99 for a requested 100: a deviation of exactly 1.0 %, which is `SENSOR_SENSITIVITY`'s tolerance, and the comparison is `<=`. It passes by the width of the rule. One ISO step is photographically irrelevant (about 1/100 of a stop) and the metering loop reacts to the reported value anyway (ADR-0005), so the recorded response is to note it rather than widen the constant.
+
+   These four ran as `VideoCapture`-only sessions, not the shipped three-stream session: a physical camera id is fixed at bind time, so each lens needs its own bind, and a `Preview` with no surface provider produces no frames — which the sweep needs, because it runs with the phone locked. The main-lens number above (18027 results) *is* from the full session. So: the shipped session is verified on the main lens, and the per-sensor result is "this sensor honours the keys while recording UHD30".
+
+   **Ticked for one of the two devices this item names.** There is no Samsung (ADR-0017); #29 re-runs this before the beta. And the session had no `ImageAnalysis`, because the reference device refuses it alongside UHD (ADR-0018); frames came from the preview tap.
 3. [x] Phase 0: log the codec chosen by the device profile for UHD on both reference devices; record here.
 
    **Measured 2026-09-04, Pixel 10, camera id 0.** The UHD profile selects `video/avc` at 3840x2160, and a hardware HEVC encoder is present and unused:

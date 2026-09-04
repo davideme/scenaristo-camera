@@ -1,6 +1,8 @@
 package com.scenaristo.camera.capture
 
+import android.content.Context
 import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
@@ -62,13 +64,22 @@ object ManualControls {
      * ADR-0002 extends PRD 6.1's "stabilisation off" to OIS, which drifts on a
      * tripod. AE and AWB go off explicitly: without that, setting an exposure
      * time is advisory and the device may quietly keep metering.
+     *
+     * [physicalCameraId] pins the stream to one sensor of a logical multi-camera.
+     * #20 asks for a verdict per lens, and leaving the choice to zoom leaves it
+     * to the HAL: it may serve a ratio from whichever sensor it prefers, so an
+     * unpinned sweep can miss a lens entirely and can never prove which one a
+     * failure belongs to. Null keeps the logical camera's own behaviour, which is
+     * what the product ships.
      */
     fun <T> applyTo(
         builder: ExtendableBuilder<T>,
         request: Request,
         onResult: (TotalCaptureResult) -> Unit,
+        physicalCameraId: String? = null,
     ) {
         Camera2Interop.Extender(builder)
+            .also { extender -> physicalCameraId?.let { extender.setPhysicalCameraId(it) } }
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
             .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_OFF)
             .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, request.exposureTimeNs)
@@ -128,6 +139,46 @@ object ManualControls {
             result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE)?.toLong(),
         ),
     )
+
+    /**
+     * Pins one stream to a physical sensor, without touching the manual keys.
+     *
+     * Separate from [applyTo] because the keys go on the repeating request once:
+     * calling [applyTo] for a second use case would register a second capture
+     * callback and count every frame twice, which would silently inflate the
+     * frame counts #20 reports.
+     */
+    fun <T> pinTo(builder: ExtendableBuilder<T>, physicalCameraId: String) {
+        Camera2Interop.Extender(builder).setPhysicalCameraId(physicalCameraId)
+    }
+
+    /**
+     * The physical sensors behind a logical camera, or empty for a single-sensor
+     * camera.
+     *
+     * Read from `CameraManager` rather than `Camera2CameraInfo`: the ids come
+     * from `CameraCharacteristics.getPhysicalCameraIds()`, which is a method
+     * rather than a `Key`, and `Camera2CameraInfo` only exposes keys.
+     */
+    fun physicalIdsOf(context: Context, logicalCameraId: String): Set<String> = runCatching {
+        context.getSystemService(CameraManager::class.java)
+            .getCameraCharacteristics(logicalCameraId)
+            .physicalCameraIds
+    }.getOrDefault(emptySet())
+
+    /**
+     * Which physical sensor produced this result, on a logical multi-camera.
+     *
+     * The reference device exposes its ultrawide and telephoto only as physical
+     * cameras behind the back logical camera (#20), so this is the only way to
+     * name the lens a frame actually came from -- and the only way to notice the
+     * device swapping sensors mid-session, which is what [SweepAccumulator]
+     * buckets on.
+     *
+     * Null on a camera with nothing to report, which is not a failure.
+     */
+    fun activePhysicalId(result: CaptureResult): String? =
+        result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
 
     /**
      * Probes one lens for the flags ADR-0011 gates on.
