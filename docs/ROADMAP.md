@@ -52,7 +52,7 @@ API 34 floor has no device that runs it.
 
 | Issue | Story | PRD | Notes |
 |---|---|---|---|
-| #2 | Correct shutter, ISO and white balance by default | 6.1–6.4 | The core promise. Split into task issues. |
+| #2 | Correct shutter, ISO and white balance by default | 6.1–6.4 | The core promise. Split into task issues. Depends on the preview tap (ADR-0018): on the Pixel 10 there is no `ImageAnalysis` alongside a 4K recording, so the meter reads from a GL pass. |
 | #15 | Override the mains frequency in mixed-grid countries | 6.2 | Phone-side override here; the web half is Phase 2. |
 | #6 | Choose a light scenario and white balance preset | 6.4 | Depends on the Phase 0 grey-card result. |
 | #8 | Warning when the room is too dark or too bright | 6.3 | Phone-side here; mirrored to the browser in Phase 2. |
@@ -69,7 +69,7 @@ reference laptop is a MacBook (ADR-0017); other browsers are checked, not develo
 
 | Issue | Story | PRD | Notes |
 |---|---|---|---|
-| #3 | See the phone's view in a laptop browser | 6.8 | MJPEG over HTTP (ADR-0008). |
+| #3 | See the phone's view in a laptop browser | 6.8 | MJPEG over HTTP (ADR-0008), fed by the preview tap rather than `ImageAnalysis` (ADR-0018), cropped to the recording's aspect ratio. |
 | #4 | Start and stop recording from the laptop | 6.8 | Idempotent commands (ADR-0007). |
 | #7 | Recording timer and remaining storage | 6.8 | |
 | #10 | Full control from the browser | 6.8 | |
