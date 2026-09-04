@@ -155,10 +155,11 @@ private fun EchoRunner() {
                     .build(),
             )
             val plain = SessionConfig.Builder(plainUseCases).build()
-            val caps = Recorder.getVideoCapabilities(info)
-            val qualities = caps.getSupportedQualities(DynamicRange.SDR)
+            // getResolution is @RestrictTo library-internal; Quality's own toString
+            // already carries typicalSizes, which is the number wanted here.
+            val qualities = Recorder.getVideoCapabilities(info).getSupportedQualities(DynamicRange.SDR)
             binds.append("- Recorder says qualities available on this lens: ")
-                .append(qualities.joinToString { q -> "$q=${caps.getResolution(q, DynamicRange.SDR)}" })
+                .append(qualities.joinToString())
                 .append("\n")
             binds.append("- supported fps ranges for this session: ")
                 .append(info.getSupportedFrameRateRanges(plain).joinToString())
