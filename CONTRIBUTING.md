@@ -101,6 +101,14 @@ cd web && pnpm install && pnpm run dev
 requests (ADR-0009). The page is served over plain HTTP from a LAN IP, so there is no secure
 context and no CDN to reach.
 
+**"No secure context" is a bigger constraint than it sounds, and it fails silently.** Anything the
+platform gates behind a secure context is simply absent: `crypto.randomUUID`, `crypto.subtle`,
+service workers, `navigator.clipboard.write`, geolocation, WebCodecs (ADR-0008 records that one).
+The failure mode is a `TypeError` in a click handler and a button that does nothing — no build
+error, no type error, and `pnpm run dev` over `localhost` **is** a secure context, so it works
+perfectly until it reaches the phone. `crypto.getRandomValues` is not restricted and is the usual
+substitute for `randomUUID`. Test on the phone before believing a browser API exists.
+
 Do not hand-edit `web/src/protocol.ts` once it exists: it is generated from the `@Serializable`
 classes in `:domain`.
 

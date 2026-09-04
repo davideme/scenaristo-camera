@@ -137,7 +137,7 @@ export class Connection {
    * should be refused rather than silently undo someone else's.
    */
   send(name: CommandName, args?: SettingsPatch, guard = false): Promise<string | null> {
-    const id = crypto.randomUUID()
+    const id = randomId()
     const message: ClientMessage = {
       type: 'cmd',
       id,
@@ -155,6 +155,35 @@ export class Connection {
     this.snapshot = { ...this.snapshot, ...patch }
     this.onChange(this.snapshot)
   }
+}
+
+/**
+ * A command id, without `crypto.randomUUID()`.
+ *
+ * The page is served over plain HTTP from a LAN IP (ADR-0006), so it is not a
+ * secure context and `randomUUID` does not exist — it throws, and the record
+ * button silently does nothing. ADR-0008 anticipated the secure-context loss for
+ * WebCodecs; it takes `randomUUID` with it.
+ *
+ * `getRandomValues` is not secure-context-restricted, so it is the first choice;
+ * the fallback is only reached on something very old. Either way the id only has
+ * to be unique among one client's own commands within the phone's 10-second
+ * idempotency window (ADR-0007), which is a far weaker requirement than
+ * uniqueness in general.
+ */
+function randomId(): string {
+  const bytes = new Uint8Array(16)
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes)
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
+  }
+  // Version and variant bits, so the value is a well-formed UUIDv4 as ADR-0007
+  // describes rather than merely random-looking.
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 /**
