@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,7 +46,13 @@ fun ConnectSheet(url: String?, remotes: Int, onDismiss: () -> Unit) {
     val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Tokens.Panel) {
         Column(
-            modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 36.dp),
+            // Scrollable because this is a landscape app (UI-3): a bottom sheet
+            // gets a few hundred pixels of height here, not most of a portrait
+            // screen, and without this the last line is simply not reachable.
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 36.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(

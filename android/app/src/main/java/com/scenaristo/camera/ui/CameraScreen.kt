@@ -61,6 +61,7 @@ fun CameraScreen(
     codec: String,
     onToggleRecording: () -> Unit,
     onConnect: () -> Unit,
+    onLight: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val recording = state.recording.recording
@@ -102,8 +103,10 @@ fun CameraScreen(
             BottomStrip(
                 recording = recording,
                 audio = state.audio,
+                kelvin = state.settings.whiteBalanceKelvin,
                 onToggleRecording = onToggleRecording,
                 onConnect = onConnect,
+                onLight = onLight,
             )
         }
     }
@@ -220,8 +223,10 @@ private fun copyFor(warning: Warning): String = when (warning) {
 private fun BottomStrip(
     recording: Boolean,
     audio: AudioState,
+    kelvin: Int,
     onToggleRecording: () -> Unit,
     onConnect: () -> Unit,
+    onLight: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp),
@@ -229,6 +234,16 @@ private fun BottomStrip(
     ) {
         AudioMeter(audio)
         Spacer(Modifier.weight(1f))
+        // UI-4 bottom centre, UI-1: a control carries its own current value, and
+        // the status strip does not repeat it -- which is why white balance
+        // appears here and nowhere else on the screen.
+        Control(
+            label = "Light",
+            value = "$kelvin K",
+            enabled = !recording,
+            onClick = onLight,
+        )
+        Spacer(Modifier.width(20.dp))
         // UI-6: every setting is locked for the take, and a locked control says
         // so rather than being discovered by refusal.
         Control(
@@ -325,9 +340,15 @@ private fun captionFor(audio: AudioState): String = when {
     else -> "Microphone"
 }
 
-/** UI-1: framed, amber label, full contrast, always touchable. */
+/**
+ * UI-1: framed, amber label, full contrast, always touchable.
+ *
+ * [value] is the control's own current setting. UI-2 makes that the *only* place
+ * it appears -- the reported strip along the top does not repeat it -- because a
+ * value shown twice is a value that can disagree with itself.
+ */
 @Composable
-private fun Control(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun Control(label: String, enabled: Boolean, onClick: () -> Unit, value: String? = null) {
     Column(
         modifier = Modifier
             .background(Tokens.Panel.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
@@ -341,6 +362,15 @@ private fun Control(label: String, enabled: Boolean, onClick: () -> Unit) {
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
         )
+        value?.let {
+            Text(
+                text = it,
+                color = if (enabled) Tokens.Text else Tokens.Dimmer,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 
