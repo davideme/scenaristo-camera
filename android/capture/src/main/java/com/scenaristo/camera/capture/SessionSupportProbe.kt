@@ -155,6 +155,25 @@ object SessionSupportProbe {
             config(listOf(video()), GroupableFeatures.UHD_RECORDING, null),
         ),
         Candidate(
+            "UHD + 30fps pinned + video/analysis@960x540, no preview",
+            "on-device viewfinder traded away for the analysis stream",
+            config(
+                listOf(video(), analysisAt(Size(960, 540))),
+                GroupableFeatures.UHD_RECORDING,
+                30,
+            ),
+        ),
+        Candidate(
+            "UHD + video/analysis@960x540, no preview",
+            "same, without the fps pin",
+            config(listOf(video(), analysisAt(Size(960, 540))), GroupableFeatures.UHD_RECORDING, null),
+        ),
+        Candidate(
+            "UHD + video/analysis(default), no preview",
+            "same, analysis unbounded",
+            config(listOf(video(), analysis()), GroupableFeatures.UHD_RECORDING, null),
+        ),
+        Candidate(
             "FHD + 30fps pinned + preview/video/analysis",
             "same streams, lower recording quality",
             config(listOf(preview(), video(), analysis()), GroupableFeatures.FHD_RECORDING, 30),
