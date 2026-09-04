@@ -50,15 +50,29 @@ class ManualSession(
      * key-echo measurement used before the tap existed.
      */
     private val tap: PreviewTapProcessor? = null,
+    /**
+     * Pin every stream to one physical sensor of a logical multi-camera (#20).
+     *
+     * Null is what the product ships: the logical camera picks a sensor for the
+     * zoom ratio in use. A non-null id is a measurement instrument -- it is the
+     * only way to get a verdict that names the lens rather than naming whichever
+     * sensor the HAL happened to serve.
+     */
+    private val physicalCameraId: String? = null,
 ) {
 
     val preview: Preview = Preview.Builder()
-        .also { ManualControls.applyTo(it, request, ::record) }
+        .also { ManualControls.applyTo(it, request, ::record, physicalCameraId) }
         .build()
 
     val recorder: Recorder = Recorder.Builder().build()
 
-    val videoCapture: VideoCapture<Recorder> = VideoCapture.withOutput(recorder)
+    // Built through the builder rather than withOutput() so the recording stream
+    // can be pinned to the same sensor as the preview. A session that pinned only
+    // the preview would measure one lens while recording from another.
+    val videoCapture: VideoCapture<Recorder> = VideoCapture.Builder(recorder)
+        .also { builder -> physicalCameraId?.let { ManualControls.pinTo(builder, it) } }
+        .build()
 
     val imageAnalysis: ImageAnalysis = ImageAnalysis.Builder()
         // Newest frame wins: metering and preview both want current, not complete.
@@ -92,11 +106,31 @@ class ManualSession(
     /** Worst verdict per key rather than the latest; the rule is in [EchoAccumulator]. */
     private val accumulator = EchoAccumulator()
 
+    /** The same results, split by the sensor that produced them (#20). */
+    private val sweep = SweepAccumulator()
+
+    /**
+     * The zoom ratio the sweep last asked for, so a result can be attributed to
+     * the rung that produced it. Written from the UI thread and read from a
+     * camera thread, hence volatile; exactness does not matter because the
+     * physical id, not this, decides the bucket.
+     */
+    @Volatile
+    var sweepZoomRatio: Float = 1f
+
+    /** Logical camera id, for results that report no physical sensor. */
+    @Volatile
+    var logicalCameraId: String = "?"
+
     private fun record(result: android.hardware.camera2.TotalCaptureResult) {
         val echoes = ManualControls.echoes(request, result)
-        // The capture callback arrives on a camera thread; the accumulator is not
-        // thread-safe by design, so the lock lives here.
-        synchronized(lock) { accumulator.record(echoes) }
+        val physicalId = ManualControls.activePhysicalId(result)
+        // The capture callback arrives on a camera thread; the accumulators are
+        // not thread-safe by design, so the lock lives here.
+        synchronized(lock) {
+            accumulator.record(echoes)
+            sweep.record(physicalId, logicalCameraId, sweepZoomRatio, echoes)
+        }
         latest.value = echoes
     }
 
@@ -117,4 +151,7 @@ class ManualSession(
      */
     fun report(cameraId: String, lensLabel: String): LensEchoReport =
         synchronized(lock) { accumulator.report(cameraId, lensLabel) }
+
+    /** Per-sensor reports for the zoom sweep (#20). */
+    fun sweepReports(): List<SweepLensReport> = synchronized(lock) { sweep.reports() }
 }

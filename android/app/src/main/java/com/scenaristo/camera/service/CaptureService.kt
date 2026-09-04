@@ -27,6 +27,7 @@ import androidx.lifecycle.LifecycleService
 import com.scenaristo.camera.MainActivity
 import com.scenaristo.camera.R
 import com.scenaristo.camera.capture.CodecReport
+import com.scenaristo.camera.capture.LensSweepRunner
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.PreviewJpegSource
@@ -78,6 +79,13 @@ class CaptureService : LifecycleService() {
     /** #21: what the UHD profile picks against what the device can encode. */
     private val _codecs = MutableStateFlow<String?>(null)
     val codecs: StateFlow<String?> = _codecs.asStateFlow()
+
+    /** #20: the per-lens key echo, once the sweep has run. */
+    private val _lensSweep = MutableStateFlow<String?>(null)
+    val lensSweep: StateFlow<String?> = _lensSweep.asStateFlow()
+
+    /** Camera2 id of the bound back camera, for the sweep's physical-id lookup. */
+    private var backCameraId: String? = null
 
     private val jpeg = PreviewJpegSource()
     private lateinit var tap: PreviewTapProcessor
@@ -137,12 +145,39 @@ class CaptureService : LifecycleService() {
                 camera.sessionConfig,
             )
             val lens = camera.capabilities(bound.cameraInfo)
+            backCameraId = lens.cameraId
+            camera.logicalCameraId = lens.cameraId
             val report = CodecReport.markdown(CodecReport.of(lens.cameraId))
             _codecs.value = report
             // Logged as well as shown: #21's answer is a number to paste into an
             // ADR, and reading it off a screenshot means unlocking the phone.
             Log.i("CodecReport", report)
         }.onFailure { updateNotification("Camera unavailable: ${it.message}") }
+    }
+
+    /**
+     * Runs #20's pinned lens sweep, then restores the app's own session.
+     *
+     * Triggered by an intent action rather than a button because the measurement
+     * has to be startable with the phone locked: the result is a table for an
+     * ADR, and reading it off the screen would mean unlocking the phone in front
+     * of the camera it is measuring.
+     */
+    private suspend fun runLensSweep() {
+        val logicalId = backCameraId ?: run {
+            Log.w(SWEEP_TAG, "camera not bound yet; nothing to sweep")
+            return
+        }
+        val provider = ProcessCameraProvider.awaitInstance(this)
+        val text = runCatching {
+            LensSweepRunner.run(this, provider, this, DEFAULT_REQUEST, logicalId)
+        }.getOrElse { "Sweep failed: ${it.message}" }
+        _lensSweep.value = text
+        // Line by line: logcat truncates a single message past about 4 KB, and
+        // this table is longer than that with four lenses.
+        text.lineSequence().forEach { Log.i(SWEEP_TAG, it) }
+        // The sweep unbound everything, including the preview the browser reads.
+        bindCamera()
     }
 
     /**
@@ -342,8 +377,18 @@ class CaptureService : LifecycleService() {
         serverTimeMs = System.currentTimeMillis(),
     )
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val result = super.onStartCommand(intent, flags, startId)
+        if (intent?.action == ACTION_LENS_SWEEP) lifecycleScope.launch { runLensSweep() }
+        return result
+    }
+
     companion object {
         private const val CHANNEL_ID = "capture"
+        private const val SWEEP_TAG = "LensSweep"
+
+        /** #20's sweep, startable over adb so the phone need not be unlocked. */
+        const val ACTION_LENS_SWEEP = "com.scenaristo.camera.LENS_SWEEP"
         private const val NOTIFICATION_ID = 1
         private const val MAX_LOCK_MS = 4 * 60 * 60 * 1000L
 
