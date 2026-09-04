@@ -90,6 +90,7 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
 
         val surfaceRequest by (service?.surfaceRequest?.collectAsState() ?: return@Surface)
         val url by (service.url.collectAsState())
+        val codecs by (service.codecs.collectAsState())
 
         Column(
             modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -106,6 +107,11 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.headlineSmall,
                 fontFamily = FontFamily.Monospace,
             )
+            // #21's readout. Temporary: it belongs in the browser's capability
+            // report (PRD 6.10) once that exists, not on the phone screen.
+            codecs?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            }
         }
     }
 }
