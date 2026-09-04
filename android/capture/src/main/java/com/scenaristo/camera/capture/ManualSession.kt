@@ -97,6 +97,26 @@ class ManualSession(
         .apply { tap?.let { addEffect(PreviewTapEffect(it)) } }
         .build()
 
+    /**
+     * Point the viewfinder and the recording at the display's current rotation.
+     *
+     * CameraX fixes `targetRotation` to the display rotation *at the moment the
+     * use case is built*, and these are built in a foreground service (ADR-0003)
+     * that outlives every activity and has no window of its own — so nothing
+     * would ever move it again. The viewfinder then keeps rendering the frame at
+     * the rotation the phone happened to be in when the service started, which
+     * is a preview that does not rotate.
+     *
+     * [rotation] is a `Surface.ROTATION_*` constant, and it is the *display's*
+     * rotation rather than the device's physical tilt: the viewfinder is drawn
+     * into a window on that display, and asking the sensor to compensate for a
+     * tilt the window already compensated for rotates the picture twice.
+     */
+    fun setTargetRotation(rotation: Int) {
+        preview.targetRotation = rotation
+        videoCapture.targetRotation = rotation
+    }
+
     /** Latest capture result, for a live readout on the phone. */
     private val latest = MutableStateFlow<List<KeyEcho>>(emptyList())
     val latestEchoes: StateFlow<List<KeyEcho>> = latest.asStateFlow()
