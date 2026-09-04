@@ -247,11 +247,27 @@ class PreviewTapProcessor(
         val width = (croppedWidth * scale).toInt().coerceAtLeast(2) and 1.inv()
         val height = (croppedHeight * scale).toInt().coerceAtLeast(2) and 1.inv()
 
-        reader = ImageReader.newInstance(width, height, android.graphics.ImageFormat.PRIVATE, READER_BUFFERS)
-            .also { r ->
-                r.setOnImageAvailableListener({ onFrame(it.acquireLatestImage() ?: return@setOnImageAvailableListener) }, handler)
-                readerSurface = createWindowSurface(r.surface)
-            }
+        // RGBA_8888 rather than PRIVATE: PRIVATE is GPU-only, and these frames
+        // exist to be read — the JPEG encoder for the browser preview (ADR-0008)
+        // and the metering loop (ADR-0005) both need the pixels on the CPU. The
+        // usage flags say the surface is a GL render target that the CPU then
+        // reads, which is exactly what this pass does.
+        reader = ImageReader.newInstance(
+            width,
+            height,
+            android.graphics.PixelFormat.RGBA_8888,
+            READER_BUFFERS,
+            android.hardware.HardwareBuffer.USAGE_GPU_COLOR_OUTPUT or
+                android.hardware.HardwareBuffer.USAGE_CPU_READ_OFTEN,
+        ).also { r ->
+            r.setOnImageAvailableListener({ reader ->
+                val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+                // acquireLatestImage drops anything older, which is ADR-0008's
+                // newest-frame-wins. The callback owns closing it.
+                onFrame(image)
+            }, handler)
+            readerSurface = createWindowSurface(r.surface)
+        }
         Log.d(TAG, "tap reader ${width}x$height from ${inputSize.width}x${inputSize.height}, crop=$region")
     }
 

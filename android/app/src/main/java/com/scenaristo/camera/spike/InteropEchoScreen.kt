@@ -60,7 +60,18 @@ import com.scenaristo.camera.capture.KeyEcho
 import com.scenaristo.camera.capture.LensEchoReport
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
+import com.scenaristo.camera.capture.PreviewJpegSource
 import com.scenaristo.camera.capture.PreviewTapProcessor
+import com.scenaristo.camera.domain.exposure.GridFrequency
+import com.scenaristo.camera.domain.protocol.CaptureSettings
+import com.scenaristo.camera.domain.protocol.DeviceStatus
+import com.scenaristo.camera.domain.protocol.RecordingState
+import com.scenaristo.camera.domain.protocol.Session
+import com.scenaristo.camera.domain.protocol.State as ProtocolState
+import com.scenaristo.camera.domain.protocol.ThermalState
+import com.scenaristo.camera.server.ControlServer
+import com.scenaristo.camera.server.LocalAddress
+import com.scenaristo.camera.server.PreviewFrames
 import com.scenaristo.camera.capture.SessionSupportProbe
 import com.scenaristo.camera.capture.markdown
 import java.io.File
@@ -147,6 +158,8 @@ private fun EchoRunner(shutter: Shutter, onShutterChange: (Shutter) -> Unit) {
     // encode running beside it.
     var tapFrames by remember { mutableIntStateOf(0) }
     var tapFps by remember { mutableStateOf("—") }
+    // The tapped frames now go somewhere: JPEG for the browser preview (ADR-0008).
+    val jpeg = remember { PreviewJpegSource() }
     val tap = remember {
         var count = 0
         // A window, not a cumulative average: #23 asks whether the rate *drops*
@@ -154,7 +167,8 @@ private fun EchoRunner(shutter: Shutter, onShutterChange: (Shutter) -> Unit) {
         var windowStart = 0L
         var windowCount = 0
         PreviewTapProcessor { image ->
-            image.close()
+            // accept() closes the image; the reader stalls if anything holds on.
+            jpeg.accept(image)
             count++
             tapFrames = count
             val now = System.nanoTime()
@@ -210,7 +224,23 @@ private fun EchoRunner(shutter: Shutter, onShutterChange: (Shutter) -> Unit) {
         view.keepScreenOn = true
         onDispose { view.keepScreenOn = false }
     }
-    DisposableEffect(Unit) { onDispose { tap.release() } }
+    DisposableEffect(Unit) { onDispose { tap.release(); jpeg.release() } }
+
+    // The server is what makes this a remote at all (ADR-0006, ADR-0007). It is
+    // started here rather than in a foreground service because the service is
+    // ADR-0003's work and not yet written; a take still dies with the activity.
+    var serverUrl by remember { mutableStateOf<String?>(null) }
+    val server = remember {
+        ControlServer(
+            session = Session(startingState()),
+            frames = PreviewFrames { jpeg.latest() },
+        )
+    }
+    DisposableEffect(Unit) {
+        server.start()
+        serverUrl = LocalAddress.url()
+        onDispose { server.stop() }
+    }
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
     var status by remember { mutableStateOf("Binding…") }
     var cameraId by remember { mutableStateOf("?") }
@@ -363,6 +393,11 @@ private fun EchoRunner(shutter: Shutter, onShutterChange: (Shutter) -> Unit) {
             fontFamily = FontFamily.Monospace,
         )
         Text(
+            "remote: ${serverUrl ?: "no network"}  ·  ${jpeg.encoded} jpeg",
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+        )
+        Text(
             "rec: $recordingState",
             style = MaterialTheme.typography.bodyMedium,
             fontFamily = FontFamily.Monospace,
@@ -498,6 +533,32 @@ private fun thermalName(status: Int): String = when (status) {
     android.os.PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
     else -> "unknown($status)"
 }
+
+/**
+ * What the browser sees before anything has happened.
+ *
+ * The spike does not yet feed real battery, thermal or storage into the state
+ * document -- those come from the phone's own sources when the foreground
+ * service exists (ADR-0003). The values here are placeholders and are the reason
+ * the browser's status line is not yet trustworthy.
+ */
+private fun startingState() = ProtocolState(
+    settings = CaptureSettings(
+        grid = GridFrequency.HZ_50,
+        shutterHz = 50,
+        iso = 100,
+        whiteBalanceKelvin = 5600,
+        lensId = "0",
+    ),
+    recording = RecordingState(recording = false),
+    device = DeviceStatus(
+        batteryPercent = 0,
+        charging = false,
+        thermal = ThermalState.NOMINAL,
+        storageMinutesRemaining = 0,
+    ),
+    serverTimeMs = System.currentTimeMillis(),
+)
 
 private fun hasCameraPermission(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
