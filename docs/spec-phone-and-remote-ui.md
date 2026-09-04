@@ -149,6 +149,7 @@ Discovery per PRD §6.8: QR code plus the `http://<ip>:<port>` address.
 - [ ] The address is rendered in the monospace face at ≥ 17 px and is copyable.
 - [ ] The connected-remote count is shown, so an unexpected client is visible.
 - [ ] The open-LAN consequence is stated in plain words on this sheet: "Anyone on this network can monitor and control the camera. Turn the server off when you are done." (v1 security position, PRD §6.8.)
+- [ ] It is drawn as an **orange box with an icon, deliberately at the loud end** (decision 2026-09-04, Davide: people should notice). This is the one sanctioned use of orange outside `State.warnings`, and it obeys UI-5's shape rule — orange is always a bordered block with an icon, never a tint on a value. When the pairing check of PRD §6.11 lands, this box is what it replaces.
 - [ ] "Recording keeps running if the laptop drops off Wi-Fi" is stated where the user first connects, not only in documentation.
 
 ---
@@ -228,13 +229,12 @@ PRD §6.8 acceptance criterion: *"Given the browser is on a phone-sized screen, 
 |---|---|---|
 | Q1 | Does the lens stay changeable mid-take? | **No.** Lens and mains frequency are locked for the duration of the take; white balance stays changeable. Specified in UI-6, and it needs the phone to refuse the command, not only the browser to grey the control. |
 | Q2 | Warning as a chip, or also as a tint on the readout that caused it? | **Chip only.** One warning, one place. No number is recoloured to raise one, which also settles that the flicker-safe shutter step is reported rather than warned. Specified in UI-5. |
+| Q3 | How loudly should the open-LAN consequence be stated (UI-7)? | **Loudly.** Keep the orange box: people should notice. Specified in UI-7. |
 | Q4 | Is "remote" the right user-facing word? | **Yes, as it stands.** The surface is the *remote control*; a connected browser is a *remote*, and the count reads "2 remotes connected". Specified in UI-12. |
 
 ### Open
 
-| # | Question | Why it is not mine to settle |
-|---|---|---|
-| Q3 | How loudly should the open-LAN consequence be stated (UI-7)? Reassuring, or alarming enough that people notice. | A tone decision that trades adoption against the v1 security position. |
+None. New questions belong here as they are found, with the requirement they block.
 
 ## 8. Protocol additions this spec needs
 
