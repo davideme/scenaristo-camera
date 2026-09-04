@@ -110,7 +110,53 @@ The MVP has to prove that locked shutter, app-driven ISO, locked WB, and the bro
    The two quantised values are the sensor's own step, far inside tolerance: 4934 ns off 1/50 s is 0.05 % of a 50 Hz half-cycle, and the frame duration reads as 29.994 fps against PRD 6.1's "30.00 fps constant".
 
    **Ticked for one of the two devices this item names.** There is no Samsung (ADR-0017); #29 re-runs this before the beta. Main lens only — secondary lenses are not covered. And the session had no `ImageAnalysis`, because the reference device refuses it alongside UHD (ADR-0018); frames came from the preview tap.
-3. [ ] Phase 0: log the codec chosen by the device profile for UHD on both reference devices; record here.
+3. [x] Phase 0: log the codec chosen by the device profile for UHD on both reference devices; record here.
+
+   **Measured 2026-09-04, Pixel 10, camera id 0.** The UHD profile selects `video/avc` at 3840x2160, and a hardware HEVC encoder is present and unused:
+
+   | Encoder | Type | Hardware |
+   |---|---|---|
+   | `c2.google.hevc.encoder` | video/hevc | yes |
+   | `c2.android.hevc.encoder` | video/hevc | no |
+   | `c2.google.avc.encoder` | video/avc | yes |
+   | `c2.android.avc.encoder` | video/avc | no |
+   | `OMX.google.h264.encoder` | video/avc | no |
+
+   Confirmed against a real take rather than only the query: `ffprobe` on a 4K30 recording reports `h264`, High profile, 3840x2160 at 36.5 Mbps. So on the one reference device PRD 6.7's HEVC default is **not** what gets recorded, and the "otherwise H.264 High" fallback is the live path.
+
+   Three API findings that size #27, all checked against the 1.6.2 artifacts rather than from memory:
+
+   - `CameraInfo` (public) exposes no `encoderProfilesProvider`; it is on `CameraInfoInternal`. `VideoCapabilities.getProfiles` is `@RestrictTo` and lint fails the build on it. The report therefore reads `CamcorderProfile.getAll(cameraId, QUALITY_2160P)`, which is the same source CameraX consults.
+   - `VideoSpec.Builder.setMimeType(String)` **already exists in 1.6.2**, but `VideoSpec` carries `@RestrictTo` and `Recorder.Builder` has no method that accepts one. The plumbing is there and only the entry point is missing, so the 1.7 change is smaller than this ADR assumed.
+   - `VideoSpec.Builder` has no `setVideoEncoder`, and `Recorder.Builder` no `setVideoSpec`. There is no supported codec selection in 1.6.2 by any route.
+
+   **Ticked for one of the two devices this item names** — there is no Samsung (ADR-0017). Main lens only.
 4. [ ] Phase 0: force-kill a recording at 30 s and confirm the file plays to about 29 s (expected: yes); then find the take length at which `moov` outgrows the 400 KB reserve by force-killing at increasing durations, and record the covered length here and in PRD 6.7.
+
+   **First half measured 2026-09-04, Pixel 10, camera id 0, UHD 30 fps, `am force-stop` mid-take.** Every length survives, and the loss is the frames in flight rather than a chunk of the take:
+
+   | Take length | Recovered | Lost | Playable |
+   |---|---|---|---|
+   | 1.3 s | 1.03 s | 0.26 s | yes |
+   | 2.2 s | 2.03 s | 0.17 s | yes |
+   | 5.2 s | 5.04 s | 0.17 s | yes |
+   | 20.2 s | 20.04 s | 0.15 s | yes |
+   | 60.2 s | 60.05 s | 0.18 s | yes |
+
+   Take length is measured from the moment the file appears, not from the command ack: ADR-0007's session is pure, so a start is acked before the camera has bound, and charging that bind latency to the muxer overstates what a kill costs. The 60 s file decodes end to end (`ffmpeg -f null -`, 1801 frames, no errors) — not merely a readable header.
+
+   The mechanism is visible in the container: top-level boxes are `ftyp`, `moov`, `free`, `mdat`, with `moov` **before** the media data and `moov + free` equal to exactly **400,008 bytes** in every file measured. The muxer updates the index in place inside that reserve, which is why a killed file is complete to within one update interval.
+
+   **The second half is not measured, and the estimate in PRD 6.7 is wrong.** `moov` growth is strongly sub-linear, because the sample tables pack better as a take lengthens:
+
+   | Frames | `moov` bytes | Bytes/frame since previous |
+   |---|---|---|
+   | 31 | 1035 | — |
+   | 151 | 2491 | 12.1 |
+   | 811 | 10507 | 12.1 |
+   | 1801 | 22511 | 12.1 |
+   | 8398 | 38911 | 2.5 |
+
+   Extrapolating the 12.1 B/frame slope of the short takes gives ~18 min; the 4 min 40 s point rules that out, and the slope between the last two points would put the limit past an hour. Neither number is trustworthy, so **no covered length is recorded yet** and PRD 6.7 keeps its placeholder. Killing at guessed lengths is the wrong instrument — it costs one recording per point. The remaining work is one long undisturbed take sampled every 30 s (`free` shrinking to zero is the answer); an attempt on 2026-09-04 was cut short at 4 min 40 s when the phone was picked up.
 5. [x] Amend PRD 6.6 (level meter 5 Hz), 6.7 (crash resilience covered up to a measured length, HEVC "when the device profile provides it" until 1.7), and 6.1 (OIS off).
 6. [ ] Create a tracking issue "CameraX 1.7 revisit" with the checklist from the revisit pin.
