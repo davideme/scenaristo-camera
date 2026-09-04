@@ -138,7 +138,8 @@ Warnings are `State.warnings` (`TOO_DARK`, `TOO_BRIGHT`, `TOO_CLOSE_TO_LENS`, `O
 - [ ] The timecode goes to full contrast and gains a filled red dot and the word `Recording`.
 - [ ] The record control becomes a stop control (rounded square, same position, same size).
 - [ ] Red (`oklch(.63 .21 26)`) appears nowhere else in the interface.
-- [ ] **The lens and the mains frequency are locked for the duration of the take** (decision 2026-09-04, Davide). A lens switch mid-recording is a cut in the middle of a take, and the mains frequency changes the shutter under the recording. White balance stays changeable, with the caution of UI-9. [ADR-0007](adr/0007-control-protocol.md) accepts `settings.set` at any time, so this is enforced by the phone: a `settings.set` carrying `lensId` or `grid` while recording is answered with `nack` / `INVALID`, and the browser draws the control as locked rather than letting the user discover it by being refused.
+- [ ] **Every setting is locked for the duration of the take, and focus is not.** `Session.settings` already refuses any `settings.set` while `recording` is true, answering `nack` / `INVALID`, on PRD §6.1's promise of a locked look for the whole take — so the lens lock Davide confirmed on 2026-09-04 is the shipped behaviour and needs no change. Focus is the deliberate exception (UI-16). Whether white balance should be carved out too is **Q5**.
+- [ ] Every locked control is drawn as locked. The nack is the mechanism — [ADR-0007](adr/0007-control-protocol.md) has clients send requests rather than state writes, so a second remote or a stale tab cannot walk past a greyed control — but a user should never discover the rule by being refused.
 - [ ] Controls locked for the duration of the take are dimmed with the caption "Locked while recording" — not with the padlock glyph, which means "held still by the app" (§5) and must not acquire a second meaning.
 
 ---
@@ -215,6 +216,18 @@ PRD §6.8 acceptance criterion: *"Given the browser is on a phone-sized screen, 
 - [ ] A control that a lens cannot honour is labelled with what is missing, never hidden and never silently inert (PRD §6.10).
 - [ ] Distance guidance reads "Wide lens — sit 1.5–2 m back" and is dismissible for the session (PRD §6.5).
 
+---
+**UI-16 — Tap to focus**
+
+PRD §6.1 ("continuous AF with face priority, lockable; tap-to-focus and lock on both phone and web") and §6.8. Landed in `:domain` as the `focus.set` command, with `docs/protocol/fixtures/cmd-focus-set.json` as its golden fixture.
+
+- [ ] A tap on the preview — phone or browser — focuses there and locks. A control returns to continuous autofocus.
+- [ ] The tap point is sent normalised in the frame, `0.0` to `1.0` on each axis. Not pixels: the browser is looking at a 960 × 540 preview of a 3840 × 2160 recording. Normalised **in the frame** rather than in the preview image, which is only unambiguous because §6.8 crops the preview to the recording's aspect ratio — that crop is what makes one pair of numbers mean the same point on both surfaces and in the file.
+- [ ] Focus works **while recording**. It is the one control that does, and the reason is that refocusing leaves nothing in the file an editor has to explain, where a lens switch or a colour shift does.
+- [ ] The current focus state is in the snapshot, so a second remote sees where focus went.
+- [ ] A lens that cannot focus on a region reports `NOT_CAPABLE` and the control is labelled unavailable rather than inert ([ADR-0011](adr/0011-per-lens-capability-gating.md), UI-12). `:domain` cannot make that call — it holds no capability table — so the capture layer does.
+- [ ] Not drawn on any artboard yet: the mockups show the preview without a focus indicator. Whatever is drawn must not sit over the subject's face, which is exactly where the tap will usually land.
+
 ### Nice-to-have
 
 - **UI-13** Countdown before record (3-2-1), on both surfaces (PRD §6.11).
@@ -234,21 +247,23 @@ PRD §6.8 acceptance criterion: *"Given the browser is on a phone-sized screen, 
 
 ### Open
 
-None. New questions belong here as they are found, with the requirement they block.
-
-## 8. Protocol additions this spec needs
-
-All three are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"additive protocol fields"*). They are listed here because the mockups draw them and `:domain` does not yet carry them.
-
-| Need | Where it belongs | PRD |
+| # | Question | Why it is not mine to settle |
 |---|---|---|
-| Framing-guide toggles (thirds, eye line) | `SettingsPatch` plus a field on `CaptureSettings`, or client-local state if the guides are not meant to be shared between remotes — decide which | §6.8 "Preview shows framing overlays … toggleable from the web UI" |
-| Preview-link quality | `DeviceStatus` | §6.8 "connection quality" |
-| Tap to focus, and focus lock | A new `CommandName`; there is no focus command in `Messages.kt` today | §6.1 "Tap-to-focus and lock on both phone and web", §6.8 |
+| Q5 | Should white balance be changeable mid-take? `Session` locks **every** setting while recording, which is stricter than Q1 asked about. Q1's answer confirmed the lens; it did not say whether the Kelvin preset should be the exception. | A trade the user makes, not the protocol: a colour jump mid-file against having to stop and restart when the light changes under you. Carving it out means relaxing `Session.settings` and a test that currently asserts the opposite. |
 
-The third is the only one that is not a field: it needs a command, and the coordinate space it carries (preview-relative, so it survives the crop of §6.8) is worth settling when it is written.
+## 8. Protocol additions
 
-One more consequence, and it is a state-machine rule rather than a protocol change, so it adds nothing to the wire: UI-6's mid-take lock must be enforced in `Session`, answering a `settings.set` that carries `lensId` or `grid` while `recording` is true with `nack` / `INVALID`. The reason is [ADR-0007](adr/0007-control-protocol.md)'s own: a client sends a request, not a state write, so the phone is the only place a rule like this can hold. Greying the control in the browser is the courtesy, not the mechanism — a second remote, or a stale tab, would otherwise walk straight past it.
+All are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"additive protocol fields"*).
+
+| Need | Where it belongs | PRD | Status |
+|---|---|---|---|
+| Tap to focus, and focus lock | Its own command rather than a patch field: it is allowed while recording, carries no `expectRev`, and a point and a mode only mean anything together | §6.1 "Tap-to-focus and lock on both phone and web", §6.8 | **Landed.** `focus.set` carrying `Focus(mode, x, y)`, `focus` on `CaptureSettings`, validation in `Session`, and `cmd-focus-set.json` as its golden fixture |
+| Framing-guide toggles (thirds, eye line) | `SettingsPatch` plus a field on `CaptureSettings`, or client-local state if the guides are not meant to be shared between remotes | §6.8 "Preview shows framing overlays … toggleable from the web UI" | Open |
+| Preview-link quality | `DeviceStatus` | §6.8 "connection quality" | Open |
+
+The guides row has a design question inside it rather than a shape question: two remotes watching one phone may reasonably want different overlays, in which case the toggle is not protocol at all.
+
+Focus's validation belongs here rather than in UI-16, because it is protocol and not layout. A point outside `0.0..1.0`, half a point, or a point handed to continuous autofocus is answered `INVALID` rather than repaired — the same reason the Kelvin range is refused rather than clamped: a value the phone silently repairs is a bug the client never learns it has. `NOT_CAPABLE` for a lens without focus regions is the capture layer's to send; `:domain` is platform-free and holds no capability table.
 
 ## 9. Verification
 

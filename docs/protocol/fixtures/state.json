@@ -7,7 +7,12 @@
       "shutterHz": 100,
       "iso": 400,
       "whiteBalanceKelvin": 3200,
-      "lensId": "0"
+      "lensId": "0",
+      "focus": {
+        "mode": "locked",
+        "x": 0.42,
+        "y": 0.33
+      }
     },
     "recording": {
       "recording": true,

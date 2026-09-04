@@ -1,0 +1,12 @@
+{
+  "type": "cmd",
+  "id": "5c8e1a34-72b9-4d0f-8a6e-2f4b9c1d7e83",
+  "name": "focus.set",
+  "expectRev": null,
+  "args": null,
+  "focus": {
+    "mode": "locked",
+    "x": 0.42,
+    "y": 0.33
+  }
+}

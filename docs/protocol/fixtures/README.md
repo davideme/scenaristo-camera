@@ -16,5 +16,11 @@ A behaviour not covered by a fixture is a behaviour that can drift.
 | Fixture | Covers |
 |---|---|
 | `hello.json` | The first server message on `/ws`: protocol version, app name, platform discriminator. |
+| `state.json` | The snapshot every browser mirrors, mid-recording: the flicker-safe shutter step in use, a locked focus point, a warning, and the client count. |
+| `cmd-record-start.json` | A record command: no `expectRev`, no args. |
+| `cmd-settings-set.json` | A settings patch with the staleness guard set, and a null field meaning "leave it alone". |
+| `cmd-focus-set.json` | Tap to focus: a normalised point in the frame, and no `expectRev` — focus acts on the latest state, like record. |
+| `ack.json` | The revision a command produced. |
+| `nack-stale.json` | A command refused for a stale `expectRev`. |
 
 Run them with `./gradlew :domain:jvmTest` from `android/`.

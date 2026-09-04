@@ -110,6 +110,15 @@ data class Command(
     val name: CommandName,
     val expectRev: Int? = null,
     val args: SettingsPatch? = null,
+    /**
+     * Argument of [CommandName.FOCUS_SET], and of nothing else.
+     *
+     * A field of its own rather than a member of [SettingsPatch] because focus is
+     * not one of the settings: it is allowed while recording, it is not guarded
+     * by `expectRev`, and it does not survive being merged field-by-field the way
+     * a patch does — a point and a mode only mean anything together.
+     */
+    val focus: Focus? = null,
 ) : ClientMessage
 
 @Serializable
@@ -123,6 +132,17 @@ enum class CommandName {
 
     @SerialName("settings.set")
     SETTINGS_SET,
+
+    /**
+     * Tap to focus, and focus lock (PRD 6.1, 6.8). Carries [Command.focus].
+     *
+     * Its own command rather than a settings field because it is the one control
+     * that stays live during a take: refocusing mid-recording leaves nothing in
+     * the file an editor has to explain, where a lens switch or a white balance
+     * change does.
+     */
+    @SerialName("focus.set")
+    FOCUS_SET,
 }
 
 /**
@@ -132,7 +152,8 @@ enum class CommandName {
  * Absent from this list on purpose: `shutterHz` and `iso`. Those are outputs of
  * the exposure loop (ADR-0005), not inputs — PRD 6.3 has the app choose them, and
  * letting a browser set them directly would make the flicker-safe ladder
- * advisory.
+ * advisory. Focus is absent for the opposite reason: it is settable, but through
+ * [CommandName.FOCUS_SET], because it obeys none of the rules a patch does.
  */
 @Serializable
 data class SettingsPatch(

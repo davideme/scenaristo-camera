@@ -1,6 +1,7 @@
 package com.scenaristo.camera.domain.protocol
 
 import com.scenaristo.camera.domain.exposure.GridFrequency
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -43,7 +44,46 @@ data class CaptureSettings(
     val whiteBalanceKelvin: Int,
     /** Camera id of the active lens, as reported by the capability probe (ADR-0011). */
     val lensId: String,
+    /**
+     * Where the camera is focusing. Defaulted so that a snapshot written before
+     * focus existed still decodes, which is the compatibility rule ADR-0007 sets
+     * for added fields.
+     */
+    val focus: Focus = Focus(),
 )
+
+/**
+ * Where the camera is focusing (PRD 6.1 "Continuous AF with face priority,
+ * lockable"; PRD 6.8 "focus (tap on preview, lock)").
+ *
+ * [x] and [y] are normalised in the frame: 0.0 is the left or top edge, 1.0 the
+ * right or bottom. Normalised rather than pixels because the browser sees a
+ * 960 × 540 preview of a 3840 × 2160 recording (PRD 6.8), and normalised
+ * *in the frame* rather than in the preview image because the preview is cropped
+ * to the recording's aspect ratio — which is what makes one pair of numbers mean
+ * the same point on the phone, in the browser, and in the file.
+ *
+ * Both are null in [FocusMode.CONTINUOUS], and both are set in
+ * [FocusMode.LOCKED] when the lock came from a tap. A lock with no point means
+ * "hold it where it already is", which is the other half of PRD 6.1's "lockable".
+ */
+@Serializable
+data class Focus(
+    val mode: FocusMode = FocusMode.CONTINUOUS,
+    val x: Double? = null,
+    val y: Double? = null,
+)
+
+@Serializable
+enum class FocusMode {
+    /** PRD 6.1's default: continuous autofocus, face priority. */
+    @SerialName("continuous")
+    CONTINUOUS,
+
+    /** Held, either where it was or at the point of the tap that set it. */
+    @SerialName("locked")
+    LOCKED,
+}
 
 @Serializable
 data class RecordingState(
