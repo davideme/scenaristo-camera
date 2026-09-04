@@ -157,6 +157,10 @@ The MVP has to prove that locked shutter, app-driven ISO, locked WB, and the bro
    | 1801 | 22511 | 12.1 |
    | 8398 | 38911 | 2.5 |
 
-   Extrapolating the 12.1 B/frame slope of the short takes gives ~18 min; the 4 min 40 s point rules that out, and the slope between the last two points would put the limit past an hour. Neither number is trustworthy, so **no covered length is recorded yet** and PRD 6.7 keeps its placeholder. Killing at guessed lengths is the wrong instrument — it costs one recording per point. The remaining work is one long undisturbed take sampled every 30 s (`free` shrinking to zero is the answer); an attempt on 2026-09-04 was cut short at 4 min 40 s when the phone was picked up.
+   Those samples are of the **recovery copy** written ahead of `mdat` during recording, and it is not a complete index. A 24 min 48 s take (44,638 frames) recorded the same day settles it: on a clean stop the front reserve is released back into a `free` box and the real `moov` is written after `mdat`, and that final index measures **476,755 bytes** — 10.68 bytes/frame overall, already larger than the 400,008-byte reserve.
+
+   So the covered length is **under 24 min 48 s, and around 20 min** at that rate. The short-take slope (~18 min) lands close, by luck; the 4 min 40 s sample of the front copy, which suggested well over an hour, was misleading because that copy is not the full index. PRD 6.7's original "10–15 minutes" was the right order of magnitude and slightly low.
+
+   **This is an inference from index size, not an observed failure**, so no covered length is recorded as measured yet and PRD 6.7 keeps its estimate marked unconfirmed. Confirming it needs one long undisturbed take with the header sampled every 30 s until `free` reaches zero, then a force-kill past that point to see what a take beyond the reserve actually does. Killing at guessed lengths is the wrong instrument — it costs one recording per point. Deferred 2026-09-04 (Davide).
 5. [x] Amend PRD 6.6 (level meter 5 Hz), 6.7 (crash resilience covered up to a measured length, HEVC "when the device profile provides it" until 1.7), and 6.1 (OIS off).
 6. [ ] Create a tracking issue "CameraX 1.7 revisit" with the checklist from the revisit pin.
