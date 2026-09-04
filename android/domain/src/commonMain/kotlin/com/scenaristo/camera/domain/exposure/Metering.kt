@@ -13,11 +13,6 @@ import kotlin.math.ln
  * anyway: ADR-0005 requires one metering implementation so the two platforms
  * cannot drift apart on what "correctly exposed" means.
  *
- * The frames come from the preview tap (ADR-0018) rather than an `ImageAnalysis`
- * stream, because a UHD recording and an `ImageAnalysis` cannot be bound together
- * on the reference device (#20). Nothing here depends on which: it takes a luma
- * plane and returns a number.
- *
  * It is deliberately not an average of the picture. A talking head is usually
  * backlit by whatever is behind them — a window, a lamp, a bright wall — and the
  * frame mean of that scene is a correctly exposed *room* with an underexposed
@@ -51,13 +46,12 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
         var row = 0
         while (row < frame.height) {
             val y = (row + 0.5) / frame.height
-            val rowStart = row * frame.rowStride
             var col = 0
             while (col < frame.width) {
                 val x = (col + 0.5) / frame.width
                 val w = if (windows.any { it.contains(x, y) }) 1.0 else config.backgroundWeight
                 if (w > 0.0) {
-                    weightedLog += w * ln(frame.luma(rowStart + col, config.videoRange))
+                    weightedLog += w * ln(frame.sampler.lumaAt(col, row))
                     weight += w
                 }
                 col += stride
@@ -70,41 +64,75 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
 }
 
 /**
- * A frame's luma plane, exactly as the platform hands it over: `Y` of a
- * `YUV_420_888` image on Android, the luma plane of a `kCVPixelFormatType_420f`
- * buffer on iOS.
+ * A frame to meter: its size, and a way to read one pixel's luma.
  *
- * Not a `data class` on purpose — a `ByteArray` in one gives you an `equals` that
- * compares identity while looking like it compares content, and this is exactly
- * the kind of object someone would reach for that with.
+ * A sampler rather than a buffer because `:domain` is platform-free and the
+ * buffer never is. On Android the frames come from the GL tap of ADR-0018 as
+ * packed RGBA; on iOS they will come from a `CVPixelBuffer`'s luma plane; a
+ * `java.nio.ByteBuffer` cannot cross into `commonMain` at all
+ * (`tools/check-domain-platform-free.sh`). What is genuinely shared is the
+ * photometry and the weighting, and those are here — [LumaScale] converts a
+ * platform's pixel to luma, and [FaceWeightedMeter] decides which pixels count.
  */
 class LumaFrame(
-    val y: ByteArray,
     val width: Int,
     val height: Int,
+    val sampler: LumaSampler,
+)
+
+/** Reads gamma-encoded luma in 0.0..1.0 at a pixel, whatever the buffer's layout. */
+fun interface LumaSampler {
+    fun lumaAt(x: Int, y: Int): Double
+}
+
+/**
+ * Turning a platform's pixel into luma, which is shared arithmetic rather than
+ * platform detail — and easy to get quietly wrong in two different ways on two
+ * different platforms.
+ */
+object LumaScale {
+
     /**
-     * Bytes per row, which is **not** [width] on most devices: the camera pads
-     * rows out to an alignment. Reading [width] bytes per row from a padded plane
-     * meters a slowly shearing diagonal of the picture rather than the picture.
-     */
-    val rowStride: Int = width,
-) {
-    /**
-     * One sample, normalised to 0.0..1.0 and floored.
-     *
      * A frame that meters as pure black is a lens cap, not an infinite exposure
-     * error; the floor keeps the logarithm finite so the loop asks for maximum
+     * error. The floor keeps the logarithm finite so the loop asks for maximum
      * ISO and stops there.
      */
-    internal fun luma(index: Int, videoRange: Boolean): Double {
-        val raw = y[index].toInt() and 0xFF
-        val scaled = if (videoRange) (raw - 16) / 219.0 else raw / 255.0
-        return scaled.coerceIn(BLACK_FLOOR, 1.0)
-    }
+    const val BLACK_FLOOR: Double = 1e-4
 
-    private companion object {
-        const val BLACK_FLOOR = 1e-4
-    }
+    /**
+     * Rec.709 luma from encoded R, G, B bytes — the coefficients PRD 6.1's
+     * "SDR, Rec.709, 8-bit" implies, and what the GL tap's RGBA frames need.
+     *
+     * Note the luma is computed from the *encoded* values rather than linearised
+     * first. That is deliberate and matches what a camera's own Y channel is: the
+     * loop linearises once, downstream, with a single gamma.
+     */
+    fun rec709(r: Int, g: Int, b: Int): Double =
+        ((0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0).coerceIn(BLACK_FLOOR, 1.0)
+
+    /** A studio-range (16..235) luma byte, which is what a camera Y plane carries. */
+    fun studioRange(raw: Int): Double = ((raw - 16) / 219.0).coerceIn(BLACK_FLOOR, 1.0)
+
+    /** A full-range (0..255) luma byte. */
+    fun fullRange(raw: Int): Double = (raw / 255.0).coerceIn(BLACK_FLOOR, 1.0)
+}
+
+/**
+ * A sampler over a luma plane held as bytes — a `YUV_420_888` Y plane copied out,
+ * and the shape the tests use.
+ *
+ * [rowStride] is **not** [LumaFrame.width] on most devices: cameras pad rows out
+ * to an alignment, and reading width bytes per row meters a slowly shearing
+ * diagonal of the picture while looking entirely plausible.
+ */
+fun yPlaneSampler(
+    y: ByteArray,
+    rowStride: Int,
+    pixelStride: Int = 1,
+    videoRange: Boolean = true,
+): LumaSampler = LumaSampler { x, row ->
+    val raw = y[row * rowStride + x * pixelStride].toInt() and 0xFF
+    if (videoRange) LumaScale.studioRange(raw) else LumaScale.fullRange(raw)
 }
 
 /** A rectangle in the frame, normalised so 0.0 is the left or top edge and 1.0 the right or bottom. */
@@ -138,15 +166,7 @@ data class MeteringConfig(
     /**
      * Sample every nth pixel in both axes. At ADR-0008's 960x540 preview size a
      * stride of 4 still reads about 32 000 samples, which is far more than a
-     * mean needs and a quarter of the work of reading all of them.
+     * mean needs and a sixteenth of the work of reading all of them.
      */
     val sampleStride: Int = 4,
-    /**
-     * True when the luma plane is studio-range (16..235) rather than full-range
-     * (0..255). Camera YUV is conventionally studio-range; a device that hands
-     * over full-range luma and is metered as studio-range reads about a tenth of
-     * a stop bright, which is inside the loop's dead band but not inside the
-     * grey-card tolerance of PRD 6.4. Confirm per device in #25.
-     */
-    val videoRange: Boolean = true,
 )
