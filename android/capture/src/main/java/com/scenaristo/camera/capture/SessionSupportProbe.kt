@@ -235,6 +235,26 @@ object SessionSupportProbe {
      * resolutions are read back after binding because "it bound" is not the
      * question -- whether the recorder actually got UHD is.
      */
+    /**
+     * A *preferred* feature group, which is the opposite instruction from the
+     * required one used everywhere else: CameraX drops the feature rather than
+     * refusing the session. It always binds, so the question is never whether it
+     * works but what it silently settles for -- which is why this returns the
+     * selected features alongside the resolutions.
+     */
+    fun preferredCandidates(): List<Triple<String, SessionConfig, List<androidx.camera.core.UseCase>>> {
+        fun build(vararg features: GroupableFeature): Pair<SessionConfig, List<androidx.camera.core.UseCase>> {
+            val useCases = listOf(preview(), video(), analysis())
+            return SessionConfig.Builder(useCases).setPreferredFeatureGroup(*features).build() to useCases
+        }
+        val uhd = build(GroupableFeatures.UHD_RECORDING)
+        val uhdThenFhd = build(GroupableFeatures.UHD_RECORDING, GroupableFeatures.FHD_RECORDING)
+        return listOf(
+            Triple("preferred(UHD) + preview/video/analysis", uhd.first, uhd.second),
+            Triple("preferred(UHD, FHD) + preview/video/analysis", uhdThenFhd.first, uhdThenFhd.second),
+        )
+    }
+
     fun varargCandidates(): List<Triple<String, List<androidx.camera.core.UseCase>, String>> = listOf(
         Triple(
             "vararg: preview + video(UHD) + analysis@960x540",

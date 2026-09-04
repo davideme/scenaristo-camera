@@ -137,7 +137,28 @@ private fun EchoRunner() {
         // processor renders nothing; what is being tested is whether the session
         // is accepted, not whether pixels arrive. Printed first because it is the
         // load-bearing result and the table below is long.
-        val binds = StringBuilder("Vararg binds (CameraX resolves the combination itself):\n")
+        val binds = StringBuilder("Preferred feature group (CameraX drops what it cannot do):\n")
+        for ((label, config, useCases) in SessionSupportProbe.preferredCandidates()) {
+            var selected = "?"
+            config.setFeatureSelectionListener(ContextCompat.getMainExecutor(context)) { features ->
+                selected = if (features.isEmpty()) "none" else features.joinToString { "$it" }
+            }
+            val outcome = runCatching {
+                provider.unbindAll()
+                provider.bindToLifecycle(lifecycleOwner, selector, config)
+            }
+            binds.append("- $label: ")
+                .append(
+                    if (outcome.isSuccess) {
+                        "BOUND ${SessionSupportProbe.resolutionsOf(useCases)} selected=[$selected]"
+                    } else {
+                        "REFUSED: ${shortReason(outcome.exceptionOrNull())}"
+                    },
+                )
+                .append("\n")
+        }
+
+        binds.append("\nVararg binds (CameraX resolves the combination itself):\n")
         for ((label, useCases, varies) in SessionSupportProbe.varargCandidates()) {
             val outcome = runCatching {
                 provider.unbindAll()
