@@ -100,6 +100,18 @@ fun ConnectSheet(url: String?, remotes: Int, onDismiss: () -> Unit) {
                 color = Tokens.Dim,
                 fontSize = 12.sp,
             )
+
+            // ADR-0019: the sentence above promises an off switch, so it says
+            // where it is. The switch itself is in the notification, because
+            // that is the one place reachable once the user has left the app --
+            // which is also when they are most likely to want it.
+            Text(
+                "The server stops on its own when you leave the app, unless a " +
+                    "recording or a remote is still using it. Stop it now from " +
+                    "the Scenaristo Camera notification.",
+                color = Tokens.Dim,
+                fontSize = 12.sp,
+            )
         }
     }
 }

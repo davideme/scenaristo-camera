@@ -35,6 +35,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0016](0016-continuous-integration.md) | PRs gated on compilation, host tests and repo invariants; device verification stays manual | Proposed | 6.1-6.7, 6.10, 9 |
 | [0017](0017-phase-0-verification-matrix.md) | Phase 0 runs on one reference device (Pixel 10) with a MacBook browser; second phone and iOS Safari deferred | Accepted | 9, 8-Q5, 6.8, 6.10 |
 | [0018](0018-preview-tap-for-metering-and-preview-frames.md) | Metering and preview frames come from a `CameraEffect` tap on the preview stream; no `ImageAnalysis` alongside UHD recording | Accepted | 6.1, 6.3, 6.5, 6.8, 6.10 |
+| [0019](0019-stop-the-service-when-idle.md) | Stop the capture service when the user leaves the app and neither a recording nor a remote is using it; explicit stop action | Proposed | 6.8, 6.9 |
 
 ## Challenges to positions stated in the PRD
 

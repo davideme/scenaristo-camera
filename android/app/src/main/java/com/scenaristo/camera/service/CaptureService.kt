@@ -49,6 +49,7 @@ import com.scenaristo.camera.domain.protocol.State as ProtocolState
 import com.scenaristo.camera.server.ControlServer
 import com.scenaristo.camera.server.LocalAddress
 import com.scenaristo.camera.server.PreviewFrames
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -113,6 +114,9 @@ class CaptureService : LifecycleService() {
     private lateinit var server: ControlServer
 
     private var recording: Recording? = null
+
+    /** Pending ADR-0019 shutdown, cancelled if the activity comes back. */
+    private var idleShutdown: Job? = null
     private var displayListener: DisplayManager.DisplayListener? = null
 
     /** Last rotation handed to the camera, so a brightness change is not one. */
@@ -126,7 +130,58 @@ class CaptureService : LifecycleService() {
 
     override fun onBind(intent: Intent): IBinder {
         super.onBind(intent)
+        idleShutdown?.cancel()
+        idleShutdown = null
         return binder
+    }
+
+    /**
+     * The activity has gone (ADR-0019).
+     *
+     * Returning true asks for [onRebind] rather than a fresh [onBind], which is
+     * what lets a recreated activity cancel the shutdown instead of racing it.
+     *
+     * This is the *destroy* signal, not the *stop* signal, and the difference is
+     * the whole decision: a screen turning off or a phone put face down must not
+     * reach here, because PRD 6.8's flow is a phone left alone while the user
+     * walks to a laptop, and ADR-0003 exists so a locked screen changes nothing.
+     */
+    override fun onUnbind(intent: Intent?): Boolean {
+        super.onUnbind(intent)
+        scheduleIdleShutdown()
+        return true
+    }
+
+    override fun onRebind(intent: Intent?) {
+        super.onRebind(intent)
+        idleShutdown?.cancel()
+        idleShutdown = null
+    }
+
+    /**
+     * ADR-0019: stop once the user has left and neither a recording nor a remote
+     * is using this.
+     *
+     * The delay is not politeness, it is correctness: an activity being recreated
+     * unbinds and rebinds, and without a grace period that sequence would tear
+     * the camera down and build it again for nothing.
+     *
+     * The two conditions are re-read *after* the delay rather than before,
+     * because a remote can connect in the meantime -- which is exactly the case
+     * this must not break.
+     */
+    private fun scheduleIdleShutdown() {
+        idleShutdown?.cancel()
+        idleShutdown = lifecycleScope.launch {
+            delay(IDLE_SHUTDOWN_GRACE_MS)
+            if (session.state.recording.recording || session.state.clients > 0) {
+                Log.i(IDLE_TAG, "staying up: recording or a remote is still attached")
+                return@launch
+            }
+            Log.i(IDLE_TAG, "no activity, no recording, no remotes; stopping")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     override fun onCreate() {
@@ -497,6 +552,16 @@ class CaptureService : LifecycleService() {
             .setContentTitle("Scenaristo Camera")
             .setContentText(text)
             .setContentIntent(open)
+            .addAction(
+                R.drawable.ic_launcher_foreground,
+                "Stop",
+                PendingIntent.getService(
+                    this,
+                    1,
+                    Intent(this, CaptureService::class.java).setAction(ACTION_STOP),
+                    PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
             .setOngoing(true)
             .setSilent(true)
             .build()
@@ -551,16 +616,35 @@ class CaptureService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val result = super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_LENS_SWEEP) lifecycleScope.launch { runLensSweep() }
+        // The user's own off switch (ADR-0019). UI-7's security copy promises
+        // one -- "turn the server off when you are done" -- and an automatic
+        // rule they cannot see is not an answer to a consequence they were just
+        // told about. Deliberate, so it ignores the idle conditions.
+        if (intent?.action == ACTION_STOP) {
+            stopRecording()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
         return result
     }
 
     companion object {
         private const val CHANNEL_ID = "capture"
         private const val EXPOSURE_TAG = "ExposureLoop"
+        private const val IDLE_TAG = "IdleShutdown"
+
+        /**
+         * Long enough for a recreated activity to rebind, short enough that a
+         * user who closed the app does not wonder why the camera light is on.
+         */
+        private const val IDLE_SHUTDOWN_GRACE_MS = 5_000L
         private const val SWEEP_TAG = "LensSweep"
 
         /** #20's sweep, startable over adb so the phone need not be unlocked. */
         const val ACTION_LENS_SWEEP = "com.scenaristo.camera.LENS_SWEEP"
+
+        /** The notification's own stop action (ADR-0019). */
+        const val ACTION_STOP = "com.scenaristo.camera.STOP"
         private const val NOTIFICATION_ID = 1
         private const val MAX_LOCK_MS = 4 * 60 * 60 * 1000L
 
