@@ -111,6 +111,14 @@ class CaptureService : LifecycleService() {
     private val _codecLabel = MutableStateFlow("—")
     val codecLabel: StateFlow<String> = _codecLabel.asStateFlow()
 
+    /**
+     * The active lens in 35 mm-equivalent millimetres (PRD 6.5), or null when
+     * the characteristics do not say. Null is not 0: the guidance is withheld
+     * rather than guessed.
+     */
+    private val _lensMm = MutableStateFlow<Int?>(null)
+    val lensMm: StateFlow<Int?> = _lensMm.asStateFlow()
+
     /** #20: the per-lens key echo, once the sweep has run. */
     private val _lensSweep = MutableStateFlow<String?>(null)
     val lensSweep: StateFlow<String?> = _lensSweep.asStateFlow()
@@ -329,6 +337,7 @@ class CaptureService : LifecycleService() {
             val lens = camera.capabilities(bound.cameraInfo)
             backCameraId = lens.cameraId
             camera.logicalCameraId = lens.cameraId
+            _lensMm.value = ManualControls.equivalentFocalLength(bound.cameraInfo)
             startExposureLoop(bound)
             val codecReport = CodecReport.of(lens.cameraId)
             _codecLabel.value = when {
