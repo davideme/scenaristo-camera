@@ -127,8 +127,9 @@ Warnings are `State.warnings` (`TOO_DARK`, `TOO_BRIGHT`, `TOO_CLOSE_TO_LENS`, `O
 - [ ] Each warning is a single line beginning with the action: "Add light — ISO 1600 will look noisy", "Sit further back — 1.5–2 m for the 24 mm lens", "Too much light — close the blinds or move the key light back".
 - [ ] A warning carries an icon; a control never does. This is what separates warning orange (`oklch(.74 .165 48)`) from control amber at a glance.
 - [ ] A warning does not restate a value that is visible in the readout strip within the same screen.
-- [ ] The readout that caused the warning is tinted in the same orange, so the warning and its cause are visibly linked.
+- [ ] **A warning is a chip and nothing else** (decision 2026-09-04, Davide). No readout, status value or number is recoloured to signal one: the chip is the single channel, which is UI-2 applied to warnings. The one exception is the thermal dot, which names a four-level state rather than raising a warning.
 - [ ] Warnings appear below the top strip on the phone and above the preview in the browser, and never over the subject.
+- [ ] The flicker-safe shutter step of §6.3 is **not** a warning and is not drawn as one: it is a `Stepped` marker in the reported style on the shutter readout, and PRD §6.3 says explicitly that no warning is shown when the step succeeds.
 
 ---
 **UI-6 — Recording state is impossible to misread**
@@ -137,6 +138,7 @@ Warnings are `State.warnings` (`TOO_DARK`, `TOO_BRIGHT`, `TOO_CLOSE_TO_LENS`, `O
 - [ ] The timecode goes to full contrast and gains a filled red dot and the word `Recording`.
 - [ ] The record control becomes a stop control (rounded square, same position, same size).
 - [ ] Red (`oklch(.63 .21 26)`) appears nowhere else in the interface.
+- [ ] **The lens and the mains frequency are locked for the duration of the take** (decision 2026-09-04, Davide). A lens switch mid-recording is a cut in the middle of a take, and the mains frequency changes the shutter under the recording. White balance stays changeable, with the caution of UI-9. [ADR-0007](adr/0007-control-protocol.md) accepts `settings.set` at any time, so this is enforced by the phone: a `settings.set` carrying `lensId` or `grid` while recording is answered with `nack` / `INVALID`, and the browser draws the control as locked rather than letting the user discover it by being refused.
 - [ ] Controls locked for the duration of the take are dimmed with the caption "Locked while recording" — not with the padlock glyph, which means "held still by the app" (§5) and must not acquire a second meaning.
 
 ---
@@ -218,12 +220,19 @@ PRD §6.8 acceptance criterion: *"Given the browser is on a phone-sized screen, 
 - **UI-14** Face-size indicator on the preview when the subject is inside the wide lens's distortion zone (PRD §6.11), replacing the persistent text guidance of UI-12 once it is reliable.
 - **UI-15** A one-glance "everything is right" state — the case where there are no warnings deserves a positive signal, not merely the absence of orange.
 
-## 7. Open questions
+## 7. Questions
+
+### Decided
+
+| # | Question | Decision (2026-09-04, Davide) |
+|---|---|---|
+| Q1 | Does the lens stay changeable mid-take? | **No.** Lens and mains frequency are locked for the duration of the take; white balance stays changeable. Specified in UI-6, and it needs the phone to refuse the command, not only the browser to grey the control. |
+| Q2 | Warning as a chip, or also as a tint on the readout that caused it? | **Chip only.** One warning, one place. No number is recoloured to raise one, which also settles that the flicker-safe shutter step is reported rather than warned. Specified in UI-5. |
+
+### Open
 
 | # | Question | Why it is not mine to settle |
 |---|---|---|
-| Q1 | Does the lens stay changeable mid-take? The mockups lock lens and mains while recording and leave white balance changeable with a caution. | [ADR-0007](adr/0007-control-protocol.md) accepts `settings.set` at any time and takes no position; this is a product call about what a mid-take change should cost. |
-| Q2 | Warning as a chip, or only as a tint on the readout that caused it? UI-5 currently does both, which is two channels for one fact and sits uneasily beside UI-2. | Depends on how loud a warning should be for a user who is mid-sentence on camera. |
 | Q3 | How loudly should the open-LAN consequence be stated (UI-7)? Reassuring, or alarming enough that people notice. | A tone decision that trades adoption against the v1 security position. |
 | Q4 | Is "remote" the right user-facing word, or "remote control" spelled out? The 9 px label slot fits "Remotes". | Product vocabulary. |
 
@@ -238,6 +247,8 @@ All three are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"
 | Tap to focus, and focus lock | A new `CommandName`; there is no focus command in `Messages.kt` today | §6.1 "Tap-to-focus and lock on both phone and web", §6.8 |
 
 The third is the only one that is not a field: it needs a command, and the coordinate space it carries (preview-relative, so it survives the crop of §6.8) is worth settling when it is written.
+
+One more consequence, and it is a state-machine rule rather than a protocol change, so it adds nothing to the wire: UI-6's mid-take lock must be enforced in `Session`, answering a `settings.set` that carries `lensId` or `grid` while `recording` is true with `nack` / `INVALID`. The reason is [ADR-0007](adr/0007-control-protocol.md)'s own: a client sends a request, not a state write, so the phone is the only place a rule like this can hold. Greying the control in the browser is the courtesy, not the mechanism — a second remote, or a stale tab, would otherwise walk straight past it.
 
 ## 9. Verification
 
