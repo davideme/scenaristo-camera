@@ -39,6 +39,8 @@ import com.scenaristo.camera.capture.PreviewJpegSource
 import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.protocol.CaptureSettings
+import com.scenaristo.camera.domain.protocol.Command
+import com.scenaristo.camera.domain.protocol.CommandName
 import com.scenaristo.camera.domain.protocol.DeviceStatus
 import com.scenaristo.camera.domain.protocol.RecordingState
 import com.scenaristo.camera.domain.protocol.Session
@@ -84,6 +86,18 @@ class CaptureService : LifecycleService() {
     /** #21: what the UHD profile picks against what the device can encode. */
     private val _codecs = MutableStateFlow<String?>(null)
     val codecs: StateFlow<String?> = _codecs.asStateFlow()
+
+    private val _state = MutableStateFlow(startingState())
+
+    /**
+     * The same state document the browser sees (ADR-0007), for the phone's own
+     * HUD. One source of truth, so the two surfaces cannot disagree.
+     */
+    val state: StateFlow<ProtocolState> = _state.asStateFlow()
+
+    /** "HEVC (H.265)" or "H.264", before recording starts (PRD 6.7). */
+    private val _codecLabel = MutableStateFlow("—")
+    val codecLabel: StateFlow<String> = _codecLabel.asStateFlow()
 
     /** #20: the per-lens key echo, once the sweep has run. */
     private val _lensSweep = MutableStateFlow<String?>(null)
@@ -247,7 +261,13 @@ class CaptureService : LifecycleService() {
             backCameraId = lens.cameraId
             camera.logicalCameraId = lens.cameraId
             startExposureLoop(bound)
-            val report = CodecReport.markdown(CodecReport.of(lens.cameraId))
+            val codecReport = CodecReport.of(lens.cameraId)
+            _codecLabel.value = when {
+                codecReport.profileCodec?.contains("hevc") == true -> "HEVC (H.265)"
+                codecReport.profileCodec?.contains("avc") == true -> "H.264"
+                else -> "—"
+            }
+            val report = CodecReport.markdown(codecReport)
             _codecs.value = report
             // Logged as well as shown: #21's answer is a number to paste into an
             // ADR, and reading it off a screenshot means unlocking the phone.
@@ -332,6 +352,7 @@ class CaptureService : LifecycleService() {
                 )
             }
             server.broadcastSnapshot()
+            _state.value = session.state
             updateNotification(describe())
             delay(1_000)
         }
@@ -346,6 +367,27 @@ class CaptureService : LifecycleService() {
      * a moment before the file exists, which is why the notification and the
      * browser both read from the same state rather than from the recorder.
      */
+    /**
+     * The record button on the phone (PRD 6.9, spec UI-4).
+     *
+     * Goes through the server's command path rather than touching `Session`
+     * directly, so the phone is one more client of ADR-0007's single writer --
+     * and a take started on the phone is acked, revisioned and broadcast exactly
+     * like one started from a laptop.
+     */
+    fun toggleRecording() {
+        val start = !session.state.recording.recording
+        lifecycleScope.launch {
+            server.applyLocal(
+                Command(
+                    id = "phone-" + System.currentTimeMillis(),
+                    name = if (start) CommandName.RECORD_START else CommandName.RECORD_STOP,
+                ),
+            )
+            _state.value = session.state
+        }
+    }
+
     private suspend fun followRecordingState() {
         var wasRecording = false
         while (true) {

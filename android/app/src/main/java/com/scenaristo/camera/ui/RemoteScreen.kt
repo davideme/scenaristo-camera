@@ -9,14 +9,10 @@ import android.content.pm.PackageManager
 import android.os.IBinder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.compose.CameraXViewfinder
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -32,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.scenaristo.camera.service.CaptureService
@@ -91,34 +86,24 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
 
         val surfaceRequest by (service?.surfaceRequest?.collectAsState() ?: return@Surface)
         val url by (service.url.collectAsState())
-        val codecs by (service.codecs.collectAsState())
+        val codec by (service.codecLabel.collectAsState())
+        val state by (service.state.collectAsState())
+        var showConnect by remember { mutableStateOf(false) }
 
-        Column(
-            // safeDrawing, not just the status bar: in landscape this phone puts
-            // its camera cutout down the left edge and its gesture bar down the
-            // right, and `enableEdgeToEdge` means the window extends under both.
-            // Without this the address is printed through the cutout and the
-            // first character of every line is unreadable — which is the shape
-            // of the problem UI-3 flags for the record button.
-            modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                surfaceRequest?.let {
-                    CameraXViewfinder(surfaceRequest = it, modifier = Modifier.fillMaxSize())
-                }
-            }
-            Text("Open on your laptop:", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                url ?: "no network",
-                style = MaterialTheme.typography.headlineSmall,
-                fontFamily = FontFamily.Monospace,
+        CameraScreen(
+            surfaceRequest = surfaceRequest,
+            state = state,
+            codec = codec,
+            onToggleRecording = service::toggleRecording,
+            onConnect = { showConnect = true },
+        )
+
+        if (showConnect) {
+            ConnectSheet(
+                url = url,
+                remotes = state.clients,
+                onDismiss = { showConnect = false },
             )
-            // #21's readout. Temporary: it belongs in the browser's capability
-            // report (PRD 6.10) once that exists, not on the phone screen.
-            codecs?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-            }
         }
     }
 }
