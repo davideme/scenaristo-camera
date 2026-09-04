@@ -217,13 +217,14 @@ private fun EchoRunner() {
                 )
                 .append("\n")
         }
-        binds.append("\nSessionConfig binds, with the resolutions CameraX assigned:\n")
+        binds.insert(0, "SessionConfig binds, with the resolutions CameraX assigned:\nPLACEHOLDER\n\n")
+        val sessionConfigSection = StringBuilder()
         for (r in results) {
             val outcome = runCatching {
                 provider.unbindAll()
                 provider.bindToLifecycle(lifecycleOwner, selector, r.candidate.config)
             }
-            binds.append("- ${r.candidate.label}: ")
+            sessionConfigSection.append("- ${r.candidate.label}: ")
                 .append(
                     if (outcome.isSuccess) {
                         "BOUND ${SessionSupportProbe.resolutions(r.candidate.config)}"
@@ -234,7 +235,8 @@ private fun EchoRunner() {
                 .append("\n")
         }
         provider.unbindAll()
-        support = binds.toString()
+        val assembled = binds.toString().replace("PLACEHOLDER", sessionConfigSection.toString().trimEnd())
+        support = assembled
 
         status = try {
             provider.bindToLifecycle(lifecycleOwner, selector, session.sessionConfig)

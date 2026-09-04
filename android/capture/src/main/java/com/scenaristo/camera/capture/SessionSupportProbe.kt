@@ -51,13 +51,7 @@ object SessionSupportProbe {
      * resolved, so for anything resolution-dependent the only honest test is to
      * bind and read the streams back.
      */
-    fun resolutions(config: SessionConfig): String {
-        val video = config.useCases.filterIsInstance<VideoCapture<*>>()
-            .firstNotNullOfOrNull { it.resolutionInfo?.resolution }
-        val analysis = config.useCases.filterIsInstance<ImageAnalysis>()
-            .firstNotNullOfOrNull { it.resolutionInfo?.resolution }
-        return "video=${video ?: "-"} analysis=${analysis ?: "-"}"
-    }
+    fun resolutions(config: SessionConfig): String = resolutionsOf(config.useCases)
 
     private fun preview() = Preview.Builder().build()
 
