@@ -209,7 +209,7 @@ PRD §6.8 acceptance criterion: *"Given the browser is on a phone-sized screen, 
 **UI-12 — Copy**
 
 - [ ] Sentence case throughout. No title case, no shouting.
-- [ ] Terminology is fixed: a connected browser is a **remote**, never a viewer or a client; the count reads "2 remotes connected".
+- [ ] Terminology is fixed (decision 2026-09-04, Davide): the browser surface is the **remote control**, a connected browser is a **remote**, and the count reads "2 remotes connected". Never *viewer*, and never *client* — a viewer watches, and this one can start a recording.
 - [ ] The two light scenarios are "Daylight in the room" and "Lamps only" — the plain-language form of PRD §6.4's "natural light present" and "artificial light only". The user does not meet the word Kelvin before the preset value.
 - [ ] A control that a lens cannot honour is labelled with what is missing, never hidden and never silently inert (PRD §6.10).
 - [ ] Distance guidance reads "Wide lens — sit 1.5–2 m back" and is dismissible for the session (PRD §6.5).
@@ -228,13 +228,13 @@ PRD §6.8 acceptance criterion: *"Given the browser is on a phone-sized screen, 
 |---|---|---|
 | Q1 | Does the lens stay changeable mid-take? | **No.** Lens and mains frequency are locked for the duration of the take; white balance stays changeable. Specified in UI-6, and it needs the phone to refuse the command, not only the browser to grey the control. |
 | Q2 | Warning as a chip, or also as a tint on the readout that caused it? | **Chip only.** One warning, one place. No number is recoloured to raise one, which also settles that the flicker-safe shutter step is reported rather than warned. Specified in UI-5. |
+| Q4 | Is "remote" the right user-facing word? | **Yes, as it stands.** The surface is the *remote control*; a connected browser is a *remote*, and the count reads "2 remotes connected". Specified in UI-12. |
 
 ### Open
 
 | # | Question | Why it is not mine to settle |
 |---|---|---|
 | Q3 | How loudly should the open-LAN consequence be stated (UI-7)? Reassuring, or alarming enough that people notice. | A tone decision that trades adoption against the v1 security position. |
-| Q4 | Is "remote" the right user-facing word, or "remote control" spelled out? The 9 px label slot fits "Remotes". | Product vocabulary. |
 
 ## 8. Protocol additions this spec needs
 
