@@ -1,5 +1,7 @@
 package com.scenaristo.camera.capture
 
+import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,6 +18,8 @@ class LensSweepTest {
         exposureTimeNs = 20_000_000,
         sensitivity = 100,
         frameDurationNs = 33_333_333,
+        // PRD 6.4's default, as the locked preset nearest 5600 K (ADR-0011).
+        awbMode = ManualControls.awbModeFor(DEFAULT_KELVIN),
     )
 
     private fun goodEchoes() = listOf(

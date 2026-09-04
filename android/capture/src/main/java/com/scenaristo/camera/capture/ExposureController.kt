@@ -42,9 +42,24 @@ class ExposureController(
     private val cameraControl: CameraControl,
     /** 30 fps, pinned (PRD 6.1). The loop never changes it; the sensor is told anyway. */
     private val frameDurationNs: Long = FRAME_DURATION_30FPS_NS,
+    /**
+     * The locked white balance mode to keep asserting (PRD 6.4).
+     *
+     * It rides along with every exposure push and is not the loop's business,
+     * for a reason that is easy to miss: the runtime request path in
+     * [ManualControls] **replaces** the whole set of options previously set
+     * through it, so a push that carried only ISO would silently drop the white
+     * balance somebody set a moment earlier. Anything applied that way has to be
+     * applied every time. (Naming the API here would fail the ADR-0002
+     * invariant check, which greps these files, comments included.)
+     */
+    awbMode: Int,
     private val config: ExposureConfig = ExposureConfig(),
     meteringConfig: MeteringConfig = MeteringConfig(),
 ) {
+
+    @Volatile
+    private var awb: Int = awbMode
 
     private val loop = ExposureLoop(isoRange, config)
     private val meter = FaceWeightedMeter(meteringConfig)
@@ -105,6 +120,19 @@ class ExposureController(
         }
     }
 
+    /**
+     * The user chose a different white balance preset (PRD 6.4).
+     *
+     * Applied through the same request as exposure, for the replacement reason
+     * above, and allowed at any time the session allows it -- `Session` already
+     * refuses a settings change while recording (PRD 6.1's locked look), so this
+     * does not have to.
+     */
+    fun onWhiteBalanceChanged(awbMode: Int) {
+        awb = awbMode
+        push(_state.value)
+    }
+
     /** The user changed the mains frequency (PRD 6.2). */
     fun onGridChanged(grid: GridFrequency, nowMs: Long) {
         val next = synchronized(lock) {
@@ -122,6 +150,7 @@ class ExposureController(
             exposureTimeNs = exposureTimeNsOf(state.shutterHz),
             sensitivity = state.iso,
             frameDurationNs = frameDurationNs,
+            awbMode = awb,
         ),
     )
 
