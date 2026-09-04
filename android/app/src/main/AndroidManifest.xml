@@ -4,6 +4,22 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- ADR-0003: capture and the server run in a foreground service so a take
+         survives the screen locking, a call, or the activity being destroyed.
+         Android 14 requires the camera and microphone types to be declared and
+         permitted explicitly. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <!-- FOREGROUND_SERVICE_MICROPHONE and the microphone service type return
+         with PRD 6.6's audio capture. Declaring the type before then crashes the
+         service on start: Android validates that RECORD_AUDIO is *granted*, not
+         merely declared, and asking for the microphone to record video-only
+         would be a permission prompt for a feature that does not exist yet. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- The high-performance Wi-Fi lock the server holds while a browser is
+         attached; Doze otherwise throttles the link the remote depends on. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
@@ -27,6 +43,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.CaptureService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
     </application>
 
 </manifest>
