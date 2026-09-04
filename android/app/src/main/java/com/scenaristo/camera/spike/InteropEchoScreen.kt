@@ -9,11 +9,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.compose.CameraXViewfinder
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.DynamicRange
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.core.SessionConfig
 import androidx.camera.core.SurfaceRequest
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.lifecycle.awaitInstance
 import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -137,7 +143,43 @@ private fun EchoRunner() {
         // processor renders nothing; what is being tested is whether the session
         // is accepted, not whether pixels arrive. Printed first because it is the
         // load-bearing result and the table below is long.
-        val binds = StringBuilder("Preferred feature group (CameraX drops what it cannot do):\n")
+        // The plain question: three use cases, no feature group, no fps demand.
+        // What does the device say is possible, and what does it hand back?
+        val binds = StringBuilder("Plain SessionConfig(preview, video, analysis), no preference:\n")
+        run {
+            val plainUseCases = listOf(
+                Preview.Builder().build(),
+                VideoCapture.withOutput(Recorder.Builder().build()),
+                ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build(),
+            )
+            val plain = SessionConfig.Builder(plainUseCases).build()
+            val caps = Recorder.getVideoCapabilities(info)
+            val qualities = caps.getSupportedQualities(DynamicRange.SDR)
+            binds.append("- Recorder says qualities available on this lens: ")
+                .append(qualities.joinToString { q -> "$q=${caps.getResolution(q, DynamicRange.SDR)}" })
+                .append("\n")
+            binds.append("- supported fps ranges for this session: ")
+                .append(info.getSupportedFrameRateRanges(plain).joinToString())
+                .append("\n")
+            binds.append("- isSessionConfigSupported: ${info.isSessionConfigSupported(plain)}\n")
+            val outcome = runCatching {
+                provider.unbindAll()
+                provider.bindToLifecycle(lifecycleOwner, selector, plain)
+            }
+            binds.append("- bound: ")
+                .append(
+                    if (outcome.isSuccess) {
+                        SessionSupportProbe.resolutionsOf(plainUseCases)
+                    } else {
+                        "REFUSED: ${shortReason(outcome.exceptionOrNull())}"
+                    },
+                )
+                .append("\n")
+        }
+
+        binds.append("\nPreferred feature group (CameraX drops what it cannot do):\n")
         for ((label, config, useCases) in SessionSupportProbe.preferredCandidates()) {
             var selected = "?"
             config.setFeatureSelectionListener(ContextCompat.getMainExecutor(context)) { features ->
