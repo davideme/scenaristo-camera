@@ -77,10 +77,21 @@ class ExposureLoop(
      * which is deliberate rather than overlooked — [ExposureLoop] never asks for
      * an ISO outside the range the sensor reported, and a lens that ignores
      * `SENSOR_SENSITIVITY` altogether cannot record at all (ADR-0011).
+     *
+     * ISO is compared with slack, because sensors round. #20 measured the
+     * reference device's telephoto answering 99 to a requested 100 — inside
+     * `SENSOR_SENSITIVITY`'s own 1 % tolerance, and an exact comparison would
+     * have waited forever for a frame that was never coming. Shutter is compared
+     * exactly, because the caller rounds nanoseconds back to a ladder rung first
+     * and the ladder has two entries a stop apart.
      */
-    fun onSensorEcho(state: ExposureState, iso: Int, shutterHz: Int): ExposureState =
-        if (!state.awaitingEcho || iso != state.iso || shutterHz != state.shutterHz) state
-        else state.copy(awaitingEcho = false)
+    fun onSensorEcho(state: ExposureState, iso: Int, shutterHz: Int): ExposureState {
+        if (!state.awaitingEcho) return state
+        if (shutterHz != state.shutterHz) return state
+        val slack = (state.iso * config.sensorEchoTolerance).coerceAtLeast(1.0)
+        if (abs(iso - state.iso) > slack) return state
+        return state.copy(awaitingEcho = false)
+    }
 
     /**
      * The user changed the mains frequency (PRD 6.2's override, mandatory in a
@@ -276,6 +287,16 @@ data class ExposureConfig(
      * "per-device noise threshold, default ISO 800"). Phase 0 sets it per device.
      */
     val noiseWarningIso: Int = 800,
+    /**
+     * How far the sensor's reported ISO may sit from the requested one and still
+     * count as the echo the loop is waiting for.
+     *
+     * `SENSOR_SENSITIVITY` is documented as accurate to within 1 %, and #20
+     * measured exactly that on the reference device: 99 for a requested 100.
+     * Never below one whole ISO step, because 1 % of a low base ISO is less than
+     * the smallest number a sensor can report a difference in.
+     */
+    val sensorEchoTolerance: Double = 0.02,
 ) {
     /** The standard exponential-moving-average weight for an [emaFrames] window. */
     val emaAlpha: Double get() = 2.0 / (emaFrames + 1)

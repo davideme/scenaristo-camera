@@ -169,6 +169,23 @@ class ExposureLoopTest {
         assertFalse(released.awaitingEcho)
     }
 
+    // #20 measured the reference device's telephoto reporting ISO 99 for a
+    // requested 100 -- inside SENSOR_SENSITIVITY's documented 1 % tolerance. An
+    // exact echo comparison waits forever for a frame that is never coming, and
+    // a loop that never meters again is a locked exposure that looks deliberate.
+    @Test
+    fun `a sensor that rounds ISO by one percent still releases the loop`() {
+        val loop = ExposureLoop(IsoRange(BASE_ISO, MAX_ISO))
+        val inFlight = loop.start(GridFrequency.HZ_50)
+            .copy(iso = 100, acquired = true, awaitingEcho = true, changedAtMs = 0)
+
+        assertFalse(loop.onSensorEcho(inFlight, iso = 99, shutterHz = 50).awaitingEcho)
+        // Slack, not a free pass: a sensor that answered a different exposure
+        // entirely is still a stale frame.
+        assertTrue(loop.onSensorEcho(inFlight, iso = 64, shutterHz = 50).awaitingEcho)
+        assertTrue(loop.onSensorEcho(inFlight, iso = 100, shutterHz = 100).awaitingEcho)
+    }
+
     // ADR-0005: "a +/- 0.15 EV dead-band". Small scene noise is not a change to chase.
     @Test
     fun `ADR-0005 - an error inside the dead band moves nothing`() {
