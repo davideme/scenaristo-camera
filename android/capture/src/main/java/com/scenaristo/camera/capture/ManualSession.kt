@@ -59,6 +59,14 @@ class ManualSession(
      * sensor the HAL happened to serve.
      */
     private val physicalCameraId: String? = null,
+    /**
+     * Every capture result, for whoever else needs one.
+     *
+     * The exposure loop is the caller that matters: ADR-0005 has it wait for the
+     * sensor to report the ISO it asked for before metering again, and this is
+     * the only place that arrives. Runs on a camera thread.
+     */
+    private val onCaptureResult: (android.hardware.camera2.TotalCaptureResult) -> Unit = {},
 ) {
 
     val preview: Preview = Preview.Builder()
@@ -132,6 +140,7 @@ class ManualSession(
             sweep.record(physicalId, logicalCameraId, sweepZoomRatio, echoes)
         }
         latest.value = echoes
+        onCaptureResult(result)
     }
 
     /**
