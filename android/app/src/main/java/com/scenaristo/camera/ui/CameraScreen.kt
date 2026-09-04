@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -33,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scenaristo.camera.domain.exposure.shutterLadder
+import com.scenaristo.camera.domain.protocol.AudioInput
+import com.scenaristo.camera.domain.protocol.AudioState
 import com.scenaristo.camera.domain.protocol.State as ProtocolState
 import com.scenaristo.camera.domain.protocol.Warning
 import com.scenaristo.camera.theme.Tokens
@@ -98,6 +101,7 @@ fun CameraScreen(
             Spacer(Modifier.weight(1f))
             BottomStrip(
                 recording = recording,
+                audio = state.audio,
                 onToggleRecording = onToggleRecording,
                 onConnect = onConnect,
             )
@@ -213,11 +217,17 @@ private fun copyFor(warning: Warning): String = when (warning) {
 }
 
 @Composable
-private fun BottomStrip(recording: Boolean, onToggleRecording: () -> Unit, onConnect: () -> Unit) {
+private fun BottomStrip(
+    recording: Boolean,
+    audio: AudioState,
+    onToggleRecording: () -> Unit,
+    onConnect: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        AudioMeter(audio)
         Spacer(Modifier.weight(1f))
         // UI-6: every setting is locked for the take, and a locked control says
         // so rather than being discovered by refusal.
@@ -258,6 +268,61 @@ private fun RecordButton(recording: Boolean, onClick: () -> Unit) {
                 .background(Tokens.Red),
         )
     }
+}
+
+/**
+ * The level meter (UI-4 bottom left, PRD 6.6), and the input it is listening to.
+ *
+ * One bar, not UI-4's two: CameraX reports a single amplitude for the recording,
+ * so a second channel would be the same number drawn twice. It becomes two the
+ * day the capture stack exposes PCM, which is the same P1 that raises the meter
+ * from 5 Hz to 10 (ADR-0002).
+ *
+ * It is a *reported* value, so it follows UI-1 -- dim, unframed, untouchable --
+ * even though it is the liveliest thing on the screen.
+ *
+ * When nothing is metering, the bar is empty and the caption says so. A meter
+ * reading zero means a quiet room; a meter that is not running means nothing at
+ * all, and drawing the second as the first is how someone concludes their
+ * microphone is dead.
+ */
+@Composable
+private fun AudioMeter(audio: AudioState) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Label("Audio")
+        Box(
+            Modifier
+                .width(METER_WIDTH)
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Tokens.Text.copy(alpha = 0.16f)),
+        ) {
+            if (audio.metering) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .width(METER_WIDTH * audio.level.toFloat().coerceIn(0f, 1f))
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(if (audio.clipping) Tokens.Orange else Tokens.Green),
+                )
+            }
+        }
+        Text(
+            text = captionFor(audio),
+            color = if (audio.input == AudioInput.BLUETOOTH) Tokens.Orange else Tokens.Dimmer,
+            fontSize = 10.sp,
+        )
+    }
+}
+
+/** UI-12: sentence case, and PRD 6.6's Bluetooth wording where it applies. */
+private fun captionFor(audio: AudioState): String = when {
+    audio.input == AudioInput.BLUETOOTH -> "Bluetooth is low quality — use a wired mic"
+    !audio.metering -> "No meter until recording"
+    audio.input == AudioInput.USB -> "USB mic"
+    audio.input == AudioInput.WIRED -> "Wired mic"
+    audio.input == AudioInput.BUILT_IN -> "Built-in mic"
+    else -> "Microphone"
 }
 
 /** UI-1: framed, amber label, full contrast, always touchable. */
@@ -305,6 +370,9 @@ private fun Value(text: String) = Text(
     fontSize = 15.sp,
     fontWeight = FontWeight.Medium,
 )
+
+/** Wide enough to read a level from across a room, narrow enough to stay out of the frame. */
+private val METER_WIDTH = 132.dp
 
 internal fun formatTimecode(elapsedMs: Long): String {
     val totalSeconds = elapsedMs / 1_000

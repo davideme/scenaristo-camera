@@ -5,6 +5,7 @@ import com.scenaristo.camera.domain.protocol.Ack
 import com.scenaristo.camera.domain.protocol.ClientMessage
 import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
+import com.scenaristo.camera.domain.protocol.AudioInput
 import com.scenaristo.camera.domain.protocol.FocusMode
 import com.scenaristo.camera.domain.protocol.Hello
 import com.scenaristo.camera.domain.protocol.Nack
@@ -19,6 +20,7 @@ import com.scenaristo.camera.domain.protocol.Warning
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -76,6 +78,13 @@ class ProtocolFixtureTest {
         assertEquals(ThermalState.FAIR, state.device.thermal)
         assertEquals(84, state.device.storageMinutesRemaining)
         assertEquals(FocusMode.LOCKED, state.settings.focus.mode, "focus survives in the snapshot too")
+        // PRD 6.6: the meter is on both surfaces, so it is in the snapshot both
+        // surfaces read -- and `metering` is what lets a browser tell a quiet
+        // room from a meter that is not running.
+        assertEquals(AudioInput.WIRED, state.audio.input)
+        assertEquals(0.42, state.audio.level, absoluteTolerance = 1e-9)
+        assertTrue(state.audio.metering)
+        assertFalse(state.audio.clipping)
         assertEquals(listOf(Warning.TOO_DARK), state.warnings)
         assertEquals(2, state.clients)
     }

@@ -22,8 +22,17 @@ import androidx.camera.core.SurfaceRequest
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.lifecycle.awaitInstance
 import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.PendingRecording
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoRecordEvent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import androidx.camera.video.AudioStats
+import com.scenaristo.camera.domain.protocol.AudioInput
+import com.scenaristo.camera.domain.protocol.AudioState
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -196,7 +205,7 @@ class CaptureService : LifecycleService() {
         // before it will start a microphone service, and this app records
         // video-only until PRD 6.6's audio lands. Declaring it early crashed the
         // service outright.
-        startForeground(NOTIFICATION_ID, notification("Starting…"))
+        startForeground(NOTIFICATION_ID, notification("Starting…"), foregroundTypes())
 
         session = Session(startingState())
         jpeg.quality = 80
@@ -406,6 +415,16 @@ class CaptureService : LifecycleService() {
                     ),
                 )
             }
+            // PRD 6.6 asks the app to show which input is active, and a user
+            // checking their microphone before a take is the whole point -- so
+            // the input is published on the tick, not only once a recording is
+            // producing statistics. The level is not: there is none to report
+            // until the recorder is running, and `metering` says so.
+            if (!session.state.recording.recording) {
+                session.update(System.currentTimeMillis()) {
+                    it.copy(audio = AudioState(input = activeAudioInput(), metering = false))
+                }
+            }
             server.broadcastSnapshot()
             _state.value = session.state
             updateNotification(describe())
@@ -454,12 +473,64 @@ class CaptureService : LifecycleService() {
         }
     }
 
+    /**
+     * Which foreground service types this process may claim right now (ADR-0003).
+     *
+     * `microphone` is only claimed once `RECORD_AUDIO` is granted: Android 14
+     * validates the permission at `startForeground`, and claiming the type
+     * without it kills the service outright rather than degrading. So the
+     * manifest declares both and this decides, which also means the app is
+     * usable video-only before the user has answered the microphone prompt.
+     */
+    private fun foregroundTypes(): Int {
+        val types = ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        return if (hasAudioPermission()) {
+            types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        } else {
+            types
+        }
+    }
+
+    /**
+     * Turns audio on when we are allowed to (PRD 6.6).
+     *
+     * Two things are load-bearing here. `withAudioEnabled` returns a **new**
+     * pending recording rather than mutating this one, so its result has to be
+     * kept -- dropping it records silence while the code reads as though it
+     * asked for sound, which is the exact failure this story exists to prevent.
+     *
+     * And the permission check is inline rather than delegated, because lint
+     * only recognises a guard it can see in the same function; a helper that
+     * returns the same boolean is invisible to it and the build fails on
+     * `MissingPermission`. Better to satisfy the check honestly than to
+     * suppress it.
+     */
+    private fun PendingRecording.withAudioIfPermitted(): PendingRecording =
+        if (ContextCompat.checkSelfPermission(this@CaptureService, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            withAudioEnabled()
+        } else {
+            this
+        }
+
+    private fun hasAudioPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
     private fun startRecording() {
         val file = File(getExternalFilesDir(null), "take-${System.currentTimeMillis()}.mp4")
-        recording = camera.recorder
-            .prepareRecording(this, FileOutputOptions.Builder(file).build())
+        val withAudio = hasAudioPermission()
+        // The permission can arrive after the service started, so the microphone
+        // type is claimed here rather than only in onCreate.
+        if (withAudio) startForeground(NOTIFICATION_ID, notification(describe()), foregroundTypes())
+        val pending = camera.recorder.prepareRecording(this, FileOutputOptions.Builder(file).build())
+        recording = pending
+            .withAudioIfPermitted()
             .start(ContextCompat.getMainExecutor(this)) { event ->
+                if (event is VideoRecordEvent.Status) publishAudio(event.recordingStats)
                 if (event is VideoRecordEvent.Finalize) {
+                    publishAudio(null)
                     recording = null
                     // A recording can end on its own -- storage, a file size cap,
                     // the source going away. The state document has to follow the
@@ -477,6 +548,68 @@ class CaptureService : LifecycleService() {
         recording?.stop()
         recording = null
         releaseLocksIfIdle()
+    }
+
+    /**
+     * The level meter (PRD 6.6), from the recorder's own statistics.
+     *
+     * CameraX reports amplitude with each `Status` event, roughly every 200 ms,
+     * which is the 5 Hz meter ADR-0002 accepted against PRD 6.6's eventual
+     * 10 Hz. Null means the recording ended: the meter stops, and says it has
+     * stopped rather than reporting a convincing silence.
+     *
+     * **The meter only exists while recording**, because that is the only time
+     * the `Recorder` produces statistics. PRD 6.6 wants it before the take too --
+     * "so I do not discover a silent or clipped take afterwards" is a
+     * before-the-take promise -- and that needs a second audio source the stock
+     * Recorder does not offer. Recorded as a gap rather than papered over.
+     */
+    private fun publishAudio(stats: androidx.camera.video.RecordingStats?) {
+        val audio = if (stats == null) {
+            AudioState(input = activeAudioInput(), metering = false)
+        } else {
+            val amplitude = stats.audioStats.audioAmplitude
+            AudioState(
+                level = amplitude.coerceIn(0.0, 1.0),
+                clipping = amplitude >= CLIPPING_LEVEL,
+                input = activeAudioInput(),
+                metering = stats.audioStats.audioState == AudioStats.AUDIO_STATE_ACTIVE,
+            )
+        }
+        session.update(System.currentTimeMillis()) { it.copy(audio = audio) }
+        _state.value = session.state
+    }
+
+    /**
+     * Which microphone the system routed to (PRD 6.6).
+     *
+     * A heuristic, and deliberately so: ADR-0002 accepted **system default
+     * routing** for the MVP, so the app does not choose the input and Android
+     * offers no "which input is the Recorder using" question. What it offers is
+     * the list of inputs that exist, and the routing rule it applies is
+     * documented -- a plugged microphone wins over the built-in one. So the best
+     * available answer is the highest-priority device present, in the order
+     * PRD 6.6 lists.
+     *
+     * It is wrong in one case worth naming: a wired headset plugged in but not
+     * selected by the user in system settings. The MVP shows what the system
+     * would normally pick, and the fix is the input *selection* ADR-0002
+     * deferred, not a better guess here.
+     */
+    private fun activeAudioInput(): AudioInput {
+        if (!hasAudioPermission()) return AudioInput.UNKNOWN
+        val devices = getSystemService(AudioManager::class.java)
+            ?.getDevices(AudioManager.GET_DEVICES_INPUTS)
+            ?.map { it.type }
+            .orEmpty()
+        return when {
+            devices.any { it == AudioDeviceInfo.TYPE_USB_DEVICE || it == AudioDeviceInfo.TYPE_USB_HEADSET } ->
+                AudioInput.USB
+            devices.any { it == AudioDeviceInfo.TYPE_WIRED_HEADSET } -> AudioInput.WIRED
+            devices.any { it == AudioDeviceInfo.TYPE_BLUETOOTH_SCO } -> AudioInput.BLUETOOTH
+            devices.any { it == AudioDeviceInfo.TYPE_BUILTIN_MIC } -> AudioInput.BUILT_IN
+            else -> AudioInput.UNKNOWN
+        }
     }
 
     /**
@@ -638,6 +771,13 @@ class CaptureService : LifecycleService() {
          * user who closed the app does not wonder why the camera light is on.
          */
         private const val IDLE_SHUTDOWN_GRACE_MS = 5_000L
+
+        /**
+         * Where the meter calls it clipping. Not 1.0: a signal that reaches full
+         * scale has already been clipped by the converter, so the indicator has
+         * to fire slightly before it to be a warning rather than a post-mortem.
+         */
+        private const val CLIPPING_LEVEL = 0.99
         private const val SWEEP_TAG = "LensSweep"
 
         /** #20's sweep, startable over adb so the phone need not be unlocked. */
