@@ -49,6 +49,7 @@ import com.scenaristo.camera.capture.KeyEcho
 import com.scenaristo.camera.capture.LensEchoReport
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
+import com.scenaristo.camera.capture.SessionSupportProbe
 import com.scenaristo.camera.capture.markdown
 import java.io.File
 
@@ -104,12 +105,17 @@ private fun EchoRunner() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    val session = remember { ManualSession(DEFAULT_REQUEST) }
+    // Analysis is dropped when the device refuses UHD + analysis, which the Pixel
+    // 10 does (#20). The keys ride on Preview either way, so the echo measurement
+    // survives; what does not survive is ADR-0005's metering and ADR-0008's
+    // preview source, and that is a decision, not a fallback.
+    var session by remember { mutableStateOf(ManualSession(DEFAULT_REQUEST)) }
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
     var status by remember { mutableStateOf("Binding…") }
     var cameraId by remember { mutableStateOf("?") }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var report by remember { mutableStateOf<LensEchoReport?>(null) }
+    var support by remember { mutableStateOf("") }
 
     val latest: State<List<KeyEcho>> = session.latestEchoes.collectAsState()
 
@@ -117,18 +123,39 @@ private fun EchoRunner() {
         session.preview.setSurfaceProvider { surfaceRequest = it }
         val provider = ProcessCameraProvider.awaitInstance(context)
         val selector = CameraSelector.DEFAULT_BACK_CAMERA
+
+        // Ask before binding. "Feature group is not supported" from bindToLifecycle
+        // is true but unattributable; the probe says which variation the device
+        // refuses, which is the answer #20 actually wants.
+        val info = provider.getCameraInfo(selector)
+        val caps = session.capabilities(info)
+        cameraId = caps.cameraId
+        val results = SessionSupportProbe.run(info)
+        support = SessionSupportProbe.markdown(caps.cameraId, results)
+
         status = try {
-            // Required, not preferred: a device that cannot do UHD30 has to fail
-            // here rather than quietly measure a 1080p session instead.
-            val camera = provider.bindToLifecycle(lifecycleOwner, selector, session.sessionConfig)
-            val caps = session.capabilities(camera.cameraInfo)
-            cameraId = caps.cameraId
-            "Bound. manualSensor=${caps.hasManualSensor} " +
+            provider.bindToLifecycle(lifecycleOwner, selector, session.sessionConfig)
+            "Bound with analysis. manualSensor=${caps.hasManualSensor} " +
                 "manualPostProcessing=${caps.hasManualPostProcessing} uhd30=${caps.supportsUhd30}"
         } catch (e: IllegalArgumentException) {
-            // The informative failure: this device cannot bind the session the
-            // product needs. Record it in the issue exactly as it reads here.
-            "BIND FAILED — ${e.message}"
+            // Record this verbatim: it is a Phase 0 result, not a bug. Then retry
+            // without ImageAnalysis so #20's own question -- do the keys echo --
+            // is still answered on a session this device accepts.
+            val withoutAnalysis = ManualSession(DEFAULT_REQUEST, includeAnalysis = false)
+            session = withoutAnalysis
+            runCatching {
+                provider.unbindAll()
+                withoutAnalysis.preview.setSurfaceProvider { surfaceRequest = it }
+                provider.bindToLifecycle(lifecycleOwner, selector, withoutAnalysis.sessionConfig)
+                withoutAnalysis.videoCapture.resolutionInfo?.resolution
+            }.fold(
+                onSuccess = { resolution ->
+                    "NO ANALYSIS: bound preview+video at $resolution after \"${e.message}\". " +
+                        "manualSensor=${caps.hasManualSensor} " +
+                        "manualPostProcessing=${caps.hasManualPostProcessing}"
+                },
+                onFailure = { "BIND FAILED — ${e.message}; and without analysis: ${it.message}" },
+            )
         }
     }
 
@@ -158,10 +185,12 @@ private fun EchoRunner() {
                 Text(if (recording == null) "Record" else "Stop and report")
             }
 
-            report?.let { finished ->
-                OutlinedButton(onClick = { copyToClipboard(context, finished.markdown()) }) {
-                    Text("Copy paste for #20")
-                }
+            OutlinedButton(
+                onClick = {
+                    copyToClipboard(context, listOfNotNull(support, report?.markdown()).joinToString("\n"))
+                },
+            ) {
+                Text("Copy paste for #20")
             }
         }
 
@@ -181,6 +210,13 @@ private fun EchoRunner() {
                     } else {
                         MaterialTheme.colorScheme.error
                     },
+                )
+            }
+            if (support.isNotEmpty()) {
+                Text(
+                    support,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
                 )
             }
             report?.let {

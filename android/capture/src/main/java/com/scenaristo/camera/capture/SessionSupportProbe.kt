@@ -1,0 +1,181 @@
+package com.scenaristo.camera.capture
+
+import android.util.Range
+import androidx.camera.core.CameraInfo
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.core.SessionConfig
+import android.util.Size
+import androidx.camera.core.featuregroup.GroupableFeature
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
+import androidx.camera.video.GroupableFeatures
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.VideoCapture
+
+/**
+ * Which UHD30 session shapes a device will actually accept.
+ *
+ * The first Pixel 10 run of #20 failed to bind with "Feature group is not
+ * supported", which is true but useless: it does not say whether the obstacle is
+ * UHD, the pinned frame rate, or the third stream. This probe asks
+ * `CameraInfo.isSessionConfigSupported` about one variation at a time so the
+ * answer is attributable, and it needs no binding and no permission-gated
+ * recording to run.
+ *
+ * The candidates are ordered most-wanted first: [candidates] `.first { supported }`
+ * is the best session this device can give us, and how far down the list that
+ * lands is itself the Phase 0 result.
+ */
+object SessionSupportProbe {
+
+    data class Candidate(
+        val label: String,
+        /** What this candidate changes relative to the one above it. */
+        val varies: String,
+        val config: SessionConfig,
+    )
+
+    data class Result(val candidate: Candidate, val supported: Boolean)
+
+    private fun preview() = Preview.Builder().build()
+
+    private fun video() = VideoCapture.withOutput(Recorder.Builder().build())
+
+    /**
+     * The pre-feature-group way to ask for a resolution: a quality on the
+     * Recorder, with no `GroupableFeature` involved. Whether this reaches UHD
+     * where the feature group refuses is the question that decides how much of
+     * ADR-0005 and ADR-0008 survives.
+     */
+    private fun videoAt(quality: Quality) = VideoCapture.withOutput(
+        Recorder.Builder().setQualitySelector(QualitySelector.from(quality)).build(),
+    )
+
+    private fun analysis() = ImageAnalysis.Builder()
+        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+        .build()
+
+    /**
+     * Analysis at a bounded size. The default asks for whatever CameraX picks,
+     * which on a 4K session can be large enough to blow the stream combination on
+     * its own -- and neither the metering loop (ADR-0005) nor the 960x540 MJPEG
+     * preview (ADR-0008) wants a big frame anyway.
+     */
+    private fun analysisAt(size: Size) = ImageAnalysis.Builder()
+        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+        .setResolutionSelector(
+            ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    ResolutionStrategy(size, ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER),
+                )
+                .build(),
+        )
+        .build()
+
+    private fun config(
+        useCases: List<androidx.camera.core.UseCase>,
+        feature: GroupableFeature?,
+        fps: Int?,
+    ): SessionConfig = SessionConfig.Builder(useCases)
+        .apply {
+            feature?.let { setRequiredFeatureGroup(it) }
+            fps?.let { setFrameRateRange(Range(it, it)) }
+        }
+        .build()
+
+    /**
+     * Ordered by how much of the product each one preserves. Dropping
+     * `ImageAnalysis` costs the metering loop (ADR-0005) and the MJPEG preview
+     * (ADR-0008); dropping the frame-rate pin costs PRD 6.1's "30.00 fps
+     * constant"; dropping UHD costs PRD 6.1 outright. None of those are free, so
+     * the first supported row is a decision for Davide, not a fallback to take
+     * silently.
+     */
+    fun candidates(): List<Candidate> = listOf(
+        Candidate(
+            "UHD + 30fps pinned + preview/video/analysis",
+            "what the product needs",
+            config(listOf(preview(), video(), analysis()), GroupableFeatures.UHD_RECORDING, 30),
+        ),
+        Candidate(
+            "UHD + preview/video/analysis",
+            "drops the [30,30] pin",
+            config(listOf(preview(), video(), analysis()), GroupableFeatures.UHD_RECORDING, null),
+        ),
+        Candidate(
+            "UHD + 30fps pinned + preview/video",
+            "drops ImageAnalysis, keeps the pin",
+            config(listOf(preview(), video()), GroupableFeatures.UHD_RECORDING, 30),
+        ),
+        Candidate(
+            "UHD + preview/video",
+            "drops ImageAnalysis and the pin",
+            config(listOf(preview(), video()), GroupableFeatures.UHD_RECORDING, null),
+        ),
+        Candidate(
+            "UHD + video only",
+            "drops Preview too",
+            config(listOf(video()), GroupableFeatures.UHD_RECORDING, null),
+        ),
+        Candidate(
+            "FHD + 30fps pinned + preview/video/analysis",
+            "same streams, lower recording quality",
+            config(listOf(preview(), video(), analysis()), GroupableFeatures.FHD_RECORDING, 30),
+        ),
+        Candidate(
+            "no feature group + 30fps pinned + preview/video/analysis",
+            "same streams, no quality demand at all",
+            config(listOf(preview(), video(), analysis()), null, 30),
+        ),
+        Candidate(
+            "no feature group + preview/video/analysis",
+            "the loosest session that still binds all three",
+            config(listOf(preview(), video(), analysis()), null, null),
+        ),
+        Candidate(
+            "QualitySelector UHD + 30fps pinned + preview/video/analysis",
+            "UHD asked for the old way, not as a feature group",
+            config(listOf(preview(), videoAt(Quality.UHD), analysis()), null, 30),
+        ),
+        Candidate(
+            "QualitySelector UHD + preview/video/analysis",
+            "same, without the pin",
+            config(listOf(preview(), videoAt(Quality.UHD), analysis()), null, null),
+        ),
+        Candidate(
+            "UHD + 30fps pinned + preview/video/analysis@960x540",
+            "analysis bounded to the MJPEG preview size (ADR-0008)",
+            config(
+                listOf(preview(), video(), analysisAt(Size(960, 540))),
+                GroupableFeatures.UHD_RECORDING,
+                30,
+            ),
+        ),
+        Candidate(
+            "UHD + 30fps pinned + preview/video/analysis@640x480",
+            "analysis bounded smaller still",
+            config(
+                listOf(preview(), video(), analysisAt(Size(640, 480))),
+                GroupableFeatures.UHD_RECORDING,
+                30,
+            ),
+        ),
+    )
+
+    fun run(cameraInfo: CameraInfo): List<Result> =
+        candidates().map { Result(it, cameraInfo.isSessionConfigSupported(it.config)) }
+
+    /** For pasting into #20: which shapes this device accepts, and which it refuses. */
+    fun markdown(cameraId: String, results: List<Result>): String = buildString {
+        appendLine("Session shapes accepted on camera id `$cameraId`:")
+        appendLine()
+        appendLine("| Session | Varies | Supported |")
+        appendLine("|---|---|---|")
+        for (r in results) {
+            appendLine("| ${r.candidate.label} | ${r.candidate.varies} | ${if (r.supported) "yes" else "**no**"} |")
+        }
+    }
+}
