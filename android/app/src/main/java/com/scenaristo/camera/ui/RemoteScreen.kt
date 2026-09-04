@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -93,7 +94,13 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
         val codecs by (service.codecs.collectAsState())
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            // safeDrawing, not just the status bar: in landscape this phone puts
+            // its camera cutout down the left edge and its gesture bar down the
+            // right, and `enableEdgeToEdge` means the window extends under both.
+            // Without this the address is printed through the cutout and the
+            // first character of every line is unreadable — which is the shape
+            // of the problem UI-3 flags for the record button.
+            modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {

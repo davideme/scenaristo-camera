@@ -6,12 +6,16 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.hardware.display.DisplayManager
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Binder
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.view.Display
 import android.os.StatFs
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.SurfaceRequest
@@ -94,6 +98,10 @@ class CaptureService : LifecycleService() {
     private lateinit var server: ControlServer
 
     private var recording: Recording? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
+
+    /** Last rotation handed to the camera, so a brightness change is not one. */
+    private var appliedRotation: Int? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
@@ -122,6 +130,7 @@ class CaptureService : LifecycleService() {
         camera = ManualSession(DEFAULT_REQUEST, tap = tap)
         server = ControlServer(session = session, frames = PreviewFrames { jpeg.latest() })
 
+        followDisplayRotation()
         lifecycleScope.launch { bindCamera() }
         server.start()
         _url.value = LocalAddress.url()
@@ -133,6 +142,49 @@ class CaptureService : LifecycleService() {
         // recorder has to follow, or the browser's Record button is a light
         // switch wired to nothing.
         lifecycleScope.launch { followRecordingState() }
+    }
+
+    /**
+     * Keeps the viewfinder and the recording pointed at the display's rotation.
+     *
+     * Capture lives in a service (ADR-0003), so the use cases are built once,
+     * with no window and no configuration change to react to — and CameraX only
+     * samples the display rotation when a use case is built. Nothing moved it
+     * afterwards, so turning the phone left the preview drawn at the rotation the
+     * service happened to start in.
+     *
+     * A `DisplayManager` listener rather than the activity's configuration
+     * change, because the activity is a client that may not exist: PRD 6.9 has
+     * the phone screen off during a take, and the recording still owes the file
+     * an orientation (PRD 6.1).
+     */
+    private fun followDisplayRotation() {
+        val displays = getSystemService(DisplayManager::class.java) ?: return
+        applyDisplayRotation()
+        displays.registerDisplayListener(
+            object : DisplayManager.DisplayListener {
+                override fun onDisplayAdded(displayId: Int) = Unit
+                override fun onDisplayRemoved(displayId: Int) = Unit
+                override fun onDisplayChanged(displayId: Int) {
+                    if (displayId == Display.DEFAULT_DISPLAY) applyDisplayRotation()
+                }
+            }.also { displayListener = it },
+            Handler(Looper.getMainLooper()),
+        )
+    }
+
+    /**
+     * `onDisplayChanged` is not a rotation callback — it also fires for
+     * brightness, refresh rate and HDR changes, which on this device means
+     * several times a second while the screen adapts. Comparing first keeps a
+     * dimming screen from rebuilding the camera's transform.
+     */
+    private fun applyDisplayRotation() {
+        val display = getSystemService(DisplayManager::class.java)
+            ?.getDisplay(Display.DEFAULT_DISPLAY) ?: return
+        if (display.rotation == appliedRotation) return
+        appliedRotation = display.rotation
+        camera.setTargetRotation(display.rotation)
     }
 
     private suspend fun bindCamera() {
@@ -285,6 +337,8 @@ class CaptureService : LifecycleService() {
 
     override fun onDestroy() {
         stopRecording()
+        displayListener?.let { getSystemService(DisplayManager::class.java)?.unregisterDisplayListener(it) }
+        displayListener = null
         server.stop()
         tap.release()
         jpeg.release()
