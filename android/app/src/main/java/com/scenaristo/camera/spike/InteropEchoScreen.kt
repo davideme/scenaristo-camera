@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -174,6 +175,16 @@ private fun EchoRunner() {
         }
     }
     val session = remember { ManualSession(DEFAULT_REQUEST, tap = tap) }
+
+    // Both previous soaks ended at the device's 120 s screen timeout, because the
+    // camera is bound to this activity's lifecycle. Shipping capture runs in a
+    // foreground service and does not have this problem (ADR-0003); until then a
+    // wake lock on the window is what lets a timed run finish.
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
     DisposableEffect(Unit) { onDispose { tap.release() } }
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
     var status by remember { mutableStateOf("Binding…") }
@@ -311,7 +322,11 @@ private fun EchoRunner() {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        // Fixed height rather than a weight: the readout column below scrolls and
+        // therefore claims every pixel it is offered, which left the viewfinder
+        // with none. Without a visible viewfinder the flicker check of PRD 6.2
+        // cannot be run at all -- you cannot aim at a light panel you cannot see.
+        Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
             surfaceRequest?.let { CameraXViewfinder(surfaceRequest = it, modifier = Modifier.fillMaxSize()) }
         }
 
@@ -363,7 +378,7 @@ private fun EchoRunner() {
         // Live, so a key that flips mid-take is visible while it happens rather
         // than only in the summary.
         Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             for (echo in latest.value) {
