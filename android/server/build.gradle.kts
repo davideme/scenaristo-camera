@@ -32,6 +32,60 @@ kotlin {
     jvmToolchain(17)
 }
 
+// ADR-0009: the web UI ships as one static bundle inside the app, so the remote
+// is genuinely zero-install -- the laptop types an IP and gets the page, with
+// nothing to download. The bundle is built by `pnpm run build` (ADR-0014) and
+// added to this module's Java resources, where Ktor serves it from the
+// classpath.
+//
+// Wired through AGP 9's androidComponents Sources API rather than the old
+// sourceSets DSL, which AGP 9 removed -- the same API the ROADMAP names for this
+// job.
+abstract class SyncWebBundle : DefaultTask() {
+    /**
+     * Declared as a file collection rather than an `@InputDirectory`, because
+     * `web/dist` legitimately does not exist: CI's Android job never runs
+     * `pnpm run build`, and neither does a contributor who only touches Kotlin.
+     * An `@InputDirectory` fails validation outright in that case — "Input file
+     * does not exist" — even when marked `@Optional`, since the property is set
+     * and merely points at nothing.
+     */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val bundle: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val destination: DirectoryProperty
+
+    @TaskAction
+    fun sync() {
+        val target = destination.get().asFile.resolve("web")
+        target.deleteRecursively()
+        target.mkdirs()
+        val source = bundle.files.firstOrNull()
+        if (source == null || !source.isDirectory) {
+            // Not a build failure: an APK without the UI is a valid thing to
+            // build. The control socket still works and the UI route 404s, which
+            // is a legible failure rather than a mysterious one.
+            logger.lifecycle("web/dist not built; this build serves no browser UI")
+            return
+        }
+        source.copyRecursively(target, overwrite = true)
+    }
+}
+
+val syncWebBundle by tasks.registering(SyncWebBundle::class) {
+    description = "Copies web/dist into :server resources so the phone can serve the UI."
+    bundle.from(rootProject.layout.projectDirectory.dir("../web/dist"))
+    destination.set(layout.buildDirectory.dir("generated/webResources"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.resources?.addGeneratedSourceDirectory(syncWebBundle, SyncWebBundle::destination)
+    }
+}
+
 dependencies {
     api(project(":domain"))
 
@@ -39,6 +93,10 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)
+    // The protocol classes are :domain's, but their Json configuration
+    // (ProtocolJson) is part of the contract, so :server needs the same library
+    // rather than a second encoder. Already in the catalogue; no new decision.
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.zxing.core)
 

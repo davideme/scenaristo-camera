@@ -14,3 +14,80 @@ body {
     padding: 1rem;
   }
 }
+
+/* The remote is used at arm's length while someone is on camera, so everything
+   is large, high contrast, and never moves: a control that shifts position is a
+   control you have to look at, and looking away is the thing to avoid. */
+main {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1rem;
+  font-family: system-ui, sans-serif;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.status {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 1rem;
+  background: #333;
+  color: #ddd;
+}
+.status.live { background: #16653d; color: #d7f5e4; }
+.status.stale { background: #7c5800; color: #ffeeba; }
+.status.closed { background: #7f1d1d; color: #fecaca; }
+
+.preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  object-fit: contain;
+  border-radius: 0.5rem;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.controls button {
+  font-size: 1.25rem;
+  padding: 0.75rem 2rem;
+  border-radius: 2rem;
+  border: none;
+  cursor: pointer;
+}
+.controls button.recording { background: #b91c1c; color: white; }
+
+/* Tabular numerals so the timer does not jitter as digits change width. */
+.timer {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+fieldset { border: 1px solid #444; border-radius: 0.5rem; }
+fieldset:disabled { opacity: 0.5; }
+fieldset button { margin-right: 0.5rem; padding: 0.4rem 1rem; }
+fieldset button.selected { outline: 2px solid currentColor; }
+
+.readout {
+  display: grid;
+  grid-template-columns: max-content auto;
+  gap: 0.25rem 1rem;
+  margin-top: 1rem;
+}
+.readout dt { opacity: 0.7; }
+.readout dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.warnings { color: #f59e0b; }
+.refused { color: #f87171; }
