@@ -11,6 +11,7 @@ import android.os.BatteryManager
 import android.os.Binder
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import android.os.StatFs
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.SurfaceRequest
@@ -25,6 +26,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.LifecycleService
 import com.scenaristo.camera.MainActivity
 import com.scenaristo.camera.R
+import com.scenaristo.camera.capture.CodecReport
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.PreviewJpegSource
@@ -72,6 +74,10 @@ class CaptureService : LifecycleService() {
 
     private val _url = MutableStateFlow<String?>(null)
     val url: StateFlow<String?> = _url.asStateFlow()
+
+    /** #21: what the UHD profile picks against what the device can encode. */
+    private val _codecs = MutableStateFlow<String?>(null)
+    val codecs: StateFlow<String?> = _codecs.asStateFlow()
 
     private val jpeg = PreviewJpegSource()
     private lateinit var tap: PreviewTapProcessor
@@ -125,7 +131,17 @@ class CaptureService : LifecycleService() {
         camera.preview.setSurfaceProvider { _surfaceRequest.value = it }
         val provider = ProcessCameraProvider.awaitInstance(this)
         runCatching {
-            provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, camera.sessionConfig)
+            val bound = provider.bindToLifecycle(
+                this,
+                CameraSelector.DEFAULT_BACK_CAMERA,
+                camera.sessionConfig,
+            )
+            val lens = camera.capabilities(bound.cameraInfo)
+            val report = CodecReport.markdown(CodecReport.of(lens.cameraId))
+            _codecs.value = report
+            // Logged as well as shown: #21's answer is a number to paste into an
+            // ADR, and reading it off a screenshot means unlocking the phone.
+            Log.i("CodecReport", report)
         }.onFailure { updateNotification("Camera unavailable: ${it.message}") }
     }
 
