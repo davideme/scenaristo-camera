@@ -131,7 +131,24 @@ private fun EchoRunner() {
         val caps = session.capabilities(info)
         cameraId = caps.cameraId
         val results = SessionSupportProbe.run(info)
-        support = SessionSupportProbe.markdown(caps.cameraId, results)
+
+        // isSessionConfigSupported is CameraX's own answer and may not model
+        // effects at all, so the effect shapes are bound for real. A stub
+        // processor renders nothing; what is being tested is whether the session
+        // is accepted, not whether pixels arrive. Printed first because it is the
+        // load-bearing result and the table below is long.
+        val binds = StringBuilder("Real binds (stub SurfaceProcessor):\n")
+        for (r in results.filter { "effect(" in it.candidate.label }) {
+            val outcome = runCatching {
+                provider.unbindAll()
+                provider.bindToLifecycle(lifecycleOwner, selector, r.candidate.config)
+            }
+            binds.append("- ${r.candidate.label}: ")
+                .append(if (outcome.isSuccess) "BOUND" else "REFUSED (${outcome.exceptionOrNull()?.message})")
+                .append("\n")
+        }
+        provider.unbindAll()
+        support = binds.toString() + "\n" + SessionSupportProbe.markdown(caps.cameraId, results)
 
         status = try {
             provider.bindToLifecycle(lifecycleOwner, selector, session.sessionConfig)

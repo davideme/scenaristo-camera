@@ -1,10 +1,14 @@
 package com.scenaristo.camera.capture
 
 import android.util.Range
+import androidx.camera.core.CameraEffect
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.core.SessionConfig
+import androidx.camera.core.SurfaceOutput
+import androidx.camera.core.SurfaceProcessor
+import androidx.camera.core.SurfaceRequest
 import android.util.Size
 import androidx.camera.core.featuregroup.GroupableFeature
 import androidx.camera.core.resolutionselector.ResolutionSelector
@@ -14,6 +18,7 @@ import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.VideoCapture
+import java.util.concurrent.Executors
 
 /**
  * Which UHD30 session shapes a device will actually accept.
@@ -75,14 +80,35 @@ object SessionSupportProbe {
         )
         .build()
 
+    /**
+     * Enough of a [SurfaceProcessor] to construct a [CameraEffect] and ask
+     * whether the session would be accepted. It renders nothing: a support query
+     * never runs it, and a bind only needs it to exist. The real one -- the GL
+     * pass that would feed the viewfinder, the meter and the MJPEG encoder from
+     * one preview stream -- is the work this probe exists to justify or kill.
+     */
+    private object StubProcessor : SurfaceProcessor {
+        override fun onInputSurface(request: SurfaceRequest) = Unit
+        override fun onOutputSurface(output: SurfaceOutput) = Unit
+    }
+
+    private class TapEffect(targets: Int) : CameraEffect(
+        targets,
+        Executors.newSingleThreadExecutor(),
+        StubProcessor,
+        {},
+    )
+
     private fun config(
         useCases: List<androidx.camera.core.UseCase>,
         feature: GroupableFeature?,
         fps: Int?,
+        effect: CameraEffect? = null,
     ): SessionConfig = SessionConfig.Builder(useCases)
         .apply {
             feature?.let { setRequiredFeatureGroup(it) }
             fps?.let { setFrameRateRange(Range(it, it)) }
+            effect?.let { addEffect(it) }
         }
         .build()
 
@@ -152,6 +178,26 @@ object SessionSupportProbe {
                 listOf(preview(), video(), analysisAt(Size(960, 540))),
                 GroupableFeatures.UHD_RECORDING,
                 30,
+            ),
+        ),
+        Candidate(
+            "UHD + 30fps pinned + preview/video + effect(PREVIEW)",
+            "no analysis stream; frames tapped off Preview instead",
+            config(
+                listOf(preview(), video()),
+                GroupableFeatures.UHD_RECORDING,
+                30,
+                TapEffect(CameraEffect.PREVIEW),
+            ),
+        ),
+        Candidate(
+            "UHD + 30fps pinned + preview/video + effect(PREVIEW|VIDEO_CAPTURE)",
+            "same tap, also targeting the recording stream",
+            config(
+                listOf(preview(), video()),
+                GroupableFeatures.UHD_RECORDING,
+                30,
+                TapEffect(CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE),
             ),
         ),
         Candidate(
