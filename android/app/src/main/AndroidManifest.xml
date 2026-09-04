@@ -10,11 +10,12 @@
          permitted explicitly. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <!-- FOREGROUND_SERVICE_MICROPHONE and the microphone service type return
-         with PRD 6.6's audio capture. Declaring the type before then crashes the
-         service on start: Android validates that RECORD_AUDIO is *granted*, not
-         merely declared, and asking for the microphone to record video-only
-         would be a permission prompt for a feature that does not exist yet. -->
+    <!-- PRD 6.6's audio. Android validates that RECORD_AUDIO is *granted*, not
+         merely declared, before it will start a microphone foreground service,
+         so the type is declared here but requested at runtime only once the
+         permission is held. `startForeground` is called with camera alone until
+         then, which is why both types are listed rather than assumed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- The high-performance Wi-Fi lock the server holds while a browser is
@@ -54,7 +55,7 @@
         <service
             android:name=".service.CaptureService"
             android:exported="false"
-            android:foregroundServiceType="camera" />
+            android:foregroundServiceType="camera|microphone" />
     </application>
 
 </manifest>

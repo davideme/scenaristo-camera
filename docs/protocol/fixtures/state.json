@@ -24,8 +24,16 @@
       "thermal": "FAIR",
       "storageMinutesRemaining": 84
     },
-    "warnings": ["TOO_DARK"],
+    "warnings": [
+      "TOO_DARK"
+    ],
     "clients": 2,
+    "audio": {
+      "level": 0.42,
+      "clipping": false,
+      "input": "WIRED",
+      "metering": true
+    },
     "serverTimeMs": 1788500123456
   }
 }

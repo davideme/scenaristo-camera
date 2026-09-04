@@ -55,6 +55,9 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
     val askNotifications = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {}
+    val askAudio = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {}
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (!granted) {
@@ -72,6 +75,10 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
         val service = rememberCaptureService()
         DisposableEffect(Unit) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            // PRD 6.6. Asked separately from the camera and after it, because the
+            // app records video without it: a refused microphone costs the take
+            // its sound, not the take.
+            askAudio.launch(Manifest.permission.RECORD_AUDIO)
             onDispose {}
         }
 

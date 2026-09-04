@@ -22,6 +22,12 @@ data class State(
     /** How many browsers are attached, so a user can tell they are not alone (PRD 6.8). */
     val clients: Int = 0,
     /**
+     * The microphone and what it is hearing (PRD 6.6). Defaulted, so a snapshot
+     * written before audio existed still decodes -- ADR-0007's rule for added
+     * fields.
+     */
+    val audio: AudioState = AudioState(),
+    /**
      * The phone's clock when this snapshot was built. Elapsed recording time is
      * derived from this rather than sent directly, so it stays right across a
      * reconnect and does not drift with the browser's clock (ADR-0007).
@@ -108,6 +114,63 @@ data class DeviceStatus(
      */
     val storageMinutesRemaining: Int,
 )
+
+/**
+ * The microphone, as PRD 6.6 needs it shown on both surfaces.
+ *
+ * A silent take is discovered afterwards, when it is too late, which is why 6.6
+ * asks for a meter rather than a setting.
+ */
+@Serializable
+data class AudioState(
+    /**
+     * How loud it is right now, 0.0 to 1.0, already normalised by the platform.
+     *
+     * Android reports this every 200 ms, which is the 5 Hz meter ADR-0002
+     * accepted for the MVP against PRD 6.6's eventual 10 Hz.
+     */
+    val level: Double = 0.0,
+    /**
+     * True when the signal reached the top of the scale. Its own field rather
+     * than `level >= 1.0`, because clipping is a thing that *happened* and
+     * should survive a quieter frame arriving straight after it.
+     */
+    val clipping: Boolean = false,
+    /** Which microphone the system routed to (PRD 6.6). */
+    val input: AudioInput = AudioInput.UNKNOWN,
+    /**
+     * False when there is no meter to show rather than silence to show.
+     *
+     * The distinction matters: a meter reading zero says the room is quiet, and
+     * a meter that is not running says nothing at all, and drawing the second as
+     * the first is how someone concludes their microphone is dead.
+     */
+    val metering: Boolean = false,
+)
+
+/**
+ * The microphone in use, named for a person rather than for an Android constant.
+ *
+ * The app does not *choose* this. ADR-0002 accepted system default routing for
+ * the MVP -- which prefers a plugged-in microphone, so the priority PRD 6.6 asks
+ * for is what usually happens -- and the app's job is to say which one won.
+ */
+@Serializable
+enum class AudioInput {
+    BUILT_IN,
+    WIRED,
+    USB,
+
+    /**
+     * Works, and is worth warning about: hands-free Bluetooth is a 8-16 kHz
+     * voice codec, which is audibly worse than the built-in microphone it
+     * usually replaces (PRD 6.6).
+     */
+    BLUETOOTH,
+
+    /** Nothing has told us yet, which is not the same as "the built-in one". */
+    UNKNOWN,
+}
 
 /** Mirrors Android's `PowerManager` thermal status, named for a person (PRD 6.8). */
 @Serializable
