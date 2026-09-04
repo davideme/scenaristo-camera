@@ -6,6 +6,8 @@ import com.scenaristo.camera.domain.protocol.CaptureSettings
 import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
 import com.scenaristo.camera.domain.protocol.DeviceStatus
+import com.scenaristo.camera.domain.protocol.Focus
+import com.scenaristo.camera.domain.protocol.FocusMode
 import com.scenaristo.camera.domain.protocol.Nack
 import com.scenaristo.camera.domain.protocol.NackReason
 import com.scenaristo.camera.domain.protocol.RecordingState
@@ -46,6 +48,9 @@ class SessionTest {
 
     private fun cmd(name: CommandName, id: String = "c1", expectRev: Int? = null, args: SettingsPatch? = null) =
         Command(id = id, name = name, expectRev = expectRev, args = args)
+
+    private fun focusCmd(focus: Focus?, id: String = "f1") =
+        Command(id = id, name = CommandName.FOCUS_SET, focus = focus)
 
     // ADR-0007: "A repeated id within 10 s returns the original ack without
     // re-applying." The failure this prevents: a browser resends after a dropped
@@ -187,6 +192,94 @@ class SessionTest {
 
     // rev is not a command counter: the phone changes state on its own -- battery,
     // thermal, warnings, the exposure loop moving ISO -- and clients must refresh.
+    // PRD 6.1 and 6.8 both promise tap-to-focus, and it is the one control that
+    // has to keep working mid-take: the speaker leans in, or continuous AF drifts
+    // onto the bookcase, and stopping the recording to fix it is the workflow the
+    // remote exists to remove.
+    @Test
+    fun `PRD 6_1 - focus can be set while recording, unlike every other setting`() {
+        val session = Session(idle())
+        session.apply(cmd(CommandName.RECORD_START), nowMs = 1_000)
+        val revBefore = session.rev
+
+        val outcome = session.apply(
+            focusCmd(Focus(mode = FocusMode.LOCKED, x = 0.42, y = 0.33)),
+            nowMs = 2_000,
+        )
+
+        assertTrue(outcome.reply is Ack, "focus is not blocked by the recording guard")
+        assertTrue(outcome.broadcast, "the other remotes need to see where focus went")
+        assertEquals(revBefore + 1, session.rev)
+        assertEquals(
+            Focus(mode = FocusMode.LOCKED, x = 0.42, y = 0.33),
+            session.state.settings.focus,
+        )
+        assertTrue(session.state.recording.recording, "and the take is still running")
+    }
+
+    @Test
+    fun `returning to continuous autofocus clears the point`() {
+        val session = Session(idle())
+        session.apply(focusCmd(Focus(FocusMode.LOCKED, 0.4, 0.4), id = "f1"), nowMs = 1_000)
+
+        session.apply(focusCmd(Focus(FocusMode.CONTINUOUS), id = "f2"), nowMs = 2_000)
+
+        assertEquals(Focus(FocusMode.CONTINUOUS), session.state.settings.focus)
+        assertNull(session.state.settings.focus.x)
+    }
+
+    // Clamping would hide the bug. The same argument as the Kelvin range: a value
+    // the phone silently repaired is one the client never learns it sent.
+    @Test
+    fun `a focus point outside the frame is refused rather than clamped`() {
+        val session = Session(idle())
+
+        val outcome = session.apply(focusCmd(Focus(FocusMode.LOCKED, 1.4, 0.5)), nowMs = 1_000)
+
+        assertEquals(Nack("f1", NackReason.INVALID), outcome.reply)
+        assertEquals(Focus(), session.state.settings.focus, "focus did not move")
+        assertEquals(0, session.rev)
+    }
+
+    @Test
+    fun `focus coordinates only mean anything as a pair`() {
+        val session = Session(idle())
+
+        val outcome = session.apply(focusCmd(Focus(FocusMode.LOCKED, x = 0.4, y = null)), nowMs = 1_000)
+
+        assertEquals(Nack("f1", NackReason.INVALID), outcome.reply)
+    }
+
+    // "Focus everywhere, at this spot" has no reading, so it is a client bug.
+    @Test
+    fun `continuous autofocus carrying a point is refused`() {
+        val session = Session(idle())
+
+        val outcome = session.apply(focusCmd(Focus(FocusMode.CONTINUOUS, 0.4, 0.4)), nowMs = 1_000)
+
+        assertEquals(Nack("f1", NackReason.INVALID), outcome.reply)
+    }
+
+    @Test
+    fun `a focus command with no focus at all is refused`() {
+        val session = Session(idle())
+
+        assertEquals(Nack("f1", NackReason.INVALID), session.apply(focusCmd(null), nowMs = 1_000).reply)
+    }
+
+    // Two remotes tapping the same spot is not two changes.
+    @Test
+    fun `tapping the point focus is already on does not bump rev`() {
+        val session = Session(idle())
+        session.apply(focusCmd(Focus(FocusMode.LOCKED, 0.5, 0.5), id = "f1"), nowMs = 1_000)
+        val revAfterFirst = session.rev
+
+        val again = session.apply(focusCmd(Focus(FocusMode.LOCKED, 0.5, 0.5), id = "f2"), nowMs = 2_000)
+
+        assertEquals(revAfterFirst, session.rev)
+        assertFalse(again.broadcast)
+    }
+
     @Test
     fun `phone-side updates bump rev so clients refresh`() {
         val session = Session(idle())

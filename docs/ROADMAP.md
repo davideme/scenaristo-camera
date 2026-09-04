@@ -62,6 +62,12 @@ API 34 floor has no device that runs it.
 | #17 | Partial file is playable after a crash or dead battery | 6.7 | Scope is set by the Phase 0 measurement. |
 | #14 | Clear capability report per device and lens | 6.10 | Gating rules in ADR-0011. |
 
+The screen all of these are seen through is specified in
+[spec-phone-and-remote-ui.md](spec-phone-and-remote-ui.md): UI-1 to UI-8 for the HUD, its states and
+its copy, plus UI-11 and UI-12 for tokens and wording. UI-3 is the one with a device dependency —
+edge to edge with the system bars hidden, which puts the record button inside the navigation gesture
+zone unless it is inset.
+
 ## Phase 2 — Web control
 
 **Exit criterion:** a solo creator completes a take from a laptop without touching the phone. The
@@ -77,6 +83,11 @@ reference laptop is a MacBook (ADR-0017); other browsers are checked, not develo
 | #12 | Changes sync both ways | 6.8 | Revisioned snapshots (ADR-0007). |
 | #16 | Recording continues when the browser disconnects | 6.8 | |
 | | Browser halves of #8, #13 and #15 | 6.3, 6.7, 6.2 | Those three issues are not fully done until this lands. |
+
+The browser layout is specified in [spec-phone-and-remote-ui.md](spec-phone-and-remote-ui.md), UI-9
+and UI-10 — the second is the phone-width case PRD 6.8 makes an acceptance criterion. Read its §8
+first: three fields the mockups draw do not exist in `:domain` yet, and one of them (tap to focus,
+PRD 6.1 and 6.8) needs a new command rather than a field.
 
 Also in Phase 2: wire the web bundle into `:app` via AGP 9's `androidComponents` Sources API, and
 add the `kxstsgen` task that generates `web/src/protocol.ts` (ADR-0009 actions 1 and 3, deferred

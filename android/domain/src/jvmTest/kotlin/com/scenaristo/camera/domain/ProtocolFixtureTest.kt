@@ -5,6 +5,7 @@ import com.scenaristo.camera.domain.protocol.Ack
 import com.scenaristo.camera.domain.protocol.ClientMessage
 import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
+import com.scenaristo.camera.domain.protocol.FocusMode
 import com.scenaristo.camera.domain.protocol.Hello
 import com.scenaristo.camera.domain.protocol.Nack
 import com.scenaristo.camera.domain.protocol.NackReason
@@ -74,6 +75,7 @@ class ProtocolFixtureTest {
         assertEquals(1788500000000, state.recording.startedAtMs)
         assertEquals(ThermalState.FAIR, state.device.thermal)
         assertEquals(84, state.device.storageMinutesRemaining)
+        assertEquals(FocusMode.LOCKED, state.settings.focus.mode, "focus survives in the snapshot too")
         assertEquals(listOf(Warning.TOO_DARK), state.warnings)
         assertEquals(2, state.clients)
     }
@@ -96,6 +98,20 @@ class ProtocolFixtureTest {
         assertEquals(null, command.args?.lensId, "an absent field means 'leave it alone'")
     }
 
+    // PRD 6.1 and 6.8's tap-to-focus. The point is normalised in the frame, which
+    // is what lets a tap on the browser's 960x540 preview mean the same place as
+    // a tap on the phone.
+    @Test
+    fun `PRD 6_8 - a focus command carries a normalised point and no staleness guard`() {
+        val command = client("cmd-focus-set.json") as Command
+        assertEquals(CommandName.FOCUS_SET, command.name)
+        assertEquals(null, command.expectRev, "focus acts on the latest state, like record")
+        assertEquals(null, command.args, "focus is not a settings patch")
+        assertEquals(FocusMode.LOCKED, command.focus?.mode)
+        assertEquals(0.42, command.focus?.x)
+        assertEquals(0.33, command.focus?.y)
+    }
+
     @Test
     fun `ADR-0007 - ack and nack name the command they answer`() {
         val ack = server("ack.json") as Ack
@@ -115,7 +131,7 @@ class ProtocolFixtureTest {
             val reencoded = ProtocolJson.encodeToString(original)
             assertEquals(original, ProtocolJson.decodeFromString<ServerMessage>(reencoded), name)
         }
-        for (name in listOf("cmd-record-start.json", "cmd-settings-set.json")) {
+        for (name in listOf("cmd-record-start.json", "cmd-settings-set.json", "cmd-focus-set.json")) {
             val original = client(name)
             val reencoded = ProtocolJson.encodeToString(original)
             assertEquals(original, ProtocolJson.decodeFromString<ClientMessage>(reencoded), name)
