@@ -156,14 +156,34 @@ the extra GPU pass breaks the thermal budget, Option B is the fallback and this 
 
 ## Action Items
 
-1. [ ] Implement the `SurfaceProcessor`: EGL context, external-OES shader, `SurfaceTexture`
+1. [x] Implement the `SurfaceProcessor`: EGL context, external-OES shader, `SurfaceTexture`
        plumbing, transform matrix via `SurfaceOutput.updateTransformMatrix`, render to the
-       viewfinder surface and to an owned `ImageReader`.
-2. [ ] Crop to the recording's aspect ratio in that pass, and add a test that fails if the tapped
-       frame's aspect ratio differs from `VideoCapture.resolutionInfo`'s.
+       viewfinder surface and to an owned `ImageReader`. **Measured 2026-09-04 on the Pixel 10: the
+       session binds at 3840×2160 with the effect attached and the pass delivers 30.0 fps over 802
+       frames** — the rate the shader has to hold. Caveat: measured while streaming, **not while
+       recording**, so the 4K encoder was not running beside it. Action item 4 is where that gets
+       settled.
+2. [x] Crop to the recording's aspect ratio in that pass, and add a test that fails if the tapped
+       frame's aspect ratio differs from `VideoCapture.resolutionInfo`'s. `PreviewCrop`, six host
+       tests.
 3. [ ] Re-run #20's key-echo measurement against this session shape, while recording, for a full
        take length — the numbers so far were taken without analysis and without recording.
-4. [ ] Measure the tap's thermal and frame-rate cost as part of #23, against the same baseline.
+4. [~] Measure the tap's thermal and frame-rate cost as part of #23, against the same baseline.
+       **Corrected 2026-09-04.** A run first reported as "11 minutes of continuous 4K30 recording"
+       was actually **~2 minutes of recording followed by ~9 minutes of preview only**: pulling the
+       file showed 127.5 s and 3825 frames, and the device's `screen_off_timeout` is 120000 ms. The
+       spike screen binds the camera to the *activity* lifecycle, so the screen turning off stopped
+       the activity, unbound CameraX and finalised the recording — exactly what ADR-0003's
+       foreground service exists to prevent.
+       What stands: the tap holds **29.7 fps across a 33-second window with the 4K encoder
+       running**, and 30.0 fps for a further nine minutes without one. Thermal reached `light` at
+       3:17, about a minute after encoding had already stopped, so it is evidence about the tail of
+       the encode plus the preview rather than about sustained 4K.
+       Still open, and blocked on the harness rather than on the design: a sustained run needs the
+       foreground service (ADR-0003) or the screen kept awake. Two further limits hold either way —
+       nothing JPEG-encodes the tapped frames yet, so this is the GL pass alone and not ADR-0008's
+       full preview cost, and the screen was on throughout, which ADR-0003 counts as part of the
+       budget.
 5. [ ] Add "re-run the #20 stream-combination probe" to the CameraX 1.7 checklist (#27) and to
        every subsequent upgrade.
 6. [ ] Feed the "bind and read back, never trust a capability query" rule into ADR-0011's probe

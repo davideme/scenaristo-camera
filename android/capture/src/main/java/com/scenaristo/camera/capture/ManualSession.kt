@@ -1,5 +1,6 @@
 package com.scenaristo.camera.capture
 
+import androidx.camera.core.CameraEffect
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -11,6 +12,7 @@ import android.util.Range
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.Executors
 
 /**
  * The UHD30 session the whole product is built on, and the readout Phase 0 (#20)
@@ -32,16 +34,22 @@ class ManualSession(
     /**
      * Whether to bind `ImageAnalysis` alongside the recording.
      *
-     * False is not a preference, it is a measured constraint: on the Pixel 10
-     * (#20, 2026-09-04) UHD recording and `ImageAnalysis` are not a supported
-     * stream combination — not through the feature group, not through
-     * `QualitySelector`, and not with the analysis stream bounded to 960x540 or
-     * 640x480. That breaks the premise ADR-0005 and ADR-0008 share, so the
-     * resolution is an ADR, not a default flipped here. Until then this flag
-     * exists so the interop keys can still be measured on a session the device
-     * will actually accept.
+     * Defaults to false, and that is a measured constraint rather than a
+     * preference: on the Pixel 10 (#20, 2026-09-04) UHD recording and
+     * `ImageAnalysis` are not a supported stream combination — not through the
+     * feature group, not through `QualitySelector`, and not with the analysis
+     * stream bounded to 960x540 or 640x480. ADR-0018 resolved that by sourcing
+     * frames from [tap] instead. Setting this true asks for a session the
+     * reference device refuses; it exists for the day a CameraX release makes
+     * the combination bindable and #20's probe is re-run (#27).
      */
-    private val includeAnalysis: Boolean = true,
+    private val includeAnalysis: Boolean = false,
+    /**
+     * The GL tap that replaces `ImageAnalysis` as the frame source (ADR-0018).
+     * Null binds a session with no derived frames at all, which is what the #20
+     * key-echo measurement used before the tap existed.
+     */
+    private val tap: PreviewTapProcessor? = null,
 ) {
 
     val preview: Preview = Preview.Builder()
@@ -72,6 +80,7 @@ class ManualSession(
     )
         .setRequiredFeatureGroup(GroupableFeatures.UHD_RECORDING)
         .setFrameRateRange(Range(30, 30))
+        .apply { tap?.let { addEffect(PreviewTapEffect(it)) } }
         .build()
 
     /** Latest capture result, for a live readout on the phone. */

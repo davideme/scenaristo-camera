@@ -94,7 +94,22 @@ The MVP has to prove that locked shutter, app-driven ISO, locked WB, and the bro
 
 ## Action Items
 1. [ ] Pin `androidx.camera:*:1.6.2` in the version catalog with a comment pointing at this ADR's revisit pin.
-2. [ ] Phase 0: verify through the session capture callback that `SENSOR_EXPOSURE_TIME`, `SENSOR_SENSITIVITY`, and `SENSOR_FRAME_DURATION` echo the requested values on Pixel and Samsung while recording UHD at [30, 30].
+2. [x] Phase 0: verify through the session capture callback that `SENSOR_EXPOSURE_TIME`, `SENSOR_SENSITIVITY`, and `SENSOR_FRAME_DURATION` echo the requested values on Pixel and Samsung while recording UHD at [30, 30].
+
+   **Measured 2026-09-04, Pixel 10, camera id 0 (rear main), recording UHD at [30, 30] for ten minutes.** All six keys honoured across **18027 capture results**, worst-frame-wins — no frame in the take degraded any key:
+
+   | Key | Requested | Reported | Deviation | Verdict |
+   |---|---|---|---|---|
+   | `SENSOR_EXPOSURE_TIME` | 20000000 | 19995066 | −247 ppm | quantised |
+   | `SENSOR_SENSITIVITY` | 100 | 100 | 0 | exact |
+   | `SENSOR_FRAME_DURATION` | 33333333 | 33340454 | +214 ppm | quantised |
+   | `CONTROL_AE_MODE` | 0 (off) | 0 | 0 | exact |
+   | `CONTROL_AWB_MODE` | 0 (off) | 0 | 0 | exact |
+   | `LENS_OPTICAL_STABILIZATION_MODE` | 0 (off) | 0 | 0 | exact |
+
+   The two quantised values are the sensor's own step, far inside tolerance: 4934 ns off 1/50 s is 0.05 % of a 50 Hz half-cycle, and the frame duration reads as 29.994 fps against PRD 6.1's "30.00 fps constant".
+
+   **Ticked for one of the two devices this item names.** There is no Samsung (ADR-0017); #29 re-runs this before the beta. Main lens only — secondary lenses are not covered. And the session had no `ImageAnalysis`, because the reference device refuses it alongside UHD (ADR-0018); frames came from the preview tap.
 3. [ ] Phase 0: log the codec chosen by the device profile for UHD on both reference devices; record here.
 4. [ ] Phase 0: force-kill a recording at 30 s and confirm the file plays to about 29 s (expected: yes); then find the take length at which `moov` outgrows the 400 KB reserve by force-killing at increasing durations, and record the covered length here and in PRD 6.7.
 5. [x] Amend PRD 6.6 (level meter 5 Hz), 6.7 (crash resilience covered up to a measured length, HEVC "when the device profile provides it" until 1.7), and 6.1 (OIS off).

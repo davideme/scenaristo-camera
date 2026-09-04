@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,10 +37,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -55,6 +60,7 @@ import com.scenaristo.camera.capture.KeyEcho
 import com.scenaristo.camera.capture.LensEchoReport
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
+import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.capture.SessionSupportProbe
 import com.scenaristo.camera.capture.markdown
 import java.io.File
@@ -73,9 +79,28 @@ import java.io.File
  * out keeps the thing being measured to one variable.
  */
 
-/** 1/50 s at ISO 100, 30 fps: the 50 Hz default from PRD 6.2's ladder. */
-private val DEFAULT_REQUEST = ManualControls.Request(
-    exposureTimeNs = 20_000_000L,
+/**
+ * The shutters worth pointing at a lamp, and what each one proves.
+ *
+ * A mains-driven light ripples at twice the grid frequency, so on a 50 Hz grid
+ * the light pulses every 10 ms. An exposure covering a whole number of pulses
+ * integrates them away; a fractional one leaves the residue that becomes a
+ * rolling band.
+ *
+ * That makes [ONE_SIXTIETH] the positive control the flicker test has been
+ * missing (#20): if 1/50 and 1/100 are clean *and* 1/60 bands, the shutter is
+ * doing the work. A lamp that simply does not ripple — many LED drivers are DC —
+ * cannot produce that pattern, which is why one clean run at 1/50 proved
+ * nothing on its own.
+ */
+private enum class Shutter(val label: String, val exposureNs: Long, val expectation: String) {
+    ONE_FIFTIETH("1/50", 20_000_000L, "2.0 pulses at 50 Hz — expect clean"),
+    ONE_SIXTIETH("1/60", 16_666_667L, "1.67 pulses at 50 Hz — expect BANDS"),
+    ONE_HUNDREDTH("1/100", 10_000_000L, "1.0 pulse at 50 Hz — expect clean"),
+}
+
+private fun requestFor(shutter: Shutter) = ManualControls.Request(
+    exposureTimeNs = shutter.exposureNs,
     sensitivity = 100,
     frameDurationNs = 33_333_333L,
 )
@@ -88,9 +113,14 @@ fun InteropEchoScreen(modifier: Modifier = Modifier) {
         ActivityResultContracts.RequestPermission(),
     ) { granted = it }
 
+    // Changing the shutter re-creates the session: the keys are applied to the
+    // use-case builder at bind time, so a new value means a new bind. `key`
+    // disposes the old tap and its EGL thread with it.
+    var shutter by remember { mutableStateOf(Shutter.ONE_FIFTIETH) }
+
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (granted) {
-            EchoRunner()
+            key(shutter) { EchoRunner(shutter) { shutter = it } }
         } else {
             Column(
                 modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -107,20 +137,86 @@ fun InteropEchoScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun EchoRunner() {
+private fun EchoRunner(shutter: Shutter, onShutterChange: (Shutter) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Analysis is dropped when the device refuses UHD + analysis, which the Pixel
-    // 10 does (#20). The keys ride on Preview either way, so the echo measurement
-    // survives; what does not survive is ADR-0005's metering and ADR-0008's
-    // preview source, and that is a decision, not a fallback.
-    var session by remember { mutableStateOf(ManualSession(DEFAULT_REQUEST)) }
+    // Frames come from the GL tap rather than ImageAnalysis (ADR-0018). The
+    // counter is the measurement that matters here: binding proved the session is
+    // accepted, and only a frame rate proves a real shader keeps up with a 4K
+    // encode running beside it.
+    var tapFrames by remember { mutableIntStateOf(0) }
+    var tapFps by remember { mutableStateOf("—") }
+    val tap = remember {
+        var count = 0
+        // A window, not a cumulative average: #23 asks whether the rate *drops*
+        // as the phone heats, and an average over ten minutes hides exactly that.
+        var windowStart = 0L
+        var windowCount = 0
+        PreviewTapProcessor { image ->
+            image.close()
+            count++
+            tapFrames = count
+            val now = System.nanoTime()
+            if (windowStart == 0L) windowStart = now
+            windowCount++
+            val seconds = (now - windowStart) / 1_000_000_000.0
+            if (seconds >= 5.0) {
+                tapFps = "%.1f".format(windowCount / seconds)
+                windowStart = now
+                windowCount = 0
+            }
+        }
+    }
+
+    // PRD 8-Q4 and #23: the transitions are the measurement, not the final value.
+    val thermal = remember { mutableStateListOf<String>() }
+    var thermalNow by remember { mutableStateOf("?") }
+
+    // The phone records its own soak. A 10-minute run cannot be watched over USB
+    // while the cable is also charging the battery -- charge heat is exactly the
+    // confound #23 does not want -- so every 30 s the rate and thermal state are
+    // appended here and the whole run is readable from one screenshot afterwards.
+    val samples = remember { mutableStateListOf<String>() }
+    LaunchedEffect(Unit) {
+        val power = context.getSystemService(android.os.PowerManager::class.java)
+        val started = System.currentTimeMillis()
+        var last = -1
+        var nextSample = 30_000L
+        while (true) {
+            val status = power.currentThermalStatus
+            val elapsedMs = System.currentTimeMillis() - started
+            val elapsed = elapsedMs / 1000
+            if (status != last) {
+                thermal += "%d:%02d %s".format(elapsed / 60, elapsed % 60, thermalName(status))
+                last = status
+            }
+            thermalNow = thermalName(status)
+            if (elapsedMs >= nextSample) {
+                samples += "%d:%02d %s fps %s".format(elapsed / 60, elapsed % 60, tapFps, thermalName(status))
+                nextSample += 30_000L
+            }
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
+    val session = remember { ManualSession(requestFor(shutter), tap = tap) }
+
+    // Both previous soaks ended at the device's 120 s screen timeout, because the
+    // camera is bound to this activity's lifecycle. Shipping capture runs in a
+    // foreground service and does not have this problem (ADR-0003); until then a
+    // wake lock on the window is what lets a timed run finish.
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
+    DisposableEffect(Unit) { onDispose { tap.release() } }
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
     var status by remember { mutableStateOf("Binding…") }
     var cameraId by remember { mutableStateOf("?") }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var report by remember { mutableStateOf<LensEchoReport?>(null) }
+    var recordingState by remember { mutableStateOf("idle") }
     var support by remember { mutableStateOf("") }
 
     val latest: State<List<KeyEcho>> = session.latestEchoes.collectAsState()
@@ -240,27 +336,11 @@ private fun EchoRunner() {
 
         status = try {
             provider.bindToLifecycle(lifecycleOwner, selector, session.sessionConfig)
-            "Bound with analysis. manualSensor=${caps.hasManualSensor} " +
+            "Bound with the preview tap. manualSensor=${caps.hasManualSensor} " +
                 "manualPostProcessing=${caps.hasManualPostProcessing} uhd30=${caps.supportsUhd30}"
         } catch (e: IllegalArgumentException) {
-            // Record this verbatim: it is a Phase 0 result, not a bug. Then retry
-            // without ImageAnalysis so #20's own question -- do the keys echo --
-            // is still answered on a session this device accepts.
-            val withoutAnalysis = ManualSession(DEFAULT_REQUEST, includeAnalysis = false)
-            session = withoutAnalysis
-            runCatching {
-                provider.unbindAll()
-                withoutAnalysis.preview.setSurfaceProvider { surfaceRequest = it }
-                provider.bindToLifecycle(lifecycleOwner, selector, withoutAnalysis.sessionConfig)
-                withoutAnalysis.videoCapture.resolutionInfo?.resolution
-            }.fold(
-                onSuccess = { resolution ->
-                    "NO ANALYSIS: bound preview+video at $resolution after \"${e.message}\". " +
-                        "manualSensor=${caps.hasManualSensor} " +
-                        "manualPostProcessing=${caps.hasManualPostProcessing}"
-                },
-                onFailure = { "BIND FAILED — ${e.message}; and without analysis: ${it.message}" },
-            )
+            // Record verbatim: a refusal here is a Phase 0 result, not a bug.
+            "BIND FAILED — ${e.message}"
         }
     }
 
@@ -268,22 +348,80 @@ private fun EchoRunner() {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        // Fixed height rather than a weight: the readout column below scrolls and
+        // therefore claims every pixel it is offered, which left the viewfinder
+        // with none. Without a visible viewfinder the flicker check of PRD 6.2
+        // cannot be run at all -- you cannot aim at a light panel you cannot see.
+        Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
             surfaceRequest?.let { CameraXViewfinder(surfaceRequest = it, modifier = Modifier.fillMaxSize()) }
         }
 
         Text(status, style = MaterialTheme.typography.bodySmall)
+        Text(
+            "tap: $tapFrames frames, $tapFps fps (5s window)",
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+        )
+        Text(
+            "rec: $recordingState",
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+        )
+        Text(
+            "thermal: $thermalNow — ${thermal.joinToString(" → ")}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+        )
+        if (samples.isNotEmpty()) {
+            Text(
+                // Newest first: a soak that ends badly ends at the top.
+                samples.takeLast(24).reversed().joinToString("   "),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (option in Shutter.entries) {
+                if (option == shutter) {
+                    Button(onClick = {}) { Text(option.label) }
+                } else {
+                    OutlinedButton(onClick = { onShutterChange(option) }) { Text(option.label) }
+                }
+            }
+        }
+        Text(
+            "${shutter.label}: ${shutter.expectation}",
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
                     if (recording == null) {
-                        recording = startRecording(context, session)
                         report = null
+                        recordingState = "starting…"
+                        recording = startRecording(context, session) { event ->
+                            when (event) {
+                                is VideoRecordEvent.Status -> {
+                                    val s = event.recordingStats.recordedDurationNanos / 1_000_000_000
+                                    val mib = event.recordingStats.numBytesRecorded / (1024 * 1024)
+                                    recordingState = "recording %d:%02d, %d MiB".format(s / 60, s % 60, mib)
+                                }
+                                is VideoRecordEvent.Finalize -> {
+                                    // The recorder can end a take on its own. Reflect
+                                    // that, rather than leaving a button claiming to
+                                    // be recording something that stopped minutes ago.
+                                    recordingState = "ENDED: ${finalizeReason(event)}"
+                                    recording = null
+                                    report = session.report(cameraId, "Rear main (wide)")
+                                }
+                                else -> Unit
+                            }
+                        }
                     } else {
                         recording?.stop()
                         recording = null
-                        report = session.report(cameraId, "Rear main (wide)")
                     }
                 },
             ) {
@@ -302,7 +440,7 @@ private fun EchoRunner() {
         // Live, so a key that flips mid-take is visible while it happens rather
         // than only in the summary.
         Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             for (echo in latest.value) {
@@ -349,6 +487,18 @@ private fun shortReason(error: Throwable?): String {
     return listOfNotNull(head, configs).joinToString(" — ")
 }
 
+/** PowerManager's THERMAL_STATUS_* constants, named for a report a human reads. */
+private fun thermalName(status: Int): String = when (status) {
+    android.os.PowerManager.THERMAL_STATUS_NONE -> "none"
+    android.os.PowerManager.THERMAL_STATUS_LIGHT -> "light"
+    android.os.PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+    android.os.PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+    android.os.PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+    android.os.PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+    android.os.PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+    else -> "unknown($status)"
+}
+
 private fun hasCameraPermission(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
         PackageManager.PERMISSION_GRANTED
@@ -358,15 +508,53 @@ private fun hasCameraPermission(context: Context): Boolean =
  * The file is evidence for the issue: its metadata is what PRD 6.1's "3840x2160
  * at 30.00 fps constant" is checked against.
  */
-private fun startRecording(context: Context, session: ManualSession): Recording {
+private fun startRecording(
+    context: Context,
+    session: ManualSession,
+    onEvent: (VideoRecordEvent) -> Unit,
+): Recording {
     val file = File(context.getExternalFilesDir(null), "interop-echo-${System.currentTimeMillis()}.mp4")
     return session.recorder
         .prepareRecording(context, FileOutputOptions.Builder(file).build())
-        .start(ContextCompat.getMainExecutor(context)) { event ->
-            if (event is VideoRecordEvent.Finalize && event.hasError()) {
-                android.util.Log.e("InteropEcho", "recording failed: ${event.error}", event.cause)
-            }
-        }
+        .start(ContextCompat.getMainExecutor(context), onEvent)
+}
+
+/**
+ * Why a recording ended, in words.
+ *
+ * Two timed runs were mis-reported before this existed. One stopped at the
+ * device's 120 s screen timeout and the UI claimed it was still recording for
+ * another nine minutes; another ended 3.4 MB short of 2 GiB and left no evidence
+ * of whether that was a file-size cap or a human pressing stop. A measurement
+ * harness that cannot say why it stopped measuring is worse than none, because
+ * its numbers look fine.
+ */
+private fun finalizeReason(event: VideoRecordEvent.Finalize): String {
+    val error = when (event.error) {
+        VideoRecordEvent.Finalize.ERROR_NONE -> "stopped normally"
+        VideoRecordEvent.Finalize.ERROR_UNKNOWN -> "UNKNOWN"
+        VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED -> "FILE_SIZE_LIMIT_REACHED"
+        VideoRecordEvent.Finalize.ERROR_INSUFFICIENT_STORAGE -> "INSUFFICIENT_STORAGE"
+        VideoRecordEvent.Finalize.ERROR_SOURCE_INACTIVE -> "SOURCE_INACTIVE (camera unbound — screen off?)"
+        VideoRecordEvent.Finalize.ERROR_INVALID_OUTPUT_OPTIONS -> "INVALID_OUTPUT_OPTIONS"
+        VideoRecordEvent.Finalize.ERROR_ENCODING_FAILED -> "ENCODING_FAILED"
+        VideoRecordEvent.Finalize.ERROR_RECORDER_ERROR -> "RECORDER_ERROR"
+        VideoRecordEvent.Finalize.ERROR_NO_VALID_DATA -> "NO_VALID_DATA"
+        VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED -> "DURATION_LIMIT_REACHED"
+        VideoRecordEvent.Finalize.ERROR_RECORDING_GARBAGE_COLLECTED -> "RECORDING_GARBAGE_COLLECTED"
+        else -> "error ${event.error}"
+    }
+    val stats = event.recordingStats
+    val seconds = stats.recordedDurationNanos / 1_000_000_000.0
+    val mib = stats.numBytesRecorded / (1024.0 * 1024.0)
+    val cause = event.cause?.message?.let { " — $it" } ?: ""
+    return "%s after %d:%02d, %.0f MiB%s".format(
+        error,
+        (seconds / 60).toInt(),
+        (seconds % 60).toInt(),
+        mib,
+        cause,
+    )
 }
 
 private fun copyToClipboard(context: Context, text: String) {
