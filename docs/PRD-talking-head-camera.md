@@ -82,7 +82,7 @@ Ordered by priority.
 | White balance | Locked preset, default 5600 K | See 6.4. |
 | Focus | Continuous AF with face priority, lockable | Tap-to-focus and lock on both phone and web. |
 | Stabilisation | Off, both EIS and OIS | Phone is on a tripod; EIS crops and can wobble, OIS drifts. P1 toggle. (ADR-0002) |
-| Orientation | Landscape | Portrait supported. Web UI shows orientation. |
+| Orientation | Landscape | Landscape only in v1; portrait moves to 6.11 (decision 2026-09-04). Web UI shows orientation. |
 | Camera | Rear main (wide) | Rear only in v1. The front camera moves to 6.11 as a nice-to-have (decision 2026-09-04). |
 | Audio | 48 kHz AAC stereo or mono, from the best available input | See 6.6. |
 | Colour | SDR, Rec.709, 8-bit | HDR explicitly off. |
@@ -235,6 +235,7 @@ The phone UI is intentionally minimal: preview, record button, the QR/URL panel,
 
 ### 6.11 Nice-to-have (P1)
 
+- **Portrait orientation** (moved here from 6.1, decision 2026-09-04). It needs its own HUD layout: the landscape design puts readouts and controls in strips across the long edge, and neither the strips nor the record button's clearance from the gesture zone (UI-3) survive being turned on their side.
 - **Front camera as a selectable lens** (moved here from 6.1, decision 2026-09-04). It inherits everything 6.10 requires of any lens — its own capability probe, its own gating — and 6.5's distance guidance applies to it more than to any other lens, since a selfie camera is wide and used close.
 - Pairing check for the web interface: matching number or emoji code shown on phone and browser, confirmed on the phone (see 6.8 Security).
 - Download the last recording (or any recording from this session) from the web UI.
@@ -285,6 +286,7 @@ Analytics are opt-in and local-first; no metric requires a backend in v1.
 **Decision log (Davide; 2026-09-03 unless the row says otherwise)**
 | Question | Decision |
 |---|---|
+| Portrait in v1? | **No (2026-09-04).** Landscape only. The phone HUD specified in `spec-phone-and-remote-ui.md` UI-1 to UI-6 is a landscape layout — a top strip of readouts, a bottom strip of controls, and a preview between them — and it has no portrait design. Shipping a rotation that reflows into an untested layout is worse than not rotating. Moves to 6.11. |
 | Front camera in v1? | **No (2026-09-04).** v1 records from the rear main camera only. Selecting the front camera moves to 6.11 as a nice-to-have. A talking head on a tripod is framed from the rear camera, which is also the better sensor; supporting the front one doubles the per-lens capability surface (6.10) and the verification matrix for a lens the product does not recommend. |
 | Audio in v1? | Yes, as specified in 6.6. |
 | Platform order | Android first. iOS follows once the Android capture engine is proven. |
