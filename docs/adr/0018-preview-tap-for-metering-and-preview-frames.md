@@ -168,16 +168,22 @@ the extra GPU pass breaks the thermal budget, Option B is the fallback and this 
        tests.
 3. [ ] Re-run #20's key-echo measurement against this session shape, while recording, for a full
        take length — the numbers so far were taken without analysis and without recording.
-4. [x] Measure the tap's thermal and frame-rate cost as part of #23, against the same baseline.
-       **Soaked 2026-09-04 on the Pixel 10, off charger: 11 minutes of continuous 4K30 recording
-       with the tap running, 17529 frames, no frame-rate decay** — every 30-second sample between
-       0:30 and 11:00 read 29.8 to 30.2 fps, almost all exactly 30.0. Thermal status went
-       `none` → `light` at 3:17 and stayed there for the remaining eight minutes; no `moderate`, no
-       throttling, no dropped frames.
-       Two limits on that number. The tap renders into the reader but **nothing JPEG-encodes those
-       frames yet**, so this is the GL pass alone, not ADR-0008's full preview cost with encode and
-       network on top. And the screen was on throughout, which ADR-0003 notes is itself part of the
-       thermal budget.
+4. [~] Measure the tap's thermal and frame-rate cost as part of #23, against the same baseline.
+       **Corrected 2026-09-04.** A run first reported as "11 minutes of continuous 4K30 recording"
+       was actually **~2 minutes of recording followed by ~9 minutes of preview only**: pulling the
+       file showed 127.5 s and 3825 frames, and the device's `screen_off_timeout` is 120000 ms. The
+       spike screen binds the camera to the *activity* lifecycle, so the screen turning off stopped
+       the activity, unbound CameraX and finalised the recording — exactly what ADR-0003's
+       foreground service exists to prevent.
+       What stands: the tap holds **29.7 fps across a 33-second window with the 4K encoder
+       running**, and 30.0 fps for a further nine minutes without one. Thermal reached `light` at
+       3:17, about a minute after encoding had already stopped, so it is evidence about the tail of
+       the encode plus the preview rather than about sustained 4K.
+       Still open, and blocked on the harness rather than on the design: a sustained run needs the
+       foreground service (ADR-0003) or the screen kept awake. Two further limits hold either way —
+       nothing JPEG-encodes the tapped frames yet, so this is the GL pass alone and not ADR-0008's
+       full preview cost, and the screen was on throughout, which ADR-0003 counts as part of the
+       budget.
 5. [ ] Add "re-run the #20 stream-combination probe" to the CameraX 1.7 checklist (#27) and to
        every subsequent upgrade.
 6. [ ] Feed the "bind and read back, never trust a capability query" rule into ADR-0011's probe
