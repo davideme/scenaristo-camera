@@ -167,6 +167,21 @@ class ControlServer(
         }
     }
 
+    /**
+     * Applies a command that came from the phone's own screen rather than from a
+     * remote (PRD 6.9).
+     *
+     * The phone goes through the same path a browser does -- same lock, same
+     * idempotency, same broadcast -- because ADR-0007's premise is one state
+     * document with one writer. A phone that mutated `Session` directly would be
+     * a second writer, and the first symptom would be a remote whose Record
+     * button disagrees with the phone's.
+     */
+    suspend fun applyLocal(command: Command) {
+        val outcome = lock.withLock { session.apply(command, now()) }
+        if (outcome.broadcast) broadcastSnapshot()
+    }
+
     private suspend fun handle(client: Client, text: String) {
         val message = runCatching { ProtocolJson.decodeFromString<ClientMessage>(text) }.getOrNull()
             ?: return // Unparseable input is dropped, not answered: there is no id to answer to.

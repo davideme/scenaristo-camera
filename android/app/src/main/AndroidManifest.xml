@@ -33,10 +33,17 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ScenaristoCamera"
         android:windowSoftInputMode="adjustResize">
+        <!-- Landscape only (decision 2026-09-04, Davide): the HUD of
+             spec UI-1 to UI-6 is a landscape layout, and PRD 6.1's "portrait
+             supported" moved to 6.11 with it.
+             sensorLandscape rather than landscape, so a phone bolted to a
+             tripod either way up still draws the right way round; and rather
+             than userLandscape, because the auto-rotate lock is a decision
+             about reading, not about which way a camera is mounted. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="fullSensor"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.ScenaristoCamera">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
