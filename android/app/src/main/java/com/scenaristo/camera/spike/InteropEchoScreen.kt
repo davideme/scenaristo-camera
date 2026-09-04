@@ -59,6 +59,7 @@ import com.scenaristo.camera.capture.EchoVerdict
 import com.scenaristo.camera.capture.KeyEcho
 import com.scenaristo.camera.capture.LensEchoReport
 import com.scenaristo.camera.capture.ManualControls
+import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
 import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.PreviewJpegSource
 import com.scenaristo.camera.capture.PreviewTapProcessor
@@ -114,6 +115,8 @@ private fun requestFor(shutter: Shutter) = ManualControls.Request(
     exposureTimeNs = shutter.exposureNs,
     sensitivity = 100,
     frameDurationNs = 33_333_333L,
+    // PRD 6.4's default, as the locked preset nearest 5600 K.
+    awbMode = ManualControls.awbModeFor(DEFAULT_KELVIN),
 )
 
 @Composable

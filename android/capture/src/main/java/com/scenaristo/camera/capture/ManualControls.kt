@@ -18,6 +18,8 @@ import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.ExtendableBuilder
 import com.scenaristo.camera.domain.exposure.IsoRange
+import com.scenaristo.camera.domain.whitebalance.AwbApproximation
+import com.scenaristo.camera.domain.whitebalance.approximationFor
 
 /**
  * The single place `Camera2Interop` is allowed to appear.
@@ -52,6 +54,18 @@ object ManualControls {
         val sensitivity: Int,
         /** Nanoseconds. 30 fps is 33_333_333, which pins the frame rate (PRD 6.1). */
         val frameDurationNs: Long,
+        /**
+         * A **locked** `CONTROL_AWB_MODE`, not `OFF` (PRD 6.4, ADR-0011).
+         *
+         * `OFF` was what this asked for until now, and `OFF` with no
+         * `COLOR_CORRECTION_GAINS` alongside it is not a white balance at all --
+         * it leaves the correction at whatever the driver last had, which is
+         * neither locked nor 5600 K. A named preset is locked by definition and
+         * is exactly the fallback PRD 6.4 describes.
+         *
+         * [awbModeFor] maps a preset temperature onto one of these.
+         */
+        val awbMode: Int,
     )
 
     /** Off, for every mode the app takes over. Camera2 spells all three as 0. */
@@ -85,7 +99,7 @@ object ManualControls {
         Camera2Interop.Extender(builder)
             .also { extender -> physicalCameraId?.let { extender.setPhysicalCameraId(it) } }
             .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
-            .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_OFF)
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, request.awbMode)
             .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, request.exposureTimeNs)
             .setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, request.sensitivity)
             .setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, request.frameDurationNs)
@@ -121,6 +135,7 @@ object ManualControls {
         Camera2CameraControl.from(cameraControl).setCaptureRequestOptions(
             CaptureRequestOptions.Builder()
                 .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, request.awbMode)
                 .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, request.exposureTimeNs)
                 .setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, request.sensitivity)
                 .setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, request.frameDurationNs)
@@ -143,6 +158,11 @@ object ManualControls {
             exposureTimeNs = exposureTimeNs,
             sensitivity = sensitivity,
             frameDurationNs = result.get(CaptureResult.SENSOR_FRAME_DURATION) ?: 0L,
+            // What the sensor says it used, so a caller comparing this to a
+            // request sees the white balance too. Absent on a result that does
+            // not carry it, which is not the same as OFF -- so it reports the
+            // Camera2 sentinel for "unknown" rather than inventing a mode.
+            awbMode = result.get(CaptureResult.CONTROL_AWB_MODE) ?: -1,
         )
     }
 
@@ -190,7 +210,7 @@ object ManualControls {
         ),
         KeyEcho(
             ManualKey.CONTROL_AWB_MODE,
-            MODE_OFF,
+            request.awbMode.toLong(),
             result.get(CaptureResult.CONTROL_AWB_MODE)?.toLong(),
         ),
         KeyEcho(
@@ -199,6 +219,29 @@ object ManualControls {
             result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE)?.toLong(),
         ),
     )
+
+    /**
+     * The platform white balance mode that stands in for a Kelvin preset
+     * (PRD 6.4's Android note, ADR-0011).
+     *
+     * Which preset is nearest is decided in `:domain`, in mired, so both
+     * platforms agree; this only carries the answer across to the Camera2
+     * constant, which is the part that cannot leave this module.
+     *
+     * **Not the gains path.** ADR-0011 says a lens with `MANUAL_POST_PROCESSING`
+     * should get `COLOR_CORRECTION_GAINS` computed from Kelvin, which is more
+     * accurate than four fixed presets. That needs the device-calibrated curve
+     * PRD 6.4 describes, and measuring it is #24 -- deferred to Phase 3 with the
+     * grey card it requires. Until then every lens takes the preset path, which
+     * is a locked white balance that is approximately right rather than an
+     * unlocked one that is arbitrary.
+     */
+    fun awbModeFor(kelvin: Int): Int = when (approximationFor(kelvin)) {
+        AwbApproximation.INCANDESCENT -> CameraMetadata.CONTROL_AWB_MODE_INCANDESCENT
+        AwbApproximation.FLUORESCENT -> CameraMetadata.CONTROL_AWB_MODE_FLUORESCENT
+        AwbApproximation.DAYLIGHT -> CameraMetadata.CONTROL_AWB_MODE_DAYLIGHT
+        AwbApproximation.CLOUDY -> CameraMetadata.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT
+    }
 
     /**
      * Pins one stream to a physical sensor, without touching the manual keys.

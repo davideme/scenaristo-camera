@@ -47,6 +47,7 @@ import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.PreviewJpegSource
 import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.domain.exposure.GridFrequency
+import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
 import com.scenaristo.camera.domain.protocol.CaptureSettings
 import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
@@ -130,6 +131,9 @@ class CaptureService : LifecycleService() {
 
     /** Last rotation handed to the camera, so a brightness change is not one. */
     private var appliedRotation: Int? = null
+
+    /** Last white balance handed to the sensor, so the tick only pushes changes. */
+    private var appliedKelvin: Int? = null
 
     /** ADR-0005's loop, alive only once a camera is bound. */
     @Volatile
@@ -359,6 +363,7 @@ class CaptureService : LifecycleService() {
             isoRange = isoRange,
             grid = session.state.settings.grid,
             cameraControl = bound.cameraControl,
+            awbMode = ManualControls.awbModeFor(session.state.settings.whiteBalanceKelvin),
         )
         exposure = controller
         controller.start()
@@ -424,6 +429,16 @@ class CaptureService : LifecycleService() {
                 session.update(System.currentTimeMillis()) {
                     it.copy(audio = AudioState(input = activeAudioInput(), metering = false))
                 }
+            }
+            // PRD 6.4: a preset chosen from the phone or a remote has to reach
+            // the sensor. Watched on the tick rather than pushed from the
+            // command handler, because ADR-0007 keeps that handler pure and
+            // platform-free -- the camera work happens here, one step behind,
+            // exactly as it does for recording.
+            val kelvin = session.state.settings.whiteBalanceKelvin
+            if (kelvin != appliedKelvin) {
+                appliedKelvin = kelvin
+                exposure?.onWhiteBalanceChanged(ManualControls.awbModeFor(kelvin))
             }
             server.broadcastSnapshot()
             _state.value = session.state
@@ -793,6 +808,10 @@ class CaptureService : LifecycleService() {
             exposureTimeNs = 20_000_000L,
             sensitivity = 100,
             frameDurationNs = 33_333_333L,
+            // PRD 6.1's default white balance, as the locked preset nearest to
+            // it (PRD 6.4). Not AWB OFF: off with no gains is not a white
+            // balance, it is the absence of one.
+            awbMode = ManualControls.awbModeFor(DEFAULT_KELVIN),
         )
 
         /**
