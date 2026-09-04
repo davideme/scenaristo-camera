@@ -294,10 +294,22 @@ class CaptureService : LifecycleService() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
+    /**
+     * Android's seven thermal levels onto PRD 6.8's four.
+     *
+     * `MODERATE` maps to SERIOUS, not FAIR. At moderate the platform is already
+     * throttling, and a browser reading "fair" while the device sheds
+     * performance tells the user the opposite of what is happening — measured
+     * during ADR-0003's screen-off comparison, where `dumpsys` reported SEVERE
+     * against a state document still claiming FAIR.
+     *
+     * That leaves FAIR meaning `LIGHT` alone: warm, nothing given up yet.
+     */
     private fun thermalOf(status: Int): ThermalState = when (status) {
         PowerManager.THERMAL_STATUS_NONE -> ThermalState.NOMINAL
-        PowerManager.THERMAL_STATUS_LIGHT, PowerManager.THERMAL_STATUS_MODERATE -> ThermalState.FAIR
-        PowerManager.THERMAL_STATUS_SEVERE -> ThermalState.SERIOUS
+        PowerManager.THERMAL_STATUS_LIGHT -> ThermalState.FAIR
+        PowerManager.THERMAL_STATUS_MODERATE, PowerManager.THERMAL_STATUS_SEVERE ->
+            ThermalState.SERIOUS
         else -> ThermalState.CRITICAL
     }
 
