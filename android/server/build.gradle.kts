@@ -39,6 +39,10 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)
+    // The protocol classes are :domain's, but their Json configuration
+    // (ProtocolJson) is part of the contract, so :server needs the same library
+    // rather than a second encoder. Already in the catalogue; no new decision.
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.zxing.core)
 
