@@ -116,6 +116,12 @@ data class LensEchoReport(
     /** How the app names the lens to a user, e.g. "Rear main (wide)". */
     val lensLabel: String,
     val echoes: List<KeyEcho>,
+    /**
+     * How many capture results the [echoes] summarise. #20 asks for keys honoured
+     * *throughout* a 10-minute take, so one sampled frame and eighteen thousand
+     * are very different claims and the write-up has to say which it is.
+     */
+    val framesObserved: Int? = null,
 ) {
     /** Keys ADR-0002 action item 2 expects and this run did not report on. */
     val missingKeys: List<ManualKey> = ManualKey.entries - echoes.map { it.key }.toSet()
@@ -141,7 +147,8 @@ data class LensEchoReport(
  */
 fun LensEchoReport.markdown(): String = buildString {
     append("**").append(lensLabel).append("** (camera id `").append(cameraId).append("`) — ")
-    appendLine(if (honoured) "all keys honoured" else "**not honoured**")
+    append(if (honoured) "all keys honoured" else "**not honoured**")
+    appendLine(framesObserved?.let { " over $it capture results" } ?: "")
     appendLine()
     appendLine("| Key | Requested | Reported | Deviation | Verdict |")
     appendLine("|---|---|---|---|---|")
@@ -162,4 +169,41 @@ private fun formatDeviation(fraction: Double): String {
     val ppm = fraction * 1_000_000
     val rounded = (if (ppm < 0) -1 else 1) * (kotlin.math.abs(ppm) + 0.5).toLong()
     return "${if (rounded > 0) "+" else ""}$rounded ppm"
+}
+
+/**
+ * Accumulates capture results into one report, worst frame wins.
+ *
+ * #20 asks whether the keys are honoured *throughout* a 10-minute take, and the
+ * cheap version of this measurement — read the last frame — would pass a device
+ * that locks the shutter for a second and then quietly re-enables AE. Keeping
+ * the worst verdict per key makes the report monotonic: once a key has
+ * misbehaved, no later frame can clear it.
+ *
+ * Pure, so this rule is tested on the host; [ManualSession] only feeds it.
+ * Not thread-safe: the caller owns the lock, because the capture callback
+ * arrives on a camera thread.
+ */
+class EchoAccumulator {
+    private val worst = mutableMapOf<ManualKey, KeyEcho>()
+
+    var frames: Int = 0
+        private set
+
+    fun record(echoes: List<KeyEcho>) {
+        frames++
+        for (echo in echoes) {
+            val seen = worst[echo.key]
+            // EchoVerdict is declared best-first, so "greater" means "worse".
+            if (seen == null || echo.verdict > seen.verdict) worst[echo.key] = echo
+        }
+    }
+
+    /** Keys are reported in declaration order so two runs are diffable. */
+    fun report(cameraId: String, lensLabel: String): LensEchoReport = LensEchoReport(
+        cameraId = cameraId,
+        lensLabel = lensLabel,
+        echoes = ManualKey.entries.mapNotNull { worst[it] },
+        framesObserved = frames,
+    )
 }

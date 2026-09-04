@@ -123,3 +123,78 @@ class ManualKeyEchoTest {
         KeyEcho(ManualKey.LENS_OPTICAL_STABILIZATION_MODE, off, off),
     )
 }
+
+/**
+ * The worst-frame-wins rule (#20 asks for keys honoured *throughout* a take).
+ * This is the half of [ManualSession] that does not need a camera.
+ */
+class EchoAccumulatorTest {
+
+    private val oneFiftieth = 20_000_000L
+    private val thirtyFps = 33_333_333L
+    private val off = 0L
+
+    // The failure this rule exists for: a device that locks the shutter, then
+    // hands exposure back to AE a few seconds in. A last-frame check passes it.
+    @Test
+    fun `a key that misbehaved once cannot be cleared by later good frames`() {
+        val accumulator = EchoAccumulator()
+        accumulator.record(honoured())
+        accumulator.record(honoured().map {
+            if (it.key == ManualKey.CONTROL_AE_MODE) KeyEcho(it.key, off, 1L) else it
+        })
+        repeat(500) { accumulator.record(honoured()) }
+
+        val report = accumulator.report("0", "Rear main (wide)")
+        assertFalse(report.honoured)
+        assertEquals(listOf(ManualKey.CONTROL_AE_MODE), report.failures.map { it.key })
+        assertEquals(502, report.framesObserved)
+    }
+
+    // Monotonic in the other direction too: a worse verdict replaces a better one
+    // whenever it arrives, not only on the first frame.
+    @Test
+    fun `the worst verdict per key survives, whenever it arrives`() {
+        val accumulator = EchoAccumulator()
+        accumulator.record(honoured()) // EXACT
+        accumulator.record(honoured().map {
+            // Inside tolerance: worse than EXACT, still a pass.
+            if (it.key == ManualKey.SENSOR_EXPOSURE_TIME) {
+                KeyEcho(it.key, oneFiftieth, oneFiftieth + 150_000L)
+            } else {
+                it
+            }
+        })
+
+        val report = accumulator.report("0", "Rear main (wide)")
+        assertTrue(report.honoured)
+        val exposure = report.echoes.single { it.key == ManualKey.SENSOR_EXPOSURE_TIME }
+        assertEquals(EchoVerdict.QUANTISED, exposure.verdict)
+    }
+
+    // A run with no frames must not read as a pass: every key is simply unmeasured.
+    @Test
+    fun `an empty run reports every key as not measured`() {
+        val report = EchoAccumulator().report("0", "Rear main (wide)")
+        assertFalse(report.honoured)
+        assertEquals(0, report.framesObserved)
+        assertEquals(ManualKey.entries, report.missingKeys)
+        assertTrue(report.markdown().contains("NOT MEASURED"))
+    }
+
+    @Test
+    fun `the frame count reaches the report`() {
+        val accumulator = EchoAccumulator()
+        repeat(18_000) { accumulator.record(honoured()) } // ten minutes at 30 fps
+        assertTrue(accumulator.report("0", "Rear main (wide)").markdown().contains("over 18000 capture results"))
+    }
+
+    private fun honoured(): List<KeyEcho> = listOf(
+        KeyEcho(ManualKey.SENSOR_EXPOSURE_TIME, oneFiftieth, oneFiftieth),
+        KeyEcho(ManualKey.SENSOR_SENSITIVITY, 100L, 100L),
+        KeyEcho(ManualKey.SENSOR_FRAME_DURATION, thirtyFps, thirtyFps),
+        KeyEcho(ManualKey.CONTROL_AE_MODE, off, off),
+        KeyEcho(ManualKey.CONTROL_AWB_MODE, off, off),
+        KeyEcho(ManualKey.LENS_OPTICAL_STABILIZATION_MODE, off, off),
+    )
+}
