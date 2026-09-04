@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -78,9 +79,28 @@ import java.io.File
  * out keeps the thing being measured to one variable.
  */
 
-/** 1/50 s at ISO 100, 30 fps: the 50 Hz default from PRD 6.2's ladder. */
-private val DEFAULT_REQUEST = ManualControls.Request(
-    exposureTimeNs = 20_000_000L,
+/**
+ * The shutters worth pointing at a lamp, and what each one proves.
+ *
+ * A mains-driven light ripples at twice the grid frequency, so on a 50 Hz grid
+ * the light pulses every 10 ms. An exposure covering a whole number of pulses
+ * integrates them away; a fractional one leaves the residue that becomes a
+ * rolling band.
+ *
+ * That makes [ONE_SIXTIETH] the positive control the flicker test has been
+ * missing (#20): if 1/50 and 1/100 are clean *and* 1/60 bands, the shutter is
+ * doing the work. A lamp that simply does not ripple — many LED drivers are DC —
+ * cannot produce that pattern, which is why one clean run at 1/50 proved
+ * nothing on its own.
+ */
+private enum class Shutter(val label: String, val exposureNs: Long, val expectation: String) {
+    ONE_FIFTIETH("1/50", 20_000_000L, "2.0 pulses at 50 Hz — expect clean"),
+    ONE_SIXTIETH("1/60", 16_666_667L, "1.67 pulses at 50 Hz — expect BANDS"),
+    ONE_HUNDREDTH("1/100", 10_000_000L, "1.0 pulse at 50 Hz — expect clean"),
+}
+
+private fun requestFor(shutter: Shutter) = ManualControls.Request(
+    exposureTimeNs = shutter.exposureNs,
     sensitivity = 100,
     frameDurationNs = 33_333_333L,
 )
@@ -93,9 +113,14 @@ fun InteropEchoScreen(modifier: Modifier = Modifier) {
         ActivityResultContracts.RequestPermission(),
     ) { granted = it }
 
+    // Changing the shutter re-creates the session: the keys are applied to the
+    // use-case builder at bind time, so a new value means a new bind. `key`
+    // disposes the old tap and its EGL thread with it.
+    var shutter by remember { mutableStateOf(Shutter.ONE_FIFTIETH) }
+
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (granted) {
-            EchoRunner()
+            key(shutter) { EchoRunner(shutter) { shutter = it } }
         } else {
             Column(
                 modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -112,7 +137,7 @@ fun InteropEchoScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun EchoRunner() {
+private fun EchoRunner(shutter: Shutter, onShutterChange: (Shutter) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -174,7 +199,7 @@ private fun EchoRunner() {
             kotlinx.coroutines.delay(1_000)
         }
     }
-    val session = remember { ManualSession(DEFAULT_REQUEST, tap = tap) }
+    val session = remember { ManualSession(requestFor(shutter), tap = tap) }
 
     // Both previous soaks ended at the device's 120 s screen timeout, because the
     // camera is bound to this activity's lifecycle. Shipping capture runs in a
@@ -355,6 +380,20 @@ private fun EchoRunner() {
                 fontFamily = FontFamily.Monospace,
             )
         }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (option in Shutter.entries) {
+                if (option == shutter) {
+                    Button(onClick = {}) { Text(option.label) }
+                } else {
+                    OutlinedButton(onClick = { onShutterChange(option) }) { Text(option.label) }
+                }
+            }
+        }
+        Text(
+            "${shutter.label}: ${shutter.expectation}",
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
