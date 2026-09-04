@@ -1,6 +1,6 @@
 # ADR-0018: Take metering and preview frames from a `CameraEffect` tap on the preview stream, not from `ImageAnalysis`
 
-**Status:** Proposed
+**Status:** Accepted (2026-09-04, Davide)
 **Date:** 2026-09-04
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.1, 6.3, 6.5, 6.8, 6.10
