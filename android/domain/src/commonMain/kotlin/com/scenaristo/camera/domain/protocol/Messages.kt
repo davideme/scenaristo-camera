@@ -149,15 +149,50 @@ enum class CommandName {
  * The subset of [CaptureSettings] a browser may change, all optional so a client
  * can send one field without restating the rest.
  *
- * Absent from this list on purpose: `shutterHz` and `iso`. Those are outputs of
- * the exposure loop (ADR-0005), not inputs — PRD 6.3 has the app choose them, and
- * letting a browser set them directly would make the flicker-safe ladder
- * advisory. Focus is absent for the opposite reason: it is settable, but through
- * [CommandName.FOCUS_SET], because it obeys none of the rules a patch does.
+ * `shutterHz` and `iso` are absent, and stay absent: they are outputs of the
+ * exposure loop (ADR-0005), not inputs. What PRD 6.3 does offer is a *lock* on
+ * each, which is a different thing — it says "stop choosing" rather than "choose
+ * this", and it is the only way to set either. Focus is absent for the opposite
+ * reason: it is settable, but through [CommandName.FOCUS_SET], because it obeys
+ * none of the rules a patch does.
+ *
+ * Every lock is tri-state on the wire and the third state is why they are boxed:
+ * absent means "leave it as it is", a value means "lock here", and
+ * [SettingsPatch.CLEAR_LOCK] means "go back to automatic". A plain nullable
+ * cannot say the last one, because null is already how a patch says nothing.
  */
 @Serializable
 data class SettingsPatch(
     val grid: GridFrequency? = null,
     val whiteBalanceKelvin: Int? = null,
     val lensId: String? = null,
-)
+    /**
+     * Lock ISO to this value, [CLEAR_LOCK] to return to the loop
+     * (PRD 6.3: "ISO manual lock available (phone and web)").
+     */
+    val isoLock: Int? = null,
+    /**
+     * Lock the shutter to this rung, as reciprocal seconds, or [CLEAR_LOCK].
+     *
+     * Only a rung of the grid's own ladder is accepted — 50 or 100 on a 50 Hz
+     * grid, 60 or 120 on 60 Hz. Anything else bands, which is the one thing the
+     * product exists to prevent, so it is refused rather than clamped for the
+     * same reason the Kelvin range is: a value the phone silently repaired is a
+     * bug the client never learns it has.
+     *
+     * A locked shutter also disables ADR-0005's flicker-safe step, which PRD 6.3
+     * states directly.
+     */
+    val shutterLock: Int? = null,
+) {
+    companion object {
+        /**
+         * "Go back to automatic", for either lock.
+         *
+         * Zero rather than a sentinel string because both fields are integers on
+         * the wire and no lock could ever legitimately be zero — ISO 0 is not a
+         * sensitivity and 1/0 s is not an exposure.
+         */
+        const val CLEAR_LOCK: Int = 0
+    }
+}
