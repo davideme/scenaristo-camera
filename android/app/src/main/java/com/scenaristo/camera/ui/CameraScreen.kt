@@ -67,6 +67,8 @@ fun CameraScreen(
     lensMm: Int?,
     guidanceDismissed: Boolean,
     onDismissGuidance: () -> Unit,
+    interrupted: String?,
+    onDismissInterrupted: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val recording = state.recording.recording
@@ -105,6 +107,7 @@ fun CameraScreen(
             // UI-5: warnings sit below the top strip and never over the subject.
             Warnings(state.warnings)
             DistanceGuidance(lensMm = lensMm, onDismiss = onDismissGuidance, dismissed = guidanceDismissed)
+            InterruptedNotice(path = interrupted, onDismiss = onDismissInterrupted)
             Spacer(Modifier.weight(1f))
             BottomStrip(
                 recording = recording,
@@ -245,6 +248,47 @@ private fun DistanceGuidance(lensMm: Int?, dismissed: Boolean, onDismiss: () -> 
         // UI-12's wording, with the lens named so it reads as a fact about the
         // hardware rather than an instruction from nowhere.
         Text("Wide lens (${lensMm} mm) — sit 1.5–2 m back", color = Tokens.Dim, fontSize = 12.sp)
+        Spacer(Modifier.width(10.dp))
+        Text("Dismiss", color = Tokens.Dimmer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+/**
+ * "A recording was interrupted, and here is where it is" (PRD 6.7, #17).
+ *
+ * Not a warning either, for the same reason the distance guidance is not: there
+ * is nothing to fix. It is a fact about a take that already happened, and the
+ * only action is to go and find the file — so it is dismissible and drawn in the
+ * reported style rather than in the orange UI-5 reserves for now.
+ *
+ * It names the file. "A recording was interrupted" without a path is an anxiety
+ * rather than a message; the whole value is being able to go and look.
+ */
+@Composable
+private fun InterruptedNotice(path: String?, onDismiss: () -> Unit) {
+    if (path == null) return
+    Row(
+        modifier = Modifier
+            .padding(top = 10.dp)
+            .background(Tokens.Panel.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
+            .border(1.dp, Tokens.Dimmer, RoundedCornerShape(6.dp))
+            .clickable(onClick = onDismiss)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text(
+                "Last recording was interrupted — the file is saved",
+                color = Tokens.Dim,
+                fontSize = 12.sp,
+            )
+            Text(
+                path.substringAfterLast('/'),
+                color = Tokens.Dimmer,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+            )
+        }
         Spacer(Modifier.width(10.dp))
         Text("Dismiss", color = Tokens.Dimmer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }

@@ -119,6 +119,15 @@ class CaptureService : LifecycleService() {
     private val _lensMm = MutableStateFlow<Int?>(null)
     val lensMm: StateFlow<Int?> = _lensMm.asStateFlow()
 
+    /**
+     * The take that was interrupted, if the last run ended badly (#17).
+     *
+     * Read once at start-up and never set again, so the phone screen can say so
+     * and the user can go and find the file.
+     */
+    private val _interrupted = MutableStateFlow<String?>(null)
+    val interrupted: StateFlow<String?> = _interrupted.asStateFlow()
+
     /** #20: the per-lens key echo, once the sweep has run. */
     private val _lensSweep = MutableStateFlow<String?>(null)
     val lensSweep: StateFlow<String?> = _lensSweep.asStateFlow()
@@ -226,6 +235,9 @@ class CaptureService : LifecycleService() {
         camera = ManualSession(DEFAULT_REQUEST, tap = tap, onCaptureResult = ::onCaptureResult)
         server = ControlServer(session = session, frames = PreviewFrames { jpeg.latest() })
 
+        // Before anything can write a new marker, and before the camera binds:
+        // whatever is on disk now is a claim about the *previous* run.
+        _interrupted.value = takeInterruptedTakeIfAny()
         followDisplayRotation()
         lifecycleScope.launch { bindCamera() }
         server.start()
@@ -566,6 +578,12 @@ class CaptureService : LifecycleService() {
 
     private fun startRecording() {
         val file = File(getExternalFilesDir(null), "take-${System.currentTimeMillis()}.mp4")
+        // PRD 6.7 / #17: the app owes the user a word on the next launch if this
+        // take does not finish. Written before the recorder starts, because a
+        // crash between these two lines should over-report rather than
+        // under-report -- a take that never began is a confusing message, and a
+        // take that was lost silently is a lost take.
+        markerFile().writeText(file.absolutePath)
         val withAudio = hasAudioPermission()
         // The permission can arrive after the service started, so the microphone
         // type is claimed here rather than only in onCreate.
@@ -578,6 +596,11 @@ class CaptureService : LifecycleService() {
                 if (event is VideoRecordEvent.Finalize) {
                     publishAudio(null)
                     recording = null
+                    // Finalize is the recorder saying the file is closed and
+                    // complete, however the take ended -- stop, storage full, or
+                    // the source going away. All of those are endings the app
+                    // saw; only the ones it did not see leave the marker behind.
+                    markerFile().delete()
                     // A recording can end on its own -- storage, a file size cap,
                     // the source going away. The state document has to follow the
                     // truth rather than the request, or the browser shows a take
@@ -588,6 +611,37 @@ class CaptureService : LifecycleService() {
                 }
             }
         acquireLocks()
+    }
+
+    /**
+     * The breadcrumb that survives a crash (#17, PRD 6.7).
+     *
+     * A file rather than a preference because the process may be killed between
+     * any two instructions, and a file that exists is the only claim that
+     * survives having no chance to tidy up. Its contents are the take's path, so
+     * the message can say *where* rather than only *that*.
+     */
+    private fun markerFile() = File(filesDir, "recording-in-progress")
+
+    /**
+     * Checks, once, whether the last take ended without the app noticing.
+     *
+     * Called at service start, before anything can write a new marker. A marker
+     * still on disk means the process died between `startRecording` and the
+     * recorder's `Finalize` -- a force-kill, a battery death, or the system
+     * reclaiming us -- so the file it names was never closed by us.
+     *
+     * The marker is cleared as soon as it is read. The user is told once; a
+     * notice that reappeared on every launch would be a bug of its own.
+     */
+    private fun takeInterruptedTakeIfAny(): String? {
+        val marker = markerFile()
+        if (!marker.exists()) return null
+        val path = runCatching { marker.readText().trim() }.getOrNull()
+        marker.delete()
+        // A path that no longer names a file is worth nothing to the user, so it
+        // is treated as no notice rather than as a broken one.
+        return path?.takeIf { it.isNotBlank() && File(it).exists() }
     }
 
     private fun stopRecording() {

@@ -102,6 +102,8 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
         // acknowledgement, not something a remote should inherit.
         var guidanceDismissed by remember { mutableStateOf(false) }
         val lensMm by (service.lensMm.collectAsState())
+        val interrupted by (service.interrupted.collectAsState())
+        var interruptedDismissed by remember { mutableStateOf(false) }
 
         CameraScreen(
             surfaceRequest = surfaceRequest,
@@ -113,6 +115,8 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
             lensMm = lensMm,
             guidanceDismissed = guidanceDismissed,
             onDismissGuidance = { guidanceDismissed = true },
+            interrupted = interrupted.takeUnless { interruptedDismissed },
+            onDismissInterrupted = { interruptedDismissed = true },
         )
 
         if (showLight) {
