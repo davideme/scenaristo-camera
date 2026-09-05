@@ -53,7 +53,7 @@ class ProtocolFixtureTest {
         assertTrue(fixtures.isDirectory, "fixtures not found at ${fixtures.canonicalPath}")
     }
 
-    // ADR-0007: the first server message is {type:"hello", protocol:1, app, platform}.
+    // ADR-0007: the first server message is {type:"hello", protocol:2, app, platform}.
     @Test
     fun `ADR-0007 - hello carries the protocol version and platform`() {
         val hello = server("hello.json") as Hello
