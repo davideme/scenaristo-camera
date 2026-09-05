@@ -41,6 +41,7 @@ import com.scenaristo.camera.MainActivity
 import com.scenaristo.camera.R
 import com.scenaristo.camera.capture.CodecReport
 import com.scenaristo.camera.capture.ExposureController
+import com.scenaristo.camera.capture.FocusControl
 import com.scenaristo.camera.capture.LensSweepRunner
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
@@ -52,6 +53,8 @@ import com.scenaristo.camera.domain.protocol.CaptureSettings
 import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
 import com.scenaristo.camera.domain.protocol.DeviceStatus
+import com.scenaristo.camera.domain.protocol.Focus
+import com.scenaristo.camera.domain.protocol.FocusMode
 import com.scenaristo.camera.domain.protocol.RecordingState
 import com.scenaristo.camera.domain.protocol.SettingsPatch
 import com.scenaristo.camera.domain.protocol.Session
@@ -152,6 +155,10 @@ class CaptureService : LifecycleService() {
 
     /** Last white balance handed to the sensor, so the tick only pushes changes. */
     private var appliedKelvin: Int? = null
+
+    /** PRD 6.1's focus, alive only once a camera is bound. */
+    @Volatile
+    private var focusControl: FocusControl? = null
 
     /** ADR-0005's loop, alive only once a camera is bound. */
     @Volatile
@@ -388,6 +395,11 @@ class CaptureService : LifecycleService() {
             awbMode = ManualControls.awbModeFor(session.state.settings.whiteBalanceKelvin),
         )
         exposure = controller
+        // The recording use case, not the preview: Focus.x/y are normalised in
+        // the *recording* frame (PRD 6.8), which is the whole reason one pair of
+        // numbers means the same place on the phone, in the browser and in the
+        // file.
+        focusControl = FocusControl(bound.cameraControl, camera.videoCapture)
         controller.start()
         Log.i(EXPOSURE_TAG, "exposure loop running, ISO ${isoRange.min}..${isoRange.max}")
         lifecycleScope.launch { publishExposure(controller) }
@@ -457,6 +469,7 @@ class CaptureService : LifecycleService() {
             // command handler, because ADR-0007 keeps that handler pure and
             // platform-free -- the camera work happens here, one step behind,
             // exactly as it does for recording.
+            focusControl?.apply(session.state.settings.focus)
             val kelvin = session.state.settings.whiteBalanceKelvin
             if (kelvin != appliedKelvin) {
                 appliedKelvin = kelvin
@@ -514,6 +527,46 @@ class CaptureService : LifecycleService() {
                     id = "phone-wb-" + System.currentTimeMillis(),
                     name = CommandName.SETTINGS_SET,
                     args = SettingsPatch(whiteBalanceKelvin = kelvin),
+                ),
+            )
+            _state.value = session.state
+        }
+    }
+
+    /**
+     * A tap on the preview (PRD 6.1 "tap-to-focus and lock on both phone and
+     * web", PRD 6.8).
+     *
+     * [x] and [y] are normalised in the frame. Routed through the server's
+     * command path like the record button and the white balance presets, so the
+     * phone stays one more client of ADR-0007's single writer — which is what
+     * makes a tap here and a tap in the browser reach the lens the same way.
+     *
+     * Unlike the settings, this is allowed while recording: refocusing mid-take
+     * is ordinary, and `Session.focus` deliberately does not take the recording
+     * guard.
+     */
+    fun focusAt(x: Double, y: Double) {
+        lifecycleScope.launch {
+            server.applyLocal(
+                Command(
+                    id = "phone-af-" + System.currentTimeMillis(),
+                    name = CommandName.FOCUS_SET,
+                    focus = Focus(mode = FocusMode.LOCKED, x = x, y = y),
+                ),
+            )
+            _state.value = session.state
+        }
+    }
+
+    /** Back to PRD 6.1's default: continuous, face priority. */
+    fun clearFocus() {
+        lifecycleScope.launch {
+            server.applyLocal(
+                Command(
+                    id = "phone-af-clear-" + System.currentTimeMillis(),
+                    name = CommandName.FOCUS_SET,
+                    focus = Focus(),
                 ),
             )
             _state.value = session.state
