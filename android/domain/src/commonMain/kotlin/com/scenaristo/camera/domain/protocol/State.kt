@@ -62,6 +62,17 @@ data class CaptureSettings(
     /** Camera id of the active lens, as reported by the capability probe (ADR-0011). */
     val lensId: String,
     /**
+     * Whether takes are saved to the shared gallery instead of the app's own
+     * folder (PRD 6.7, ADR-0020).
+     *
+     * False by default, which is the quieter neighbour: a take lands in the
+     * app's directory and nothing else on the phone sees it. True puts it in
+     * `Movies/Scenaristo Camera/`, where the gallery and a laptop over MTP find
+     * it — at the cost of writing multi-gigabyte files into shared storage that
+     * the user has to clean up themselves.
+     */
+    val saveToGallery: Boolean = false,
+    /**
      * Where the camera is focusing. Defaulted so that a snapshot written before
      * focus existed still decodes, which is the compatibility rule ADR-0007 sets
      * for added fields.

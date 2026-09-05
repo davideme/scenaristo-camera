@@ -20,20 +20,32 @@ Point 3 makes this a defect rather than a design question. What is still open is
 
 ## Decision
 
-We will record into **MediaStore's video collection under `Movies/Scenaristo Camera/`**, using CameraX's `MediaStoreOutputOptions` in place of `FileOutputOptions`.
+**Revised 2026-09-05 by Davide, before acceptance.** The first draft of this ADR made MediaStore the only destination. It is now the opt-in, and the default is the app's own folder.
 
-Consequences that follow from it:
+We will:
 
-- The take appears in the gallery and in file pickers as soon as it is finalised, and survives uninstall.
-- No storage permission is required. Since Android 10, an app inserting its own rows into MediaStore needs none, and the minimum here is API 34 (ADR-0012).
-- The recorder's output is a **content URI**, not a filesystem path. Anything that previously assumed a `File` — the interrupted-take marker of #17 is the only caller today — carries the display name instead, which is what a user is told anyway.
-- Free-space estimation keeps using `getExternalFilesDir` for its `StatFs` call. It is measuring the volume, not the directory, and the volume is the same one.
+1. **Record into the app's external files directory by default** — `Android/data/<package>/files/Movies/`, via `FileOutputOptions`. This is what an ordinary app does with its own files: nothing else on the phone sees them, the gallery does not index them, and no permission is involved.
+2. **Offer the shared gallery as a setting.** `saveToGallery` on `CaptureSettings` and `SettingsPatch` — additive, so no protocol break — switches the recorder to `MediaStoreOutputOptions` under `Movies/Scenaristo Camera/`. It persists like the other settings.
 
-**Movies rather than DCIM** — confirmed by Davide on 2026-09-05. The reasoning that was offered and accepted:
+The reason the default flipped: **filling a creator's shared storage with multi-gigabyte files is not a choice to make on their behalf.** A take is 250 MB a minute (#21). An app that quietly writes that into `Movies/` on every launch is a bad neighbour, and the user is the only one who can clean it up. Writing to our own folder is the behaviour a user can predict from every other app on the phone.
 
-- `DCIM/Camera` is where a phone's own camera app puts things, and where gallery apps expect *captures*. Putting takes there mixes deliberate multi-gigabyte work product in with someone's photo roll, and a 2.9 GB file is not a snapshot.
-- `Movies/` is the platform's own home for produced video, is what `MediaStore.Video` defaults to, and keeps a named subdirectory that a creator can point an editor or a sync tool at.
-- The PRD permits both. This picks the one that treats a take as a deliverable rather than a memory.
+What that trade costs, stated plainly:
+
+- **Takes in the app folder are deleted when the app is uninstalled.** That is the real price, and it is why the option exists.
+- They are not visible to the gallery or to a laptop over MTP without the user turning the setting on or moving the file themselves.
+
+**`Movies/Scenaristo Camera/` rather than `DCIM/Camera/`** for the opt-in path — confirmed by Davide on 2026-09-05:
+
+- `DCIM/Camera` is where a phone's own camera app puts things, and where gallery apps expect *captures*. A 2.9 GB take is not a snapshot.
+- `Movies/` is the platform's own home for produced video, is what `MediaStore.Video` defaults to, and keeps a named subdirectory a creator can point an editor or sync tool at.
+
+Consequences that follow either way:
+
+- No storage permission is required on either path. Since Android 10 an app inserting its own MediaStore rows needs none, and the minimum here is API 34 (ADR-0012).
+- The interrupted-take marker of #17 carries the **display name** rather than a path, which works for both destinations — and is what the user is told anyway.
+- Free-space estimation keeps using `getExternalFilesDir` for its `StatFs` call. It measures the volume, and both destinations are on it.
+
+**This amends PRD 6.7's acceptance criterion**, which reads *"The partial file appears in the camera roll or Movies folder with the normal filename."* By default it now appears in the app's own folder; it appears in `Movies/` when the user has asked for that. The criterion should be amended to say so, or restated as "in a location the app names on the next launch", which is what #17 actually delivers.
 
 ## Options Considered
 

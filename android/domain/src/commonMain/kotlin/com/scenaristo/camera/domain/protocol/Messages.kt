@@ -166,6 +166,8 @@ data class SettingsPatch(
     val grid: GridFrequency? = null,
     val whiteBalanceKelvin: Int? = null,
     val lensId: String? = null,
+    /** Save takes to the shared gallery rather than the app's folder (PRD 6.7). */
+    val saveToGallery: Boolean? = null,
     /**
      * Lock ISO to this value, [CLEAR_LOCK] to return to the loop
      * (PRD 6.3: "ISO manual lock available (phone and web)").

@@ -36,7 +36,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0017](0017-phase-0-verification-matrix.md) | Phase 0 runs on one reference device (Pixel 10) with a MacBook browser; second phone and iOS Safari deferred | Accepted | 9, 8-Q5, 6.8, 6.10 |
 | [0018](0018-preview-tap-for-metering-and-preview-frames.md) | Metering and preview frames come from a `CameraEffect` tap on the preview stream; no `ImageAnalysis` alongside UHD recording | Accepted | 6.1, 6.3, 6.5, 6.8, 6.10 |
 | [0019](0019-stop-the-service-when-idle.md) | Stop the capture service when the user leaves the app and neither a recording nor a remote is using it; explicit stop action | Proposed | 6.8, 6.9 |
-| [0020](0020-record-into-mediastore.md) | Record into MediaStore `Movies/Scenaristo Camera/` rather than the app's private directory; takes become visible and survive uninstall | Proposed | 6.7, 3 |
+| [0020](0020-record-into-mediastore.md) | Takes go to the app's own folder by default; the shared gallery (`Movies/Scenaristo Camera/`) is a setting | Proposed | 6.7, 3 |
 | [0021](0021-remove-too-bright-and-bump-the-protocol.md) | Remove the unused `TOO_BRIGHT` warning; `PROTOCOL_VERSION` becomes 2 | Proposed | 6.3, 6.8 |
 
 ## Challenges to positions stated in the PRD

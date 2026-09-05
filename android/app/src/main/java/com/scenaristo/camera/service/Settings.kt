@@ -46,6 +46,18 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_KELVIN, DEFAULT_KELVIN)
         set(value) = prefs.edit().putInt(KEY_KELVIN, value).apply()
 
+    /**
+     * Whether takes go to the shared gallery (PRD 6.7, ADR-0020).
+     *
+     * Off by default (decision 2026-09-05, Davide): the app writes into its own
+     * folder like any other app, and a creator who wants their takes in the
+     * gallery asks for it. Filling someone's photo roll with multi-gigabyte
+     * files is not a default to choose on their behalf.
+     */
+    var saveToGallery: Boolean
+        get() = prefs.getBoolean(KEY_GALLERY, false)
+        set(value) = prefs.edit().putBoolean(KEY_GALLERY, value).apply()
+
     var lensId: String
         get() = prefs.getString(KEY_LENS, DEFAULT_LENS) ?: DEFAULT_LENS
         set(value) = prefs.edit().putString(KEY_LENS, value).apply()
@@ -84,6 +96,7 @@ class Settings(context: Context) {
         const val KEY_GRID = "grid-override"
         const val KEY_KELVIN = "white-balance-kelvin"
         const val KEY_LENS = "lens-id"
+        const val KEY_GALLERY = "save-to-gallery"
 
         /** PRD 6.1's default camera, as the platform's own id for it. */
         const val DEFAULT_LENS = "0"

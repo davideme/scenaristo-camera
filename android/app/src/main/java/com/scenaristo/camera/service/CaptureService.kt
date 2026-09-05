@@ -23,6 +23,8 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.lifecycle.awaitInstance
 import android.content.ContentValues
 import android.provider.MediaStore
+import android.os.Environment
+import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.PendingRecording
 import androidx.camera.video.Recording
@@ -171,6 +173,9 @@ class CaptureService : LifecycleService() {
     /** Last grid and lens written to storage, for the same reason. */
     private var appliedGrid: GridFrequency? = null
     private var appliedLens: String? = null
+
+    /** Last gallery choice written to storage (PRD 6.7). */
+    private var appliedGallery: Boolean? = null
 
     /** ADR-0005's loop, alive only once a camera is bound. */
     @Volatile
@@ -502,6 +507,11 @@ class CaptureService : LifecycleService() {
                 settings.gridOverride = grid
                 exposure?.onGridChanged(grid, System.currentTimeMillis())
             }
+            val gallery = session.state.settings.saveToGallery
+            if (gallery != appliedGallery) {
+                appliedGallery = gallery
+                settings.saveToGallery = gallery
+            }
             val lens = session.state.settings.lensId
             if (lens != appliedLens) {
                 appliedLens = lens
@@ -633,7 +643,11 @@ class CaptureService : LifecycleService() {
         // The permission can arrive after the service started, so the microphone
         // type is claimed here rather than only in onCreate.
         if (withAudio) startForeground(NOTIFICATION_ID, notification(describe()), foregroundTypes())
-        val pending = camera.recorder.prepareRecording(this, mediaStoreOutput(name))
+        val pending = if (session.state.settings.saveToGallery) {
+            camera.recorder.prepareRecording(this, mediaStoreOutput(name))
+        } else {
+            camera.recorder.prepareRecording(this, appFolderOutput(name))
+        }
         recording = pending
             .withAudioIfPermitted()
             .start(ContextCompat.getMainExecutor(this)) { event ->
@@ -659,16 +673,31 @@ class CaptureService : LifecycleService() {
     }
 
     /**
-     * Where a take goes (ADR-0020, PRD 6.7 and section 3).
+     * The default: the app's own external directory (decision 2026-09-05,
+     * Davide).
      *
-     * MediaStore rather than the app's private directory, so the file is visible
-     * to the gallery and to a laptop over MTP the moment it is finalised, and so
-     * it survives the app being uninstalled -- `Android/data/<package>` does not.
+     * `Android/data/<package>/files/Movies/`, which is where an ordinary app
+     * keeps its own files. Nothing else on the phone sees it, the gallery does
+     * not index it, and it needs no permission. It is also deleted when the app
+     * is uninstalled, which is the trade being made: a quiet neighbour that does
+     * not fill someone's photo roll with multi-gigabyte files, at the cost of
+     * takes that do not outlive the app unless the user moves them.
+     */
+    private fun appFolderOutput(name: String): FileOutputOptions {
+        val dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: filesDir
+        return FileOutputOptions.Builder(File(dir, "$name.mp4")).build()
+    }
+
+    /**
+     * The opt-in: the shared gallery (ADR-0020, PRD 6.7 and section 3).
+     *
+     * Visible to the gallery and to a laptop over MTP the moment it is
+     * finalised, and it survives the app being uninstalled. Chosen by the user
+     * rather than for them, because it writes large files into shared storage
+     * that only they can clean up.
      *
      * `Movies/Scenaristo Camera/` rather than `DCIM/Camera/`: a take is work
-     * product, not a snapshot, and a creator's photo roll should not fill with
-     * multi-gigabyte files. The PRD permits either; ADR-0020 is Proposed on this
-     * point and it is one constant to change.
+     * product, not a snapshot (Davide, 2026-09-05).
      *
      * No storage permission is involved. Since Android 10 an app inserting its
      * own MediaStore rows needs none, and the floor here is API 34 (ADR-0012).
@@ -711,9 +740,10 @@ class CaptureService : LifecycleService() {
         if (!marker.exists()) return null
         val name = runCatching { marker.readText().trim() }.getOrNull()
         marker.delete()
-        // Since ADR-0020 the take is a MediaStore row rather than a path, so the
-        // marker carries the display name -- which is the part the user is shown
-        // anyway, and the part they will search for in a gallery.
+        // The marker carries the display name rather than a path, because the
+        // take may be a file in the app's folder or a MediaStore row depending
+        // on the setting (ADR-0020) -- and the name is what the user is shown
+        // and what they will search for either way.
         return name?.takeIf { it.isNotBlank() }?.let { "$it.mp4" }
     }
 
@@ -937,6 +967,7 @@ class CaptureService : LifecycleService() {
             iso = DEFAULT_REQUEST.sensitivity,
             whiteBalanceKelvin = settings.whiteBalanceKelvin,
             lensId = settings.lensId,
+            saveToGallery = settings.saveToGallery,
         ),
         recording = RecordingState(recording = false),
         device = DeviceStatus(0, false, ThermalState.NOMINAL, 0),
