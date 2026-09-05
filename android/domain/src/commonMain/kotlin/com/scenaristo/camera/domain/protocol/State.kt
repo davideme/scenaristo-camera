@@ -172,9 +172,45 @@ enum class AudioInput {
     UNKNOWN,
 }
 
-/** Mirrors Android's `PowerManager` thermal status, named for a person (PRD 6.8). */
+/**
+ * Android's `PowerManager` thermal status, named for a person (PRD 6.8).
+ *
+ * **Only [SERIOUS] and [CRITICAL] are shown to anyone** (decision 2026-09-05,
+ * Davide): if the throttling neither impacts the experience nor drops frames,
+ * the interface says nothing about it. A phone getting warm while recording 4K
+ * is a phone doing its job, and telling a creator about it mid-take spends their
+ * attention on something they cannot act on and that is not hurting the take.
+ *
+ * Measured on the reference device (#23): a 10:42 take at 4K30 reaches Android's
+ * `MODERATE` after eight minutes and holds **29.990 fps, constant, with no
+ * dropped frames** throughout. That is the case this rule exists for.
+ *
+ * The four levels stay in the protocol even though two of them draw nothing,
+ * because a browser reading the state document is also the diagnostic view, and
+ * "warm but fine" is worth having in a bug report.
+ */
 @Serializable
-enum class ThermalState { NOMINAL, FAIR, SERIOUS, CRITICAL }
+enum class ThermalState {
+    /** Android `NONE` or `LIGHT`: not throttling, or throttling nobody can tell. */
+    NOMINAL,
+
+    /**
+     * Android `MODERATE`: throttling that the platform documents as not largely
+     * impacting the experience, and that #23 measured as costing no frames.
+     * **Displays nothing.**
+     */
+    FAIR,
+
+    /** Android `SEVERE`: the platform says the experience *is* impacted. Shown. */
+    SERIOUS,
+
+    /** Android `CRITICAL` and worse: the platform has done all it can. Shown. */
+    CRITICAL,
+    ;
+
+    /** Whether the interface says anything at all about this (PRD 6.8, UI-9). */
+    val worthShowing: Boolean get() = this == SERIOUS || this == CRITICAL
+}
 
 /** Things the app tells the user about the shot (PRD 6.3, 6.5). */
 @Serializable

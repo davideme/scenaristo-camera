@@ -128,6 +128,7 @@ Warnings are `State.warnings` (`TOO_DARK`, `TOO_BRIGHT`, `TOO_CLOSE_TO_LENS`, `O
 - [ ] A warning carries an icon; a control never does. This is what separates warning orange (`oklch(.74 .165 48)`) from control amber at a glance.
 - [ ] A warning does not restate a value that is visible in the readout strip within the same screen.
 - [ ] **A warning is a chip and nothing else** (decision 2026-09-04, Davide). No readout, status value or number is recoloured to signal one: the chip is the single channel, which is UI-2 applied to warnings. The one exception is the thermal dot, which names a four-level state rather than raising a warning.
+- [ ] **Thermal says nothing until it costs something** (decision 2026-09-05, Davide). The dot appears only for `SERIOUS` and `CRITICAL`. `NOMINAL` and `FAIR` draw nothing at all — not a green dot, not a grey one. #23 measured a 10:42 4K30 take reaching Android's `MODERATE` after eight minutes while holding 29.990 fps with no dropped frames: if the throttling neither impacts the experience nor costs frames, the interface has nothing to report, and a warm phone recording 4K is a phone doing its job.
 - [ ] Warnings appear below the top strip on the phone and above the preview in the browser, and never over the subject.
 - [ ] The flicker-safe shutter step of §6.3 is **not** a warning and is not drawn as one: it is a `Stepped` marker in the reported style on the shutter readout, and PRD §6.3 says explicitly that no warning is shown when the step succeeds.
 
