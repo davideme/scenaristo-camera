@@ -34,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scenaristo.camera.domain.exposure.shutterLadder
+import com.scenaristo.camera.domain.lens.LensAdvice
+import com.scenaristo.camera.domain.lens.adviceFor
 import com.scenaristo.camera.domain.protocol.AudioInput
 import com.scenaristo.camera.domain.protocol.AudioState
 import com.scenaristo.camera.domain.protocol.State as ProtocolState
@@ -62,6 +64,9 @@ fun CameraScreen(
     onToggleRecording: () -> Unit,
     onConnect: () -> Unit,
     onLight: () -> Unit,
+    lensMm: Int?,
+    guidanceDismissed: Boolean,
+    onDismissGuidance: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val recording = state.recording.recording
@@ -99,6 +104,7 @@ fun CameraScreen(
             TopStrip(state = state, codec = codec)
             // UI-5: warnings sit below the top strip and never over the subject.
             Warnings(state.warnings)
+            DistanceGuidance(lensMm = lensMm, onDismiss = onDismissGuidance, dismissed = guidanceDismissed)
             Spacer(Modifier.weight(1f))
             BottomStrip(
                 recording = recording,
@@ -208,6 +214,39 @@ private fun Warnings(warnings: List<Warning>) {
                 Text(copyFor(warning), color = Tokens.Text, fontSize = 12.sp)
             }
         }
+    }
+}
+
+/**
+ * PRD 6.5's distance guidance, which is **not** a warning (UI-5).
+ *
+ * A warning is about the moment and clears itself; this is about the lens and is
+ * true for the whole session, so it is drawn in the reported style rather than
+ * in warning orange, and it carries a dismiss instead of clearing on its own.
+ * Using the warning chip for it would spend the one channel UI-5 reserves for
+ * things the user must fix now on something they can only acknowledge.
+ *
+ * PRD 6.5 makes it dismissible per session and shown again on the next launch,
+ * which is why the dismissal lives in the screen and not in the state document.
+ */
+@Composable
+private fun DistanceGuidance(lensMm: Int?, dismissed: Boolean, onDismiss: () -> Unit) {
+    if (dismissed || lensMm == null) return
+    if (adviceFor(lensMm) != LensAdvice.WIDE_DISTANCE_GUIDANCE) return
+    Row(
+        modifier = Modifier
+            .padding(top = 10.dp)
+            .background(Tokens.Panel.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
+            .border(1.dp, Tokens.Dimmer, RoundedCornerShape(6.dp))
+            .clickable(onClick = onDismiss)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // UI-12's wording, with the lens named so it reads as a fact about the
+        // hardware rather than an instruction from nowhere.
+        Text("Wide lens (${lensMm} mm) — sit 1.5–2 m back", color = Tokens.Dim, fontSize = 12.sp)
+        Spacer(Modifier.width(10.dp))
+        Text("Dismiss", color = Tokens.Dimmer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 

@@ -18,6 +18,7 @@ import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.ExtendableBuilder
 import com.scenaristo.camera.domain.exposure.IsoRange
+import com.scenaristo.camera.domain.lens.equivalentFocalLengthMm
 import com.scenaristo.camera.domain.whitebalance.AwbApproximation
 import com.scenaristo.camera.domain.whitebalance.approximationFor
 
@@ -282,6 +283,32 @@ object ManualControls {
      */
     fun activePhysicalId(result: CaptureResult): String? =
         result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+
+    /**
+     * The active lens's focal length as a 35 mm equivalent (PRD 6.5), or null
+     * when the characteristics do not say.
+     *
+     * Both halves are needed and neither is the answer on its own: a phone lens
+     * is a number like 6.9 mm, which means nothing without the size of the
+     * sensor behind it. The arithmetic is in `:domain` so iOS inherits it; this
+     * only reads the two Camera2 keys.
+     *
+     * The **shortest** available focal length, when a lens reports several. A
+     * lens that reports a range is a zoom, and PRD 6.5's distortion question is
+     * about the widest thing it can do -- which is where a face is at risk.
+     */
+    fun equivalentFocalLength(cameraInfo: CameraInfo): Int? {
+        val info = Camera2CameraInfo.from(cameraInfo)
+        val focal = info.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+            ?.minOrNull() ?: return null
+        val size = info.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+            ?: return null
+        return equivalentFocalLengthMm(
+            focalLengthMm = focal.toDouble(),
+            sensorWidthMm = size.width.toDouble(),
+            sensorHeightMm = size.height.toDouble(),
+        ).takeIf { it > 0 }
+    }
 
     /**
      * Probes one lens for the flags ADR-0011 gates on.

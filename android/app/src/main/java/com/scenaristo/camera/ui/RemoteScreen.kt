@@ -97,6 +97,11 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
         val state by (service.state.collectAsState())
         var showConnect by remember { mutableStateOf(false) }
         var showLight by remember { mutableStateOf(false) }
+        // PRD 6.5: dismissible for the session, back on the next launch. Held
+        // here rather than in the state document because it is one person's
+        // acknowledgement, not something a remote should inherit.
+        var guidanceDismissed by remember { mutableStateOf(false) }
+        val lensMm by (service.lensMm.collectAsState())
 
         CameraScreen(
             surfaceRequest = surfaceRequest,
@@ -105,6 +110,9 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
             onToggleRecording = service::toggleRecording,
             onConnect = { showConnect = true },
             onLight = { showLight = true },
+            lensMm = lensMm,
+            guidanceDismissed = guidanceDismissed,
+            onDismissGuidance = { guidanceDismissed = true },
         )
 
         if (showLight) {
