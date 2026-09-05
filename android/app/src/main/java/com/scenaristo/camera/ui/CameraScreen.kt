@@ -299,7 +299,6 @@ private fun copyFor(warning: Warning): String = when (warning) {
     Warning.TOO_DARK -> "Add light — this ISO will look noisy"
     Warning.OVEREXPOSED_AT_BASE_ISO -> "Too much light — close the blinds or move the key light back"
     Warning.TOO_CLOSE_TO_LENS -> "Sit further back — 1.5–2 m for the wide lens"
-    Warning.TOO_BRIGHT -> "Too much light — close the blinds or move the key light back"
 }
 
 @Composable

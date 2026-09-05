@@ -13,12 +13,15 @@ class ProtocolRoundTripTest {
     private val json = Json { encodeDefaults = true }
 
     // ADR-0007: the first server message is
-    // {type:"hello", protocol:1, app, platform}, and the client refuses
+    // {type:"hello", protocol:2, app, platform}, and the client refuses
     // unknown majors -- so the version must be on the wire.
     @Test
     fun `ADR-0007 - hello serialises with an explicit protocol version`() {
         val encoded = json.encodeToString(Hello(app = "Scenaristo Camera", platform = Platform.ANDROID))
-        assertTrue(encoded.contains("\"protocol\":1"), "protocol version missing from: $encoded")
+        assertTrue(
+            encoded.contains("\"protocol\":$PROTOCOL_VERSION"),
+            "protocol version missing from: $encoded",
+        )
         assertTrue(encoded.contains("\"platform\":\"android\""), "platform discriminator wrong: $encoded")
     }
 
@@ -28,12 +31,12 @@ class ProtocolRoundTripTest {
         assertEquals(original, json.decodeFromString<Hello>(json.encodeToString(original)))
     }
 
-    // ADR-0007: "Adding fields is backward compatible." A client on protocol 1
+    // ADR-0007: "Adding fields is backward compatible." A client on the current
     // must tolerate a field a later minor version adds.
     @Test
-    fun `ADR-0007 - an unknown field does not break a protocol 1 client`() {
+    fun `ADR-0007 - an unknown field does not break a current-version client`() {
         val lenient = Json { ignoreUnknownKeys = true }
-        val fromFuture = """{"protocol":1,"app":"Scenaristo Camera","platform":"android","batteryPct":91}"""
+        val fromFuture = """{"protocol":$PROTOCOL_VERSION,"app":"Scenaristo Camera","platform":"android","batteryPct":91}"""
         assertEquals(PROTOCOL_VERSION, lenient.decodeFromString<Hello>(fromFuture).protocol)
     }
 }
