@@ -21,7 +21,9 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.SurfaceRequest
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.lifecycle.awaitInstance
-import androidx.camera.video.FileOutputOptions
+import android.content.ContentValues
+import android.provider.MediaStore
+import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.PendingRecording
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoRecordEvent
@@ -620,18 +622,18 @@ class CaptureService : LifecycleService() {
             PackageManager.PERMISSION_GRANTED
 
     private fun startRecording() {
-        val file = File(getExternalFilesDir(null), "take-${System.currentTimeMillis()}.mp4")
+        val name = "take-${System.currentTimeMillis()}"
         // PRD 6.7 / #17: the app owes the user a word on the next launch if this
         // take does not finish. Written before the recorder starts, because a
         // crash between these two lines should over-report rather than
         // under-report -- a take that never began is a confusing message, and a
         // take that was lost silently is a lost take.
-        markerFile().writeText(file.absolutePath)
+        markerFile().writeText(name)
         val withAudio = hasAudioPermission()
         // The permission can arrive after the service started, so the microphone
         // type is claimed here rather than only in onCreate.
         if (withAudio) startForeground(NOTIFICATION_ID, notification(describe()), foregroundTypes())
-        val pending = camera.recorder.prepareRecording(this, FileOutputOptions.Builder(file).build())
+        val pending = camera.recorder.prepareRecording(this, mediaStoreOutput(name))
         recording = pending
             .withAudioIfPermitted()
             .start(ContextCompat.getMainExecutor(this)) { event ->
@@ -654,6 +656,33 @@ class CaptureService : LifecycleService() {
                 }
             }
         acquireLocks()
+    }
+
+    /**
+     * Where a take goes (ADR-0020, PRD 6.7 and section 3).
+     *
+     * MediaStore rather than the app's private directory, so the file is visible
+     * to the gallery and to a laptop over MTP the moment it is finalised, and so
+     * it survives the app being uninstalled -- `Android/data/<package>` does not.
+     *
+     * `Movies/Scenaristo Camera/` rather than `DCIM/Camera/`: a take is work
+     * product, not a snapshot, and a creator's photo roll should not fill with
+     * multi-gigabyte files. The PRD permits either; ADR-0020 is Proposed on this
+     * point and it is one constant to change.
+     *
+     * No storage permission is involved. Since Android 10 an app inserting its
+     * own MediaStore rows needs none, and the floor here is API 34 (ADR-0012).
+     */
+    private fun mediaStoreOutput(name: String): MediaStoreOutputOptions {
+        val details = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, "$name.mp4")
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, TAKES_DIRECTORY)
+        }
+        return MediaStoreOutputOptions
+            .Builder(contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+            .setContentValues(details)
+            .build()
     }
 
     /**
@@ -680,11 +709,12 @@ class CaptureService : LifecycleService() {
     private fun takeInterruptedTakeIfAny(): String? {
         val marker = markerFile()
         if (!marker.exists()) return null
-        val path = runCatching { marker.readText().trim() }.getOrNull()
+        val name = runCatching { marker.readText().trim() }.getOrNull()
         marker.delete()
-        // A path that no longer names a file is worth nothing to the user, so it
-        // is treated as no notice rather than as a broken one.
-        return path?.takeIf { it.isNotBlank() && File(it).exists() }
+        // Since ADR-0020 the take is a MediaStore row rather than a path, so the
+        // marker carries the display name -- which is the part the user is shown
+        // anyway, and the part they will search for in a gallery.
+        return name?.takeIf { it.isNotBlank() }?.let { "$it.mp4" }
     }
 
     private fun stopRecording() {
@@ -934,6 +964,9 @@ class CaptureService : LifecycleService() {
         private const val EXPOSURE_TAG = "ExposureLoop"
         private const val IDLE_TAG = "IdleShutdown"
         private const val SETTINGS_TAG = "Settings"
+
+        /** ADR-0020. Relative to the external volume's root, as MediaStore wants it. */
+        private const val TAKES_DIRECTORY = "Movies/Scenaristo Camera"
 
         /**
          * Long enough for a recreated activity to rebind, short enough that a
