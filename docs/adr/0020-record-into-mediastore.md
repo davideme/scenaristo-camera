@@ -29,7 +29,7 @@ Consequences that follow from it:
 - The recorder's output is a **content URI**, not a filesystem path. Anything that previously assumed a `File` — the interrupted-take marker of #17 is the only caller today — carries the display name instead, which is what a user is told anyway.
 - Free-space estimation keeps using `getExternalFilesDir` for its `StatFs` call. It is measuring the volume, not the directory, and the volume is the same one.
 
-**Movies rather than DCIM**, which is the part to disagree with if you are going to:
+**Movies rather than DCIM** — confirmed by Davide on 2026-09-05. The reasoning that was offered and accepted:
 
 - `DCIM/Camera` is where a phone's own camera app puts things, and where gallery apps expect *captures*. Putting takes there mixes deliberate multi-gigabyte work product in with someone's photo roll, and a 2.9 GB file is not a snapshot.
 - `Movies/` is the platform's own home for produced video, is what `MediaStore.Video` defaults to, and keeps a named subdirectory that a creator can point an editor or a sync tool at.
@@ -87,7 +87,7 @@ Between A and B, both satisfy the PRD, and the difference is whose folder gets a
 
 ## Action Items
 
-1. [ ] Confirm `Movies/Scenaristo Camera/` over `DCIM/Camera/` — this ADR stays `Proposed` until then.
+1. [x] Confirm `Movies/Scenaristo Camera/` over `DCIM/Camera/`. **Davide, 2026-09-05: Movies.** The decision is made; the `Status` line is Davide's to flip.
 2. [x] Switch `FileOutputOptions` to `MediaStoreOutputOptions` and carry the display name in the interrupted-take marker.
 3. [x] Re-run the force-kill of #17 against a MediaStore recording and confirm the partial file is still readable and still visible in the gallery. **Done**: readable, 25.04 s recovered, `is_pending=0`. The `_size` column is stale, recorded above.
 4. [ ] Decide whether PRD 6.7's "camera roll or Movies folder" should be narrowed to whichever this settles on.
