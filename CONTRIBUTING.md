@@ -191,6 +191,13 @@ change it justifies, and only Davide sets a status to `Accepted` — open yours 
   checks were green, the issue auto-closed — and not one line of it was in the product. It was
   found days later only because a feature that depended on it did nothing.
 
+  **And do not delete a branch while anything is still stacked on it.** GitHub *closes* a pull
+  request whose base branch disappears, and a closed pull request cannot be reopened or retargeted
+  once its base is gone — the work is not lost, but the review, the description and the discussion
+  are stranded and the only way forward is a fresh pull request. `gh pr merge --delete-branch` on
+  the lowest of a stack does exactly this to the one above it. Retarget the upper pull request to
+  `main` **first**, then merge and delete.
+
   So after merging any stacked pull request, **check that the code is actually on `main`** rather
   than trusting the merged badge:
 
