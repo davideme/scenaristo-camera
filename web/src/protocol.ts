@@ -44,6 +44,8 @@ export interface CaptureSettings {
   grid: GridFrequency;
   shutterHz: number;
   iso: number;
+  isoLock?: number | null;
+  shutterLock?: number | null;
   whiteBalanceKelvin: number;
   lensId: string;
   focus?: Focus;
@@ -99,6 +101,8 @@ export interface SettingsPatch {
   grid?: GridFrequency | null;
   whiteBalanceKelvin?: number | null;
   lensId?: string | null;
+  isoLock?: number | null;
+  shutterLock?: number | null;
 }
 
 export type ServerMessage = AckMessage | HelloMessage | NackMessage | StateMessage;
