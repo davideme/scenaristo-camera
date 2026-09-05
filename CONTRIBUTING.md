@@ -226,6 +226,7 @@ change it justifies, and only Davide sets a status to `Accepted` — open yours 
   applies.
 - One reviewable change per pull request. Formatting-only churn in files you did not otherwise
   touch belongs in its own.
+- **Merging is a human decision.** Agents never merge, and never ask CI to merge for them: no `gh pr merge`, no auto-merge. An agent's job ends at a green pull request with a description someone can act on.
 - Agents: do not commit or push unless asked.
 
 ## 7. The review bar
