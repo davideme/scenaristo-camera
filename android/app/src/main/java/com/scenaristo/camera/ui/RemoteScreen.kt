@@ -117,6 +117,7 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
             onDismissGuidance = { guidanceDismissed = true },
             interrupted = interrupted.takeUnless { interruptedDismissed },
             onDismissInterrupted = { interruptedDismissed = true },
+            onFocusAt = { x, y -> service.focusAt(x, y) },
         )
 
         if (showLight) {
