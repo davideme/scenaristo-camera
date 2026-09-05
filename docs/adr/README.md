@@ -36,6 +36,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0017](0017-phase-0-verification-matrix.md) | Phase 0 runs on one reference device (Pixel 10) with a MacBook browser; second phone and iOS Safari deferred | Accepted | 9, 8-Q5, 6.8, 6.10 |
 | [0018](0018-preview-tap-for-metering-and-preview-frames.md) | Metering and preview frames come from a `CameraEffect` tap on the preview stream; no `ImageAnalysis` alongside UHD recording | Accepted | 6.1, 6.3, 6.5, 6.8, 6.10 |
 | [0019](0019-stop-the-service-when-idle.md) | Stop the capture service when the user leaves the app and neither a recording nor a remote is using it; explicit stop action | Proposed | 6.8, 6.9 |
+| [0020](0020-record-into-mediastore.md) | Takes go to the app's own folder by default; the shared gallery (`Movies/Scenaristo Camera/`) is a setting | Proposed | 6.7, 3 |
 | [0021](0021-remove-too-bright-and-bump-the-protocol.md) | Remove the unused `TOO_BRIGHT` warning; `PROTOCOL_VERSION` becomes 2 | Proposed | 6.3, 6.8 |
 
 ## Challenges to positions stated in the PRD
@@ -52,6 +53,7 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | 6.8 "Plain HTTP" (kept) | Consequence not stated in the PRD: no secure context, so WebCodecs is unavailable; preview transport is limited to JPEG/WebSocket now and WebRTC later. Decision stands. | 0006, 0008 |
 | 6.8 "bind to the LAN interface only" and "mDNS name advertised" | Bind once and enforce LAN-only per request (private remote address, IP-literal `Host`); `NsdManager` on API 34 cannot register a hostname, so mDNS is dropped from v1. | 0006 |
 | 6.8 "JPEG frames over WebSocket" | Browsers render MJPEG natively from an `<img>`; serve `multipart/x-mixed-replace` over HTTP and write no preview protocol. | 0008 |
+| 6.7 "the partial file appears in the camera roll or Movies folder" and 3 "files land in the device's camera roll or Movies folder" | Both are already true of the intent and false of the code: takes go to the app's private directory, are invisible to the gallery and are deleted on uninstall. ADR-0020 records into MediaStore `Movies/`, and asks whether the PRD should be narrowed from "camera roll or Movies" to the one chosen. | 0020 |
 | 6.7 "fragmented MP4 (or periodic moov updates)" and the crash-resilience acceptance criterion | The CameraX 1.6.2 stock `Recorder` rewrites `moov` every second within a 400 KB reserve, so resilience is covered up to a take length Phase 0 measures; guaranteed resilience for any length is P1. | 0002 |
 | 6.7 "HEVC if a hardware encoder is present" | CameraX 1.6.2 offers no SDR codec selector; codec follows the device profile and is shown before recording. Enforced again at CameraX 1.7 via `setVideoMimeType`. | 0002 |
 | 6.6 "Level meter updates at ≥ 10 Hz" | CameraX reports amplitude every 200 ms. MVP ships 5 Hz. | 0002 |
