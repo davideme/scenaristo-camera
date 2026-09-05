@@ -141,6 +141,20 @@ class ExposureController(
         push(next)
     }
 
+    /**
+     * The user locked or released ISO or the shutter (PRD 6.3, #51).
+     *
+     * Pushed to the sensor immediately, like every other change here: a lock the
+     * camera has not been told about is a number the UI is reporting and the
+     * hardware is not using.
+     */
+    fun onLocksChanged(isoLock: Int?, shutterLock: Int?, nowMs: Long) {
+        val next = synchronized(lock) {
+            loop.onLocksChanged(_state.value, isoLock, shutterLock, nowMs).also { _state.value = it }
+        }
+        push(next)
+    }
+
     /** Pushes the opening exposure, so the first frames are the loop's and not the builder's. */
     fun start() = push(_state.value)
 
