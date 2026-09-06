@@ -44,7 +44,6 @@ export interface CaptureSettings {
   grid: GridFrequency;
   shutterHz: number;
   iso: number;
-  isoLock?: number | null;
   shutterLock?: number | null;
   whiteBalanceKelvin: number;
   lensId: string;
@@ -103,7 +102,6 @@ export interface SettingsPatch {
   whiteBalanceKelvin?: number | null;
   lensId?: string | null;
   saveToGallery?: boolean | null;
-  isoLock?: number | null;
   shutterLock?: number | null;
 }
 

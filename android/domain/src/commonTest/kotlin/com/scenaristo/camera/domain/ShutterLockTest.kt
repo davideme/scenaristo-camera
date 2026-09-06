@@ -22,46 +22,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * PRD 6.3's two manual locks, confirmed in scope by Davide on 2026-09-05 (#51).
+ * PRD 6.3's manual shutter lock (#51).
  *
- * The pair is deliberately asymmetric. Locking ISO pins a value; locking the
- * shutter pins a *rung*, and only a rung of the grid's own ladder — because
- * every other shutter bands, which is the failure the product exists to prevent.
+ * The ISO lock that briefly sat beside it was dropped (Davide, 2026-09-06): two
+ * automatic responsiveness modes replace it. The shutter lock stays, because it
+ * pins a *rung* of the flicker-safe ladder — the one thing the ladder cannot
+ * infer from the scene, since both rungs are correct exposures and only the user
+ * knows whether they want 1/50's motion blur or 1/100's crispness.
  */
-class ExposureLockTest {
+class ShutterLockTest {
 
     private val loop = ExposureLoop(IsoRange(50, 6_400))
 
-    // PRD 6.3: "ISO manual lock available (phone and web) for users who want a
-    //           fixed value."
-    @Test
-    fun `PRD 6_3 - a locked ISO stops the loop moving it`() {
-        val dark = 0.05 // well under the 0.45 target, so the loop wants to climb
-        val free = loop.start(GridFrequency.HZ_50)
-        val moved = loop.onFrame(free, dark, nowMs = 33)
-        assertTrue(moved.iso > free.iso, "precondition: an unlocked loop climbs")
 
-        val locked = loop.onLocksChanged(free, isoLock = 800, shutterLock = null, nowMs = 33)
-        assertEquals(800, locked.iso, "locking takes effect immediately, not on the next move")
-        val settled = loop.onSensorEcho(locked, iso = 800, shutterHz = 50)
-
-        var state = settled
-        repeat(60) { i -> state = loop.onFrame(state, dark, nowMs = 100L + i * 33) }
-        assertEquals(800, state.iso, "the loop moved a locked ISO")
-    }
-
-    // PRD 6.3's too-dark warning is about the image, not about who chose the
-    // ISO. A user who locks to a noisy value should still be told it is noisy.
-    @Test
-    fun `PRD 6_3 - a locked ISO still raises the noise warning`() {
-        val locked = loop.onLocksChanged(
-            loop.start(GridFrequency.HZ_50),
-            isoLock = 3_200,
-            shutterLock = null,
-            nowMs = 0,
-        )
-        assertTrue(Warning.TOO_DARK in locked.warnings, "ISO 3200 is past the threshold")
-    }
 
     // PRD 6.3, as amended by ADR-0005: "Never raise shutter beyond that one step;
     //           a manually locked shutter disables the step."
@@ -75,7 +48,7 @@ class ExposureLockTest {
         repeat(10) { i -> unlocked = loop.onFrame(unlocked, blown, nowMs = 33L + i * 33) }
         assertEquals(100, unlocked.shutterHz, "precondition: an unlocked loop steps")
 
-        val locked = loop.onLocksChanged(free, isoLock = null, shutterLock = 50, nowMs = 0)
+        val locked = loop.onShutterLockChanged(free, shutterLock = 50, nowMs = 0)
         var state = loop.onSensorEcho(locked, iso = locked.iso, shutterHz = 50)
         repeat(30) { i -> state = loop.onFrame(state, blown, nowMs = 100L + i * 33) }
 
@@ -86,9 +59,8 @@ class ExposureLockTest {
     // disables the step for a locked shutter; it does not disable the warning.
     @Test
     fun `PRD 6_3 - overexposed with the shutter locked still warns`() {
-        val locked = loop.onLocksChanged(
+        val locked = loop.onShutterLockChanged(
             loop.start(GridFrequency.HZ_50),
-            isoLock = null,
             shutterLock = 50,
             nowMs = 0,
         )
@@ -99,16 +71,6 @@ class ExposureLockTest {
         assertEquals(50, state.shutterHz)
     }
 
-    // Releasing a lock hands the exposure back where it stood, rather than
-    // jumping: the user released while looking at a picture.
-    @Test
-    fun `PRD 6_3 - releasing a lock resumes from where it left off`() {
-        val locked = loop.onLocksChanged(loop.start(GridFrequency.HZ_50), 800, null, nowMs = 0)
-        val released = loop.onLocksChanged(locked, isoLock = null, shutterLock = null, nowMs = 100)
-
-        assertEquals(800, released.iso, "releasing snapped the exposure somewhere else")
-        assertNull(released.isoLock)
-    }
 
     // A shutter lock is a rung, and only the grid's own ladder has rungs.
     // Anything else bands, so it is refused rather than clamped -- the same rule
@@ -142,14 +104,14 @@ class ExposureLockTest {
     @Test
     fun `PRD 6_3 - CLEAR_LOCK releases a lock and absence leaves it alone`() {
         val session = session()
-        session.apply(patch(SettingsPatch(isoLock = 800)), 0)
-        assertEquals(800, session.state.settings.isoLock)
+        session.apply(patch(SettingsPatch(shutterLock = 100)), 0)
+        assertEquals(100, session.state.settings.shutterLock)
 
         session.apply(patch(SettingsPatch(whiteBalanceKelvin = 3200)), 1)
-        assertEquals(800, session.state.settings.isoLock, "an unrelated patch cleared the lock")
+        assertEquals(100, session.state.settings.shutterLock, "an unrelated patch cleared the lock")
 
-        session.apply(patch(SettingsPatch(isoLock = SettingsPatch.CLEAR_LOCK)), 2)
-        assertNull(session.state.settings.isoLock)
+        session.apply(patch(SettingsPatch(shutterLock = SettingsPatch.CLEAR_LOCK)), 2)
+        assertNull(session.state.settings.shutterLock)
     }
 
     private fun session() = Session(

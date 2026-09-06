@@ -96,12 +96,6 @@ class Session(
 
         // A lock is three states in one integer field: absent leaves it alone,
         // CLEAR_LOCK releases it, anything else pins it (PRD 6.3).
-        val isoLock = when (patch.isoLock) {
-            null -> state.settings.isoLock
-            SettingsPatch.CLEAR_LOCK -> null
-            else -> patch.isoLock.takeIf { it > 0 } ?: return invalid(command)
-        }
-
         // The shutter may only be locked to a rung of the grid it is locked
         // under. Everything else bands, which is the failure the whole product
         // exists to prevent, so it is refused rather than clamped.
@@ -122,7 +116,6 @@ class Session(
             whiteBalanceKelvin = patch.whiteBalanceKelvin ?: state.settings.whiteBalanceKelvin,
             lensId = patch.lensId ?: state.settings.lensId,
             saveToGallery = patch.saveToGallery ?: state.settings.saveToGallery,
-            isoLock = isoLock,
             shutterLock = shutterLock,
         )
         if (updated == state.settings) return remember(command, nowMs, changed = false)
