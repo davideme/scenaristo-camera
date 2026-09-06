@@ -130,10 +130,11 @@ class ExposureLoopTest {
         assertContains(room.state.warnings, Warning.TOO_DARK)
     }
 
-    // ADR-0005: "a maximum slew of 1 stop per second".
+    // ADR-0005: "a maximum slew of 1 stop per second" -- which ADR-0022 scopes
+    // to the recording mode, where PRD 6.3's criteria live.
     @Test
-    fun `ADR-0005 - ISO never travels faster than one stop per second`() {
-        val room = Room(needsIso = 100.0)
+    fun `ADR-0005 - while recording, ISO never travels faster than one stop per second`() {
+        val room = Room(needsIso = 100.0, recording = true)
         room.runFor(1_000)
 
         room.needsIso = 6_400.0 // six stops darker, so the loop is at full tilt
@@ -235,6 +236,41 @@ class ExposureLoopTest {
         assertTrue(switched.awaitingEcho, "the new shutter has to be applied and echoed")
     }
 
+    // ADR-0022: "fast while lighting the scene". Someone moving a lamp is asking
+    // a question and waiting for the answer; a two-second settle makes that a
+    // conversation nobody can have.
+    @Test
+    fun `ADR-0022 - the setup mode reaches a new light level far sooner than the recording mode`() {
+        fun settleMs(recording: Boolean): Long {
+            val room = Room(needsIso = 100.0, recording = recording)
+            room.runFor(1_000)
+            room.needsIso = 400.0 // two stops darker
+            return room.runUntil(6_000) { abs(log2(it.iso / 400.0)) <= 0.25 } ?: Long.MAX_VALUE
+        }
+
+        val setup = settleMs(recording = false)
+        val recording = settleMs(recording = true)
+
+        assertTrue(setup < recording, "setup ${setup}ms was not faster than recording ${recording}ms")
+        assertTrue(setup <= 1_000, "setup took ${setup}ms; a lamp move should read back inside a second")
+    }
+
+    // The same loop, the same target, the same picture: a mode is a speed limit,
+    // not a different opinion about correct exposure.
+    @Test
+    fun `ADR-0022 - both modes settle on the same exposure`() {
+        fun settled(recording: Boolean): Int {
+            val room = Room(needsIso = 400.0, recording = recording)
+            room.runFor(8_000)
+            return room.state.iso
+        }
+
+        assertTrue(
+            abs(log2(settled(false).toDouble() / settled(true).toDouble())) <= 0.25,
+            "setup settled at ${settled(false)}, recording at ${settled(true)}",
+        )
+    }
+
     /**
      * A room, expressed as the ISO that would put the face on target at the
      * grid's default shutter, plus the loop watching it.
@@ -248,13 +284,18 @@ class ExposureLoopTest {
         var needsIso: Double,
         grid: GridFrequency = GridFrequency.HZ_50,
         private val config: ExposureConfig = ExposureConfig(),
+        /**
+         * Which of ADR-0022's modes the loop is in. PRD 6.3's numbers are
+         * scoped "when recording", so the tests that cite them say so.
+         */
+        recording: Boolean = true,
     ) {
         private val loop = ExposureLoop(IsoRange(BASE_ISO, MAX_ISO), config)
         private val ladder = shutterLadder(grid)
         private var inFlightFrames = 0
         private var nowMs = 0L
 
-        var state: ExposureState = loop.start(grid)
+        var state: ExposureState = loop.start(grid).copy(recording = recording)
             private set
 
         fun tick() {
