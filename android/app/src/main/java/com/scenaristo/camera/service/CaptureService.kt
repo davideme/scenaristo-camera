@@ -329,8 +329,25 @@ class CaptureService : LifecycleService() {
      * reader stalls on outstanding frames rather than dropping them, so the
      * meter reads first and the encoder disposes.
      */
+    /**
+     * One tapped frame, to the meter and then to the preview encoder.
+     *
+     * The metering is wrapped because [PreviewTapProcessor] hands ownership of
+     * the image over and stalls at its buffer count if one is not returned:
+     * anything thrown here used to skip [PreviewJpegSource.accept], which is what
+     * closes it, so a single bad frame leaked every frame after it and the
+     * preview died along with the exposure loop. A frame the meter cannot read
+     * is worth losing; the take is not.
+     *
+     * `Throwable` rather than `Exception` on purpose — the failure that found
+     * this was an `OutOfMemoryError`.
+     */
     private fun onTapFrame(image: android.media.Image) {
-        exposure?.onFrame(image, System.currentTimeMillis())
+        try {
+            exposure?.onFrame(image, System.currentTimeMillis())
+        } catch (failure: Throwable) {
+            Log.w(EXPOSURE_TAG, "metering skipped a frame", failure)
+        }
         jpeg.accept(image)
     }
 
