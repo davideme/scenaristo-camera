@@ -94,6 +94,35 @@ class ExposureLoop(
     }
 
     /**
+     * The user locked or released ISO or the shutter (PRD 6.3).
+     *
+     * Locking is not merely "stop moving": it takes effect immediately, because
+     * a lock the sensor has not been told about is a value the UI is reporting
+     * and the camera is not using. Releasing sets nothing — the loop picks up
+     * from wherever the lock left it, which is the exposure the user was
+     * looking at when they released.
+     */
+    fun onLocksChanged(
+        state: ExposureState,
+        isoLock: Int?,
+        shutterLock: Int?,
+        nowMs: Long,
+    ): ExposureState {
+        if (isoLock == state.isoLock && shutterLock == state.shutterLock) return state
+        val ladder = shutterLadder(state.grid)
+        val rung = shutterLock?.let { ladder.indexOf(it) }?.takeIf { it >= 0 } ?: state.rung
+        val next = state.copy(
+            isoLock = isoLock,
+            shutterLock = shutterLock,
+            iso = isoLock?.coerceIn(iso.min, iso.max) ?: state.iso,
+            rung = rung,
+            awaitingEcho = true,
+            changedAtMs = nowMs,
+        )
+        return next.copy(warnings = warningsFor(next))
+    }
+
+    /**
      * The user changed the mains frequency (PRD 6.2's override, mandatory in a
      * mixed-grid country).
      *
@@ -129,6 +158,10 @@ class ExposureLoop(
      */
     private fun decide(state: ExposureState, acquiring: Boolean, nowMs: Long): ExposureState {
         val ladder = shutterLadder(state.grid)
+
+        // A locked shutter disables the ladder in both directions -- PRD 6.3
+        // says so for the step, and the return below is the same mechanism.
+        if (state.shutterLock != null) return moveIso(state, acquiring, nowMs)
 
         // Exposure-neutral: the slower rung is exactly one stop, and halving ISO
         // pays for it. The full stop of ISO headroom is what keeps this from
@@ -178,6 +211,11 @@ class ExposureLoop(
      * of base ISO would miss in any dim room.
      */
     private fun moveIso(state: ExposureState, acquiring: Boolean, nowMs: Long): ExposureState {
+        // A pinned ISO is the user saying "stop choosing". The loop keeps
+        // metering -- the error still drives the warnings, which is the whole
+        // point of a warning on a locked exposure -- it simply stops acting.
+        if (state.isoLock != null) return state
+
         val moveEv = if (acquiring) {
             state.errorEv
         } else {
@@ -214,8 +252,12 @@ class ExposureLoop(
         val ladder = shutterLadder(state.grid)
         return buildSet {
             if (state.iso > config.noiseWarningIso) add(Warning.TOO_DARK)
+            // Overexposed with nowhere left to go. "Nowhere left" is normally
+            // the top of the ladder, but a locked shutter is the same dead end
+            // reached sooner -- PRD 6.3 disables the step, it does not disable
+            // the warning that follows a step being unavailable.
             if (state.iso <= iso.min &&
-                state.rung == ladder.lastIndex &&
+                (state.rung == ladder.lastIndex || state.shutterLock != null) &&
                 state.errorEv < -config.deadBandEv
             ) {
                 add(Warning.OVEREXPOSED_AT_BASE_ISO)
@@ -324,6 +366,10 @@ data class ExposureState(
     val changedAtMs: Long? = null,
     /** The exposure warnings only (PRD 6.3); the caller merges in the rest. */
     val warnings: Set<Warning> = emptySet(),
+    /** ISO pinned by the user, or null when the loop is choosing (PRD 6.3). */
+    val isoLock: Int? = null,
+    /** Shutter rung pinned by the user, which also disables the ladder (PRD 6.3). */
+    val shutterLock: Int? = null,
 ) {
     /**
      * The shutter in use, as reciprocal seconds. Never longer than the grid's

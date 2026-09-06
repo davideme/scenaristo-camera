@@ -47,6 +47,17 @@ data class CaptureSettings(
      */
     val shutterHz: Int,
     val iso: Int,
+    /**
+     * The ISO the user pinned, or null when the loop is choosing (PRD 6.3).
+     *
+     * Separate from [iso], which always reports what the sensor is actually
+     * doing. Collapsing the two would lose the difference between "the loop
+     * settled here" and "the user said here", and the browser has to show which
+     * (UI-9's reported versus control styles).
+     */
+    val isoLock: Int? = null,
+    /** The shutter rung the user pinned, or null when the ladder is free (PRD 6.3). */
+    val shutterLock: Int? = null,
     val whiteBalanceKelvin: Int,
     /** Camera id of the active lens, as reported by the capability probe (ADR-0011). */
     val lensId: String,

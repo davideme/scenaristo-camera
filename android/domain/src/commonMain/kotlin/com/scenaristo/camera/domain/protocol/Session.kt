@@ -1,5 +1,7 @@
 package com.scenaristo.camera.domain.protocol
 
+import com.scenaristo.camera.domain.exposure.shutterLadder
+
 /**
  * Applying a command to the state document (ADR-0007).
  *
@@ -90,10 +92,37 @@ class Session(
             return invalid(command)
         }
 
+        val grid = patch.grid ?: state.settings.grid
+
+        // A lock is three states in one integer field: absent leaves it alone,
+        // CLEAR_LOCK releases it, anything else pins it (PRD 6.3).
+        val isoLock = when (patch.isoLock) {
+            null -> state.settings.isoLock
+            SettingsPatch.CLEAR_LOCK -> null
+            else -> patch.isoLock.takeIf { it > 0 } ?: return invalid(command)
+        }
+
+        // The shutter may only be locked to a rung of the grid it is locked
+        // under. Everything else bands, which is the failure the whole product
+        // exists to prevent, so it is refused rather than clamped.
+        val shutterLock = when (patch.shutterLock) {
+            null -> state.settings.shutterLock
+            SettingsPatch.CLEAR_LOCK -> null
+            else -> patch.shutterLock.takeIf { it in shutterLadder(grid) } ?: return invalid(command)
+        }
+
+        // Changing the grid moves the ladder under an existing lock, and a lock
+        // left pointing at the old ladder would be exactly the off-ladder
+        // shutter refused above -- so it is refused here too, rather than
+        // silently retuned to a rung the user did not choose.
+        if (shutterLock != null && shutterLock !in shutterLadder(grid)) return invalid(command)
+
         val updated = state.settings.copy(
-            grid = patch.grid ?: state.settings.grid,
+            grid = grid,
             whiteBalanceKelvin = patch.whiteBalanceKelvin ?: state.settings.whiteBalanceKelvin,
             lensId = patch.lensId ?: state.settings.lensId,
+            isoLock = isoLock,
+            shutterLock = shutterLock,
         )
         if (updated == state.settings) return remember(command, nowMs, changed = false)
         state = state.copy(settings = updated, serverTimeMs = nowMs)
