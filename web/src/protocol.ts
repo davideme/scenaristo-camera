@@ -36,6 +36,7 @@ export interface State {
   device: DeviceStatus;
   warnings?: Warning[];
   clients?: number;
+  audio?: AudioState;
   serverTimeMs: number;
 }
 
@@ -43,11 +44,22 @@ export interface CaptureSettings {
   grid: GridFrequency;
   shutterHz: number;
   iso: number;
+  isoLock?: number | null;
+  shutterLock?: number | null;
   whiteBalanceKelvin: number;
   lensId: string;
+  focus?: Focus;
 }
 
 export type GridFrequency = "HZ_50" | "HZ_60";
+
+export interface Focus {
+  mode?: FocusMode;
+  x?: number | null;
+  y?: number | null;
+}
+
+export type FocusMode = "continuous" | "locked";
 
 export interface RecordingState {
   recording: boolean;
@@ -63,7 +75,16 @@ export interface DeviceStatus {
 
 export type ThermalState = "NOMINAL" | "FAIR" | "SERIOUS" | "CRITICAL";
 
-export type Warning = "TOO_DARK" | "TOO_BRIGHT" | "TOO_CLOSE_TO_LENS" | "OVEREXPOSED_AT_BASE_ISO";
+export type Warning = "TOO_DARK" | "TOO_CLOSE_TO_LENS" | "OVEREXPOSED_AT_BASE_ISO";
+
+export interface AudioState {
+  level?: number;
+  clipping?: boolean;
+  input?: AudioInput;
+  metering?: boolean;
+}
+
+export type AudioInput = "BUILT_IN" | "WIRED" | "USB" | "BLUETOOTH" | "UNKNOWN";
 
 export interface CmdMessage {
   type: "cmd";
@@ -71,14 +92,17 @@ export interface CmdMessage {
   name: CommandName;
   expectRev?: number | null;
   args?: SettingsPatch | null;
+  focus?: Focus | null;
 }
 
-export type CommandName = "record.start" | "record.stop" | "settings.set";
+export type CommandName = "record.start" | "record.stop" | "settings.set" | "focus.set";
 
 export interface SettingsPatch {
   grid?: GridFrequency | null;
   whiteBalanceKelvin?: number | null;
   lensId?: string | null;
+  isoLock?: number | null;
+  shutterLock?: number | null;
 }
 
 export type ServerMessage = AckMessage | HelloMessage | NackMessage | StateMessage;

@@ -1,6 +1,6 @@
 {
   "type": "hello",
-  "protocol": 1,
+  "protocol": 2,
   "app": "Scenaristo Camera",
   "platform": "android"
 }

@@ -227,7 +227,6 @@ enum class ThermalState {
 @Serializable
 enum class Warning {
     TOO_DARK,
-    TOO_BRIGHT,
     TOO_CLOSE_TO_LENS,
     /** Overexposed even after the one flicker-safe shutter step ADR-0005 allows. */
     OVEREXPOSED_AT_BASE_ISO,

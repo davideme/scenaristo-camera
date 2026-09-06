@@ -10,7 +10,7 @@ import kotlinx.serialization.json.Json
  * refuses an unknown major. Adding fields is backward compatible, renaming or
  * removing bumps this number. See ADR-0007.
  */
-const val PROTOCOL_VERSION: Int = 1
+const val PROTOCOL_VERSION: Int = 2
 
 /**
  * The one `Json` both ends use.

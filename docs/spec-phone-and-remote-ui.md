@@ -122,7 +122,7 @@ Two consequences are load-bearing:
 ---
 **UI-5 — Warnings name the fix, not the fault**
 
-Warnings are `State.warnings` (`TOO_DARK`, `TOO_BRIGHT`, `TOO_CLOSE_TO_LENS`, `OVEREXPOSED_AT_BASE_ISO`) mirrored on both surfaces (PRD §6.3, §6.5, §6.8).
+Warnings are `State.warnings` (`TOO_DARK`, `TOO_CLOSE_TO_LENS`, `OVEREXPOSED_AT_BASE_ISO`) mirrored on both surfaces (PRD §6.3, §6.5, §6.8). `OVEREXPOSED_AT_BASE_ISO` is the only too-much-light warning; `TOO_BRIGHT` was removed in ADR-0021 because nothing ever raised it.
 
 - [ ] Each warning is a single line beginning with the action: "Add light — ISO 1600 will look noisy", "Sit further back — 1.5–2 m for the 24 mm lens", "Too much light — close the blinds or move the key light back".
 - [ ] A warning carries an icon; a control never does. This is what separates warning orange (`oklch(.74 .165 48)`) from control amber at a glance.

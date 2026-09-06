@@ -245,8 +245,8 @@ class ExposureLoop(
      *
      * Recomputed from scratch on every frame, which is what makes them clear
      * themselves when the condition ends. [Warning.TOO_CLOSE_TO_LENS] is not the
-     * loop's to raise, and neither is [Warning.TOO_BRIGHT]: PRD 6.3 defines one
-     * too-much-light message and it is the one that follows a failed ladder step.
+     * loop's to raise; the other two are, and PRD 6.3's single too-much-light
+     * message is [Warning.OVEREXPOSED_AT_BASE_ISO] (ADR-0021).
      */
     private fun warningsFor(state: ExposureState): Set<Warning> {
         val ladder = shutterLadder(state.grid)
