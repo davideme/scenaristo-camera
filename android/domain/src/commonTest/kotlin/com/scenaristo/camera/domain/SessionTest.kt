@@ -61,6 +61,106 @@ class SessionTest {
      * question it answers ("did that save, and as what?") is asked in the second
      * *after* the take, so it must not vanish on stop.
      */
+    /**
+     * ADR-0024, the bug this exists for.
+     *
+     * `rev` advances on everything in the document, and the exposure loop moves
+     * ISO up to six times a second (ADR-0005) — measured at 27 revisions a
+     * second on the reference device against roughly one broadcast a second. So
+     * a client's `rev` was stale before the snapshot carrying it had finished
+     * arriving, and every guarded settings change was refused. `settingsRev`
+     * does not move for any of that.
+     */
+    @Test
+    fun `ADR-0024 - a settings guard survives the exposure loop`() {
+        val session = Session(idle())
+        val guard = session.settingsRev
+
+        // The loop, doing what it does: ISO, warnings, battery, all bumping rev.
+        repeat(30) { step ->
+            session.update(1_000L + step) { it.copy(settings = it.settings.copy(iso = 100 + step)) }
+        }
+        assertTrue(session.rev > 25, "rev moved with the loop: ${session.rev}")
+        assertEquals(guard, session.settingsRev, "but a settings guard must not")
+
+        // Hmm: ISO *is* a CaptureSettings field, so the above is exactly the
+        // case that matters — the loop writes into `settings` and must still not
+        // invalidate a user's guard.
+        val outcome = session.apply(
+            Command(
+                id = "a",
+                name = CommandName.SETTINGS_SET,
+                expectSettingsRev = guard,
+                args = SettingsPatch(whiteBalanceKelvin = 3200),
+            ),
+            2_000,
+        )
+        assertTrue(outcome.reply is Ack, "expected an ack, got ${outcome.reply}")
+        assertEquals(3200, session.state.settings.whiteBalanceKelvin)
+    }
+
+    /** The guard still does its job: a stale tab cannot undo somebody else's change. */
+    @Test
+    fun `ADR-0024 - a settings guard still catches a competing settings change`() {
+        val session = Session(idle())
+        val guard = session.settingsRev
+
+        // Somebody else — another remote, or the phone's own screen.
+        session.apply(
+            Command(id = "other", name = CommandName.SETTINGS_SET, args = SettingsPatch(whiteBalanceKelvin = 6500)),
+            1_000,
+        )
+        assertTrue(session.settingsRev > guard, "a real settings change moves it")
+
+        val outcome = session.apply(
+            Command(
+                id = "stale",
+                name = CommandName.SETTINGS_SET,
+                expectSettingsRev = guard,
+                args = SettingsPatch(whiteBalanceKelvin = 3200),
+            ),
+            2_000,
+        )
+        assertEquals(Nack("stale", NackReason.STALE), outcome.reply)
+        assertEquals(6500, session.state.settings.whiteBalanceKelvin, "the other change stands")
+    }
+
+    /**
+     * A change made on the phone counts too. The guard exists so a stale browser
+     * tab cannot silently undo one, and the phone is where most of them come
+     * from.
+     */
+    @Test
+    fun `ADR-0024 - a change from the phone's own screen moves the settings revision`() {
+        val session = Session(idle())
+        val guard = session.settingsRev
+
+        session.update(1_000) { it.copy(settings = it.settings.copy(whiteBalanceKelvin = 6500)) }
+
+        assertTrue(session.settingsRev > guard)
+        val outcome = session.apply(
+            Command(
+                id = "stale",
+                name = CommandName.SETTINGS_SET,
+                expectSettingsRev = guard,
+                args = SettingsPatch(whiteBalanceKelvin = 3200),
+            ),
+            2_000,
+        )
+        assertEquals(Nack("stale", NackReason.STALE), outcome.reply)
+    }
+
+    /** A snapshot carries both revisions, so a client can choose its guard. */
+    @Test
+    fun `the snapshot carries both revisions`() {
+        val session = Session(idle())
+        session.update(1_000) { it.copy(settings = it.settings.copy(whiteBalanceKelvin = 6500)) }
+
+        val snapshot = session.snapshot()
+        assertEquals(session.rev, snapshot.rev)
+        assertEquals(session.settingsRev, snapshot.settingsRev)
+    }
+
     @Test
     fun `PRD 6_7 - the take name survives the stop`() {
         val session = Session(idle())

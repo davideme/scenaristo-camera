@@ -88,7 +88,35 @@ data class CaptureSettings(
      * for added fields.
      */
     val focus: Focus = Focus(),
-)
+) {
+    /**
+     * The fields a client can actually ask for, which is what a settings guard
+     * counts changes to (ADR-0024).
+     *
+     * **This is not "all of `CaptureSettings`", and the difference is the whole
+     * point.** `shutterHz` and `iso` live here too, and they are outputs of the
+     * ADR-0005 exposure loop — moving up to six times a second, measured at 27
+     * revisions a second on the reference device. Counting them would make a
+     * settings guard advance constantly and refuse every change a user ever
+     * made, which is the bug ADR-0024 exists to fix. `focus` is excluded for a
+     * different reason: it is set by its own command, unguarded, because it is
+     * allowed during a take (UI-16 leaves it unused, but the rule stands).
+     *
+     * The list must stay exactly the fields of [SettingsPatch]; a test asserts
+     * that against the serializer's own descriptor, so adding a patch field
+     * without adding it here fails the build rather than silently leaving that
+     * field unguarded.
+     */
+    val settable: List<Any?>
+        get() = listOf(
+            grid,
+            whiteBalanceKelvin,
+            lensId,
+            saveToGallery,
+            shutterLock,
+            lockExposureWhileRecording,
+        )
+}
 
 /**
  * Where the camera is focusing (PRD 6.1 "Continuous AF with face priority,

@@ -40,6 +40,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0021](0021-remove-too-bright-and-bump-the-protocol.md) | Remove the unused `TOO_BRIGHT` warning; `PROTOCOL_VERSION` becomes 2 | Proposed | 6.3, 6.8 |
 | [0022](0022-two-exposure-responsiveness-modes.md) | Two exposure damping modes: quick while lighting the scene, damped while recording; replaces the manual ISO lock | Proposed | 6.1, 6.3 |
 | [0023](0023-lock-exposure-for-the-take.md) | Opt-in mode that stops the exposure loop entirely for the duration of a take; off by default | Proposed | 6.1, 6.3 |
+| [0024](0024-guard-settings-on-a-settings-revision.md) | A settings command guards on a settings revision, not the document revision, which the exposure loop moves 27 times a second | Proposed | 6.3, 6.8 |
 
 ## Challenges to positions stated in the PRD
 

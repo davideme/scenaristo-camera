@@ -23,6 +23,18 @@ class Session(
     var rev: Int = 0
         private set
 
+    /**
+     * Bumped only when [CaptureSettings] changes, and the revision a settings
+     * command guards against (ADR-0024).
+     *
+     * Separate from [rev] because they answer different questions. [rev] means
+     * "anything at all moved", which is what a browser's staleness timer reads
+     * and what makes silence diagnostic. This means "somebody changed a setting",
+     * which is the only thing a settings command can actually conflict with.
+     */
+    var settingsRev: Int = 0
+        private set
+
     /** id -> (rev answered, when). Pruned by [prune] rather than by a timer. */
     private val applied = mutableMapOf<String, Pair<Int, Long>>()
 
@@ -45,6 +57,12 @@ class Session(
 
         command.expectRev?.let { expected ->
             if (expected != rev) return Outcome(Nack(command.id, NackReason.STALE), broadcast = false)
+        }
+
+        command.expectSettingsRev?.let { expected ->
+            if (expected != settingsRev) {
+                return Outcome(Nack(command.id, NackReason.STALE), broadcast = false)
+            }
         }
 
         return when (command.name) {
@@ -132,7 +150,9 @@ class Session(
             shutterLock = shutterLock,
         )
         if (updated == state.settings) return remember(command, nowMs, changed = false)
+        val settableChanged = updated.settable != state.settings.settable
         state = state.copy(settings = updated, serverTimeMs = nowMs)
+        if (settableChanged) settingsRev++
         return remember(command, nowMs, changed = true)
     }
 
@@ -205,11 +225,22 @@ class Session(
         // twice a second forever, broadcast to every client each time, and leave
         // rev meaning "time passed" rather than "something you care about moved".
         val changed = proposed.copy(serverTimeMs = state.serverTimeMs) != state
+        // A change made on the phone's own screen counts as a settings change
+        // too: the whole point of the guard is that a stale browser tab cannot
+        // silently undo one, and the phone is where most of them come from
+        // (ADR-0007, ADR-0024).
+        //
+        // `settable` and not the whole of CaptureSettings: `shutterHz` and `iso`
+        // are in there and are outputs of the exposure loop, so comparing
+        // everything would move the guard six times a second and refuse every
+        // change a user ever made -- which is the bug this is fixing.
+        val settingsChanged = proposed.settings.settable != state.settings.settable
         state = proposed.copy(serverTimeMs = nowMs)
         if (changed) rev++
+        if (settingsChanged) settingsRev++
     }
 
-    fun snapshot(): StateMessage = StateMessage(rev, state)
+    fun snapshot(): StateMessage = StateMessage(rev = rev, state = state, settingsRev = settingsRev)
 
     private companion object {
         /** PRD 6.4's presets span tungsten to shade; outside this is a typo, not a choice. */
