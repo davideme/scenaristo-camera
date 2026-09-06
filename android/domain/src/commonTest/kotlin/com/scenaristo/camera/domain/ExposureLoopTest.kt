@@ -164,8 +164,13 @@ class ExposureLoopTest {
         assertEquals(inFlight, after, "a frame exposed with the old ISO moved the loop")
 
         // Only the matching echo releases it; an in-flight result for the old
-        // value must not.
-        assertEquals(inFlight, loop.onSensorEcho(inFlight, iso = 100, shutterHz = 50))
+        // value must not. It is counted rather than ignored outright, so a
+        // sensor that never delivers cannot stall the loop forever -- but a
+        // single stale frame changes nothing else.
+        val stale = loop.onSensorEcho(inFlight, iso = 100, shutterHz = 50)
+        assertTrue(stale.awaitingEcho, "a stale result released the wait")
+        assertEquals(inFlight.iso, stale.iso, "a stale result moved the ISO")
+
         val released = loop.onSensorEcho(inFlight, iso = 400, shutterHz = 50)
         assertFalse(released.awaitingEcho)
     }
@@ -269,6 +274,44 @@ class ExposureLoopTest {
             abs(log2(settled(false).toDouble() / settled(true).toDouble())) <= 0.25,
             "setup settled at ${settled(false)}, recording at ${settled(true)}",
         )
+    }
+
+    // Reported from the device: ISO pinned at the top of the range in a 445-lux
+    // room and refusing to come down. The sensor would not deliver the value it
+    // was asked for, so the exact-match echo never arrived, so the loop stopped
+    // metering and froze wherever it was.
+    @Test
+    fun `a sensor that never reports the requested ISO does not stall the loop forever`() {
+        val loop = ExposureLoop(IsoRange(30, 7_518))
+        val asked = loop.start(GridFrequency.HZ_50)
+            .copy(iso = 7_518, acquired = true, awaitingEcho = true, changedAtMs = 0)
+
+        // The sensor answers with something else, every time.
+        var state = asked
+        repeat(ExposureConfig().echoPatience) {
+            state = loop.onSensorEcho(state, iso = 6_240, shutterHz = 50)
+        }
+
+        assertFalse(state.awaitingEcho, "the loop is still waiting for an echo that never comes")
+        assertEquals(6_240, state.iso, "the sensor is the authority on what it actually did")
+    }
+
+    // The bound must not fire on ordinary pipeline latency, which is what the
+    // wait exists for in the first place.
+    @Test
+    fun `a few stale results still count as latency rather than refusal`() {
+        val loop = ExposureLoop(IsoRange(30, 7_518))
+        val asked = loop.start(GridFrequency.HZ_50)
+            .copy(iso = 400, acquired = true, awaitingEcho = true, changedAtMs = 0)
+
+        var state = asked
+        repeat(3) { state = loop.onSensorEcho(state, iso = 200, shutterHz = 50) }
+        assertTrue(state.awaitingEcho, "gave up on the request after only three stale frames")
+        assertEquals(400, state.iso, "adopted a stale value as if the sensor had refused")
+
+        state = loop.onSensorEcho(state, iso = 400, shutterHz = 50)
+        assertFalse(state.awaitingEcho)
+        assertEquals(400, state.iso)
     }
 
     /**

@@ -88,9 +88,33 @@ class ExposureLoop(
     fun onSensorEcho(state: ExposureState, iso: Int, shutterHz: Int): ExposureState {
         if (!state.awaitingEcho) return state
         if (shutterHz != state.shutterHz) return state
+
         val slack = (state.iso * config.sensorEchoTolerance).coerceAtLeast(1.0)
-        if (abs(iso - state.iso) > slack) return state
-        return state.copy(awaitingEcho = false)
+        if (abs(iso - state.iso) <= slack) return state.copy(awaitingEcho = false, ignoredEchoes = 0)
+
+        // A result that does not carry what we asked for is *usually* a frame
+        // that was already in the pipeline, and waiting is right. But a sensor
+        // that will not deliver the value -- clamping near its ceiling, say --
+        // never sends a matching one, and waiting forever means the loop stops
+        // metering and the exposure freezes wherever it happened to be. That is
+        // exactly what was reported: ISO pinned at the top of the range in a
+        // 445-lux room, refusing to come down.
+        //
+        // So the wait is bounded. Past [ExposureConfig.echoPatience] results the
+        // sensor is taken at its word: it is the authority on what it actually
+        // did, and metering against a number it is not using is worse than
+        // adopting one it is.
+        val ignored = state.ignoredEchoes + 1
+        if (ignored < config.echoPatience) return state.copy(ignoredEchoes = ignored)
+
+        return state.copy(
+            iso = iso,
+            // The exposure delivered is not the one that was charged against the
+            // error when the request went out, so give back the difference.
+            errorEv = state.errorEv + log2(state.iso.toDouble() / iso.toDouble()),
+            awaitingEcho = false,
+            ignoredEchoes = 0,
+        )
     }
 
     /**
@@ -346,6 +370,15 @@ data class ExposureConfig(
      * the smallest number a sensor can report a difference in.
      */
     val sensorEchoTolerance: Double = 0.02,
+    /**
+     * How many non-matching capture results to wait through before believing the
+     * sensor over the request.
+     *
+     * Long enough to outlast the frames already in the pipeline when a request
+     * goes out -- a few at 30 fps -- and short enough that a sensor which clamps
+     * costs a third of a second rather than the rest of the session.
+     */
+    val echoPatience: Int = 10,
 ) {
     fun damping(recording: Boolean): Damping = if (recording) this.recording else setup
 }
@@ -409,6 +442,11 @@ data class ExposureState(
     val acquired: Boolean = false,
     /** A change is in flight; frames metered now would still show the old one. */
     val awaitingEcho: Boolean = false,
+    /**
+     * Capture results seen since the request that did not carry it, so a sensor
+     * which will never deliver the value cannot stall the loop forever.
+     */
+    val ignoredEchoes: Int = 0,
     /** When the last change was requested, for the slew limit. */
     val changedAtMs: Long? = null,
     /** The exposure warnings only (PRD 6.3); the caller merges in the rest. */
