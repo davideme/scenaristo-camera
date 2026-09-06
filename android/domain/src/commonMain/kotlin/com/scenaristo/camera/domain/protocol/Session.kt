@@ -121,6 +121,7 @@ class Session(
             grid = grid,
             whiteBalanceKelvin = patch.whiteBalanceKelvin ?: state.settings.whiteBalanceKelvin,
             lensId = patch.lensId ?: state.settings.lensId,
+            saveToGallery = patch.saveToGallery ?: state.settings.saveToGallery,
             isoLock = isoLock,
             shutterLock = shutterLock,
         )

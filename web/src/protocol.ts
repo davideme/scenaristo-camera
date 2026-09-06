@@ -48,6 +48,7 @@ export interface CaptureSettings {
   shutterLock?: number | null;
   whiteBalanceKelvin: number;
   lensId: string;
+  saveToGallery?: boolean;
   focus?: Focus;
 }
 
@@ -101,6 +102,7 @@ export interface SettingsPatch {
   grid?: GridFrequency | null;
   whiteBalanceKelvin?: number | null;
   lensId?: string | null;
+  saveToGallery?: boolean | null;
   isoLock?: number | null;
   shutterLock?: number | null;
 }
