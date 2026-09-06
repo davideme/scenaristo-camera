@@ -16,7 +16,8 @@
     },
     "recording": {
       "recording": true,
-      "startedAtMs": 1788500000000
+      "startedAtMs": 1788500000000,
+      "fileName": "Scenaristo_2026-09-06_14-32-05"
     },
     "device": {
       "batteryPercent": 63,
@@ -33,6 +34,13 @@
       "clipping": false,
       "input": "WIRED",
       "metering": true
+    },
+    "encoding": {
+      "codec": "HEVC",
+      "widthPx": 3840,
+      "heightPx": 2160,
+      "frameRate": 30,
+      "bitrate": 45000000
     },
     "serverTimeMs": 1788500123456
   }

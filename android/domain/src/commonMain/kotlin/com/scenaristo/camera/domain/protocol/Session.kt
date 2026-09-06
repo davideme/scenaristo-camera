@@ -62,6 +62,10 @@ class Session(
     private fun start(command: Command, nowMs: Long): Outcome {
         if (state.recording.recording) return remember(command, nowMs, changed = false)
         state = state.copy(
+            // `fileName` is deliberately not carried over: the previous take's
+            // name against a running timer would read as this take's, and the
+            // real one arrives from the capture layer a moment later (PRD 6.7
+            // derives it from the instant recording starts).
             recording = RecordingState(recording = true, startedAtMs = nowMs),
             serverTimeMs = nowMs,
         )
@@ -71,7 +75,14 @@ class Session(
     private fun stop(command: Command, nowMs: Long): Outcome {
         if (!state.recording.recording) return remember(command, nowMs, changed = false)
         state = state.copy(
-            recording = RecordingState(recording = false, startedAtMs = null),
+            // The name survives the stop. "Did that save, and as what?" is the
+            // question of the second after a take ends, and a transport row that
+            // blanks exactly then is answering the wrong one (UI-9).
+            recording = RecordingState(
+                recording = false,
+                startedAtMs = null,
+                fileName = state.recording.fileName,
+            ),
             serverTimeMs = nowMs,
         )
         return remember(command, nowMs, changed = true)

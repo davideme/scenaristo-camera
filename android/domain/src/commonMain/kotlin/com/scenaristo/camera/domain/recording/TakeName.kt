@@ -1,0 +1,42 @@
+package com.scenaristo.camera.domain.recording
+
+/**
+ * What a take is called on disk (PRD 6.7: `Scenaristo_YYYY-MM-DD_HH-MM-SS.mp4`).
+ *
+ * Here rather than in `:capture` because both platforms have to produce the same
+ * name from the same instant, and a second implementation is a second chance to
+ * get the separators wrong (ADR-0013). It matters more than a filename usually
+ * does: the timestamp is what makes two takes a minute apart sort correctly in a
+ * directory listing, which is the only ordering a creator gets -- there is no
+ * take list in the app (PRD 6.9), so the file browser is the take list.
+ *
+ * The platform supplies the calendar fields rather than an instant, because
+ * turning an instant into a local date needs a time zone database and
+ * `commonMain` is platform-free (ADR-0010, ADR-0015). Local time, not UTC: the
+ * name exists to be recognised by the person who shot it.
+ */
+object TakeName {
+
+    /**
+     * The name without an extension, so a caller can add `.mp4` or hand it to a
+     * `MediaStore` entry that appends its own.
+     */
+    fun of(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int): String =
+        "Scenaristo_${pad(year, 4)}-${pad(month)}-${pad(day)}_" +
+            "${pad(hour)}-${pad(minute)}-${pad(second)}"
+
+    /**
+     * The shape [of] produces, for the platform tests that assert their clock
+     * plumbing did not quietly reorder or re-separate the fields.
+     *
+     * A regex rather than a format string because it is used to check a result,
+     * and a format string that both sides share proves only that they share a
+     * bug.
+     */
+    val PATTERN = Regex("""Scenaristo_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}""")
+
+    /** The extension PRD 6.7 fixes for both platforms. */
+    const val EXTENSION: String = "mp4"
+
+    private fun pad(value: Int, width: Int = 2): String = value.toString().padStart(width, '0')
+}

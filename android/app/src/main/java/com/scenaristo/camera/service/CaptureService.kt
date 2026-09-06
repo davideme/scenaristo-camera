@@ -58,6 +58,7 @@ import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
 import com.scenaristo.camera.domain.protocol.DeviceStatus
 import com.scenaristo.camera.domain.protocol.RecordingState
+import com.scenaristo.camera.domain.recording.TakeName
 import com.scenaristo.camera.domain.protocol.SettingsPatch
 import com.scenaristo.camera.domain.protocol.Session
 import com.scenaristo.camera.domain.protocol.ThermalState
@@ -72,6 +73,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.time.LocalDateTime
 
 /**
  * Capture and the web server, in one foreground service (ADR-0003).
@@ -404,6 +406,17 @@ class CaptureService : LifecycleService() {
                 codecReport.profileCodec?.contains("avc") == true -> "H.264"
                 else -> "—"
             }
+            // PRD 6.7: the codec in use is displayed on phone *and web* before
+            // recording. The phone reads `_codecLabel`; the remote control reads
+            // the state document, so the same report goes into both.
+            session.update(System.currentTimeMillis()) {
+                it.copy(
+                    encoding = codecReport.encoding(
+                        frameRate = RECORDING_FRAME_RATE,
+                        bitrate = RECORDING_BITRATE,
+                    ),
+                )
+            }
             val report = CodecReport.markdown(codecReport)
             _codecs.value = report
             // Logged as well as shown: #21's answer is a number to paste into an
@@ -700,8 +713,21 @@ class CaptureService : LifecycleService() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
+    /**
+     * The take's name, per PRD 6.7 (`Scenaristo_YYYY-MM-DD_HH-MM-SS`).
+     *
+     * The shape is `:domain`'s so that Phase 4 produces the same one from the
+     * same instant (ADR-0013); the local calendar fields are this platform's,
+     * because turning an instant into a local date needs a time-zone database
+     * that `commonMain` cannot have (ADR-0010).
+     *
+     * Local time rather than UTC: the name exists to be recognised by the person
+     * who shot it.
+     */
+    private fun takeName(): String = takeNameOf(LocalDateTime.now())
+
     private fun startRecording() {
-        val name = "take-${System.currentTimeMillis()}"
+        val name = takeName()
         // PRD 6.7 / #17: the app owes the user a word on the next launch if this
         // take does not finish. Written before the recorder starts, because a
         // crash between these two lines should over-report rather than
@@ -716,6 +742,12 @@ class CaptureService : LifecycleService() {
             camera.recorder.prepareRecording(this, mediaStoreOutput(name))
         } else {
             camera.recorder.prepareRecording(this, appFolderOutput(name))
+        }
+        // PRD 6.8's transport row names the file. Published when the take starts
+        // rather than when it finishes, because "what is this take called" is a
+        // question asked during the take as often as after it.
+        session.update(System.currentTimeMillis()) {
+            it.copy(recording = it.recording.copy(fileName = name))
         }
         recording = pending
             .withAudioIfPermitted()
@@ -734,7 +766,17 @@ class CaptureService : LifecycleService() {
                     // truth rather than the request, or the browser shows a take
                     // that stopped minutes ago (#20).
                     session.update(System.currentTimeMillis()) {
-                        it.copy(recording = RecordingState(recording = false, startedAtMs = null))
+                        // The name outlives the take on purpose: "did that save,
+                        // and as what" is the question of the second after a
+                        // stop, and a transport row that blanks just then is
+                        // answering the wrong one.
+                        it.copy(
+                            recording = RecordingState(
+                                recording = false,
+                                startedAtMs = null,
+                                fileName = it.recording.fileName,
+                            ),
+                        )
                     }
                 }
             }
@@ -1103,14 +1145,45 @@ class CaptureService : LifecycleService() {
         )
 
         /**
-         * 4K30 measured at 33.4 Mbit/s on the reference device (#21), so roughly
-         * 250 MB a minute. A rough number that is right is more use to a creator
+         * What 4K30 actually costs, measured at 33.4 Mbit/s on the reference
+         * device (#21). A rough number that is right is more use to a creator
          * than a precise one that needs the encoder to be running.
+         *
+         * Deliberately not the `CamcorderProfile` bitrate: on the reference
+         * device the UHD profile declares 72 Mbit/s, because it describes the
+         * fastest mode it supports (2160p60) rather than the 30 fps this app
+         * pins. Both the minutes-remaining figure and the transport row's
+         * bitrate come from here, so the two cannot disagree on the same screen.
          */
-        private const val BYTES_PER_MINUTE = 250L * 1024 * 1024
+        private const val RECORDING_BITRATE = 33_400_000
+
+        /** PRD 6.1: the session pins `Range(30, 30)`, so this is the file's rate. */
+        private const val RECORDING_FRAME_RATE = 30
+
+        /** [RECORDING_BITRATE] as bytes a minute, for the storage arithmetic. */
+        private const val BYTES_PER_MINUTE = RECORDING_BITRATE / 8L * 60L
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, CaptureService::class.java))
         }
     }
 }
+
+/**
+ * PRD 6.7's name for a take, from a local date and time.
+ *
+ * A free function so it can be tested without a service, a camera or a clock.
+ * The thing worth testing is that the calendar fields do not get transposed on
+ * the way across -- `monthValue` and `dayOfMonth` are adjacent,
+ * interchangeable-looking integers, and a take named `Scenaristo_2026-06-09`
+ * instead of `Scenaristo_2026-09-06` is wrong in a way nobody notices until
+ * they sort a directory.
+ */
+internal fun takeNameOf(at: LocalDateTime): String = TakeName.of(
+    year = at.year,
+    month = at.monthValue,
+    day = at.dayOfMonth,
+    hour = at.hour,
+    minute = at.minute,
+    second = at.second,
+)

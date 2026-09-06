@@ -39,6 +39,7 @@ export interface State {
   warnings?: Warning[];
   clients?: number;
   audio?: AudioState;
+  encoding?: Encoding;
   serverTimeMs: number;
 }
 
@@ -67,6 +68,7 @@ export type FocusMode = "continuous" | "locked";
 export interface RecordingState {
   recording: boolean;
   startedAtMs?: number | null;
+  fileName?: string | null;
 }
 
 export interface DeviceStatus {
@@ -88,6 +90,16 @@ export interface AudioState {
 }
 
 export type AudioInput = "BUILT_IN" | "WIRED" | "USB" | "BLUETOOTH" | "UNKNOWN";
+
+export interface Encoding {
+  codec?: VideoCodec;
+  widthPx?: number;
+  heightPx?: number;
+  frameRate?: number;
+  bitrate?: number;
+}
+
+export type VideoCodec = "HEVC" | "H264" | "UNKNOWN";
 
 export interface CmdMessage {
   type: "cmd";
