@@ -49,7 +49,19 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
             var col = 0
             while (col < frame.width) {
                 val x = (col + 0.5) / frame.width
-                val w = if (windows.any { it.contains(x, y) }) 1.0 else config.backgroundWeight
+                // Indexed rather than `windows.any { }`: that allocates an
+                // iterator per *sampled pixel*, which at this stride is tens of
+                // thousands per frame and about a million a second. It ran the
+                // heap out of memory on the reference device and killed the tap
+                // thread, taking the preview and the metering with it.
+                var inWindow = false
+                for (i in windows.indices) {
+                    if (windows[i].contains(x, y)) {
+                        inWindow = true
+                        break
+                    }
+                }
+                val w = if (inWindow) 1.0 else config.backgroundWeight
                 if (w > 0.0) {
                     weightedLog += w * ln(frame.sampler.lumaAt(col, row))
                     weight += w
