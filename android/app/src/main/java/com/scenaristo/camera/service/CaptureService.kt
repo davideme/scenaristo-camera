@@ -826,10 +826,9 @@ class CaptureService : LifecycleService() {
      * That leaves FAIR meaning `LIGHT` alone: warm, nothing given up yet.
      */
     private fun thermalOf(status: Int): ThermalState = when (status) {
-        PowerManager.THERMAL_STATUS_NONE -> ThermalState.NOMINAL
-        PowerManager.THERMAL_STATUS_LIGHT -> ThermalState.FAIR
-        PowerManager.THERMAL_STATUS_MODERATE, PowerManager.THERMAL_STATUS_SEVERE ->
-            ThermalState.SERIOUS
+        PowerManager.THERMAL_STATUS_NONE, PowerManager.THERMAL_STATUS_LIGHT -> ThermalState.NOMINAL
+        PowerManager.THERMAL_STATUS_MODERATE -> ThermalState.FAIR
+        PowerManager.THERMAL_STATUS_SEVERE -> ThermalState.SERIOUS
         else -> ThermalState.CRITICAL
     }
 
