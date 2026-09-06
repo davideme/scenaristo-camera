@@ -47,6 +47,7 @@ import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.PreviewJpegSource
 import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.domain.exposure.GridFrequency
+import com.scenaristo.camera.domain.exposure.shutterLadder
 import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
 import com.scenaristo.camera.domain.protocol.CaptureSettings
 import com.scenaristo.camera.domain.protocol.Command
@@ -99,7 +100,15 @@ class CaptureService : LifecycleService() {
     private val _codecs = MutableStateFlow<String?>(null)
     val codecs: StateFlow<String?> = _codecs.asStateFlow()
 
-    private val _state = MutableStateFlow(startingState())
+    /**
+     * Seeded with the PRD's own defaults rather than with [startingState].
+     *
+     * Field initialisers run during construction, before `onCreate` has a
+     * `Context` to read [Settings] with — so calling `startingState()` here
+     * crashed the service on start-up. `onCreate` overwrites this the moment the
+     * real one exists, and nothing observes the flow before then.
+     */
+    private val _state = MutableStateFlow(defaultState())
 
     /**
      * The same state document the browser sees (ADR-0007), for the phone's own
@@ -138,6 +147,7 @@ class CaptureService : LifecycleService() {
     private val jpeg = PreviewJpegSource()
     private lateinit var tap: PreviewTapProcessor
     private lateinit var camera: ManualSession
+    private lateinit var settings: Settings
     private lateinit var session: Session
     private lateinit var server: ControlServer
 
@@ -155,6 +165,10 @@ class CaptureService : LifecycleService() {
 
     /** Last (isoLock, shutterLock) pushed, for the same reason (PRD 6.3, #51). */
     private var appliedLocks: Pair<Int?, Int?>? = null
+
+    /** Last grid and lens written to storage, for the same reason. */
+    private var appliedGrid: GridFrequency? = null
+    private var appliedLens: String? = null
 
     /** ADR-0005's loop, alive only once a camera is bound. */
     @Volatile
@@ -232,7 +246,10 @@ class CaptureService : LifecycleService() {
         // service outright.
         startForeground(NOTIFICATION_ID, notification("Starting…"), foregroundTypes())
 
+        settings = Settings(this)
         session = Session(startingState())
+        _state.value = session.state
+        Log.i(SETTINGS_TAG, "grid ${session.state.settings.grid} from ${settings.grid().source}")
         jpeg.quality = 80
         tap = PreviewTapProcessor(onFrame = ::onTapFrame)
         camera = ManualSession(DEFAULT_REQUEST, tap = tap, onCaptureResult = ::onCaptureResult)
@@ -469,6 +486,24 @@ class CaptureService : LifecycleService() {
             if (kelvin != appliedKelvin) {
                 appliedKelvin = kelvin
                 exposure?.onWhiteBalanceChanged(ManualControls.awbModeFor(kelvin))
+                // PRD 6.2 and #2: an override that does not survive a relaunch is
+                // not an override, it is a suggestion the app forgets.
+                settings.whiteBalanceKelvin = kelvin
+            }
+            val grid = session.state.settings.grid
+            if (grid != appliedGrid) {
+                appliedGrid = grid
+                // A grid arriving through a command is a *manual* choice by
+                // definition -- detection never goes through the protocol -- so
+                // storing it here is what makes the UI able to say "set manually"
+                // on the next launch rather than guessing again.
+                settings.gridOverride = grid
+                exposure?.onGridChanged(grid, System.currentTimeMillis())
+            }
+            val lens = session.state.settings.lensId
+            if (lens != appliedLens) {
+                appliedLens = lens
+                settings.lensId = lens
             }
             server.broadcastSnapshot()
             _state.value = session.state
@@ -840,18 +875,44 @@ class CaptureService : LifecycleService() {
         else -> ThermalState.CRITICAL
     }
 
-    private fun startingState() = ProtocolState(
+    /**
+     * The state a launch starts from (PRD 6.2, #2, #15).
+     *
+     * Everything the user can change is read back from [Settings] rather than
+     * hard-coded, and the grid runs PRD 6.2's detection chain — SIM country, then
+     * device region — with any stored override in front of it. The shutter
+     * follows from the grid rather than being a separate constant, which is what
+     * makes "the UI reads 50 Hz" and "the shutter is 1/50" the same fact.
+     */
+    /** PRD 6.1's defaults, needing nothing but the PRD. */
+    private fun defaultState(): ProtocolState = ProtocolState(
         settings = CaptureSettings(
             grid = GridFrequency.HZ_50,
-            shutterHz = 50,
+            shutterHz = shutterLadder(GridFrequency.HZ_50).first(),
             iso = DEFAULT_REQUEST.sensitivity,
-            whiteBalanceKelvin = 5600,
+            whiteBalanceKelvin = DEFAULT_KELVIN,
             lensId = "0",
         ),
         recording = RecordingState(recording = false),
         device = DeviceStatus(0, false, ThermalState.NOMINAL, 0),
         serverTimeMs = System.currentTimeMillis(),
     )
+
+    private fun startingState(): ProtocolState {
+        val grid = settings.grid()
+        return ProtocolState(
+        settings = CaptureSettings(
+            grid = grid.grid,
+            shutterHz = shutterLadder(grid.grid).first(),
+            iso = DEFAULT_REQUEST.sensitivity,
+            whiteBalanceKelvin = settings.whiteBalanceKelvin,
+            lensId = settings.lensId,
+        ),
+        recording = RecordingState(recording = false),
+        device = DeviceStatus(0, false, ThermalState.NOMINAL, 0),
+        serverTimeMs = System.currentTimeMillis(),
+        )
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val result = super.onStartCommand(intent, flags, startId)
@@ -872,6 +933,7 @@ class CaptureService : LifecycleService() {
         private const val CHANNEL_ID = "capture"
         private const val EXPOSURE_TAG = "ExposureLoop"
         private const val IDLE_TAG = "IdleShutdown"
+        private const val SETTINGS_TAG = "Settings"
 
         /**
          * Long enough for a recreated activity to rebind, short enough that a
