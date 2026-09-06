@@ -40,6 +40,7 @@ export interface State {
   clients?: number;
   audio?: AudioState;
   encoding?: Encoding;
+  exposure?: ExposureReadout;
   serverTimeMs: number;
 }
 
@@ -100,6 +101,12 @@ export interface Encoding {
 }
 
 export type VideoCodec = "HEVC" | "H264" | "UNKNOWN";
+
+export interface ExposureReadout {
+  stopsFromTarget?: number;
+  histogram?: number[];
+  metering?: boolean;
+}
 
 export interface CmdMessage {
   type: "cmd";

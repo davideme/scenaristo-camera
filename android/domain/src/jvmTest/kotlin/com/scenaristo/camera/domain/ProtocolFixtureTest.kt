@@ -1,6 +1,7 @@
 package com.scenaristo.camera.domain
 
 import com.scenaristo.camera.domain.exposure.GridFrequency
+import com.scenaristo.camera.domain.exposure.Histogram
 import com.scenaristo.camera.domain.protocol.Ack
 import com.scenaristo.camera.domain.protocol.ClientMessage
 import com.scenaristo.camera.domain.protocol.Command
@@ -96,6 +97,16 @@ class ProtocolFixtureTest {
         assertEquals(2160, state.encoding.heightPx)
         assertEquals(30, state.encoding.frameRate)
         assertEquals(45_000_000, state.encoding.bitrate)
+        // #97: the exposure aids. Negative is under-exposed, which is the
+        // opposite sign to the loop's own `errorEv` and the reason that
+        // conversion has a test of its own.
+        assertEquals(-0.4, state.exposure.stopsFromTarget, absoluteTolerance = 1e-9)
+        assertTrue(state.exposure.metering)
+        assertEquals(
+            Histogram.BINS,
+            state.exposure.histogram.size,
+            "the fixture must carry a full histogram, not a truncated one",
+        )
         // PRD 6.7's naming, which UI-9's transport row shows next to the timecode.
         assertEquals("Scenaristo_2026-09-06_14-32-05", state.recording.fileName)
         assertTrue(
