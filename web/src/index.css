@@ -1,93 +1,718 @@
+/*
+ * UI-11's tokens, and the two layouts of UI-9 and UI-10.
+ *
+ * One palette, deliberately. Spec §3 makes theming a non-goal: this interface
+ * sits on top of a live camera image, so the palette is a legibility decision
+ * rather than a taste one, and a light mode would put a bright page beside a
+ * preview whose exposure the user is trying to judge.
+ */
 :root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ground: #0a0b0c;
+  --panel: #131519;
+  --text: #f2f0ed;
+  --dim: rgba(242, 240, 237, 0.58);
+  --dimmer: rgba(242, 240, 237, 0.34);
+  --line: rgba(242, 240, 237, 0.12);
+  --amber: oklch(0.8 0.14 82);
+  --orange: oklch(0.74 0.165 48);
+  --red: oklch(0.63 0.21 26);
+  --green: oklch(0.76 0.13 155);
+
+  /*
+   * UI-11 asks for Archivo and IBM Plex Mono. ADR-0009 forbids the bundle any
+   * external request, so a webfont would have to be embedded as base64 —
+   * licence, provenance and about 60 KB of binary in the repository, which is
+   * Davide's call rather than one to make in passing. Until then these are the
+   * nearest system stacks: a grotesque for the interface, and a mono for values
+   * that change character by character.
+   */
+  --sans: "Helvetica Neue", Inter, Roboto, system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, monospace;
+
+  color-scheme: dark;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--sans);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  padding: 2rem;
+  background: var(--ground);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* PRD 6.8: the layout is responsive with a phone-width breakpoint. */
-@media (max-width: 480px) {
-  body {
-    padding: 1rem;
-  }
+/* UI-11: everything that updates live is tabular, so a changing value does not
+   shift its neighbours. */
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
-/* The remote is used at arm's length while someone is on camera, so everything
-   is large, high contrast, and never moves: a control that shifts position is a
-   control you have to look at, and looking away is the thing to avoid. */
+/* UI-11: labels are 9 px, 700, uppercase, .16em tracking. Values are 15 px, 500. */
+.label,
+dt,
+.panel h2 {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--dimmer);
+  margin: 0;
+}
+
+.value,
+dd {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* --- The page ---------------------------------------------------------- */
+
 main {
-  max-width: 60rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-areas:
+    "header header"
+    "stage  column";
+  gap: 20px;
+  align-items: start;
+  max-width: 1500px;
   margin: 0 auto;
-  padding: 1rem;
-  font-family: system-ui, sans-serif;
+  padding: 20px;
+  min-height: 100vh;
 }
 
 header {
+  grid-area: header;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 16px;
 }
 
-.status {
-  font-variant-numeric: tabular-nums;
-  font-size: 0.9rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 1rem;
-  background: #333;
-  color: #ddd;
+h1 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0;
 }
-.status.live { background: #16653d; color: #d7f5e4; }
-.status.stale { background: #7c5800; color: #ffeeba; }
-.status.closed { background: #7f1d1d; color: #fecaca; }
+
+.stage {
+  grid-area: stage;
+  min-width: 0;
+}
+
+.column {
+  grid-area: column;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* UI-9 calls this a *fixed* control column: a producer reaching for Light
+     mid-setup should not have to find where scrolling left it. */
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+/* --- Connection ---------------------------------------------------------- */
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dim);
+  margin: 0;
+}
+
+.link-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dimmer);
+}
+
+.link.live .link-dot {
+  background: var(--green);
+}
+
+/* Orange, with the shape rule of UI-5: the dot is a state, so the *text* says
+   what it means rather than a colour carrying the whole message. */
+.link.stale .link-dot,
+.link.closed .link-dot {
+  background: var(--orange);
+}
+
+.link-note {
+  color: var(--dimmer);
+  font-size: 11px;
+}
+
+/* --- Reported row (§5, UI-9) ---------------------------------------------- */
+
+.reported {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.reported > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* §5: reported values are dimmed and unframed, and none of them is touchable. */
+.reported dd {
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.padlock {
+  color: var(--dim);
+  flex: none;
+}
+
+/* ADR-0005's flicker-safe step. PRD 6.3 says no warning is shown when the step
+   succeeds, so this is a marker in the reported style — not orange, not a chip. */
+.marker {
+  font-family: var(--sans);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.caption {
+  font-size: 11px;
+  color: var(--dimmer);
+}
+
+/* --- Warnings (UI-5) ----------------------------------------------------- */
+
+.warnings {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* UI-5: orange is always a bordered block with an icon, never a tint on a
+   value. A warning carries an icon; a control never does, and that is what
+   separates warning orange from control amber at a glance. */
+.warnings li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--orange);
+  border: 1px solid color-mix(in oklab, var(--orange) 45%, transparent);
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+
+.icon {
+  flex: none;
+}
+
+/* --- Preview ------------------------------------------------------------- */
+
+.preview-frame {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
 
 .preview {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  background: #000;
   object-fit: contain;
-  border-radius: 0.5rem;
+  background: #000;
 }
 
-.controls {
+/* UI-6: a red inset border frames the whole preview while recording, and red
+   appears nowhere else in the interface. */
+main.recording .preview-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--red);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+/* --- Transport (UI-9) ---------------------------------------------------- */
+
+.transport {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 4px 0;
+}
+
+.transport-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.timecode {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin: 1rem 0;
+  gap: 8px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  font-weight: 500;
+  color: var(--dim);
+  margin: 0;
+  line-height: 1.1;
 }
 
-.controls button {
-  font-size: 1.25rem;
-  padding: 0.75rem 2rem;
-  border-radius: 2rem;
-  border: none;
+/* UI-6: the timecode goes to full contrast and gains a filled red dot. */
+.timecode.live {
+  color: var(--text);
+}
+
+.dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--red);
+  flex: none;
+}
+
+.state-word {
+  font-size: 11px;
+  color: var(--dim);
+  margin: 0;
+}
+
+.file {
+  font-size: 11px;
+  color: var(--dimmer);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transport-centre {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.record {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
 }
-.controls button.recording { background: #b91c1c; color: white; }
 
-/* Tabular numerals so the timer does not jitter as digits change width. */
-.timer {
-  font-size: 1.5rem;
+.record:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.record-glyph {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--red);
+  flex: none;
+}
+
+/* UI-6: the record control becomes a stop control — rounded square, same
+   position, same size. */
+.record.stop .record-glyph {
+  border-radius: 3px;
+}
+
+.shortcut {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  margin: 0;
+}
+
+.transport-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.transport-right p {
+  margin: 0;
+}
+
+.dim {
+  color: var(--dimmer);
+  font-size: 11px;
+}
+
+/* --- Panels -------------------------------------------------------------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* §5: an amber label means "you can change this", and it means nothing else. */
+  color: var(--amber);
+}
+
+/* A panel that only reports keeps the frame — it is a container, not a control
+   — but drops the amber, because there is nothing here to press. */
+.reported-panel h2 {
+  color: var(--dimmer);
+}
+
+.panel.locked {
+  opacity: 0.55;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.stack > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stack dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.stack dd {
+  color: var(--dim);
+  font-size: 13px;
+  text-align: right;
+}
+
+/* UI-5: the thermal state is the one exception to "a warning is a chip" — it
+   names a four-level state rather than raising a warning — and it is only drawn
+   at SERIOUS and CRITICAL at all. */
+.hot dd {
+  color: var(--orange);
+}
+
+.lock-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--dimmer);
+  margin: 0;
+}
+
+.clipping {
+  font-size: 11px;
+  color: var(--orange);
+  margin: 0;
+}
+
+/* --- Controls (§5: framed, and they carry their own value) ---------------- */
+
+.scenario-name {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 0 0 6px;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* UI-10: touch targets are at least 44 px at phone width. Kept here too —
+     nothing is gained by making them smaller on a laptop. */
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--sans);
+  cursor: pointer;
+  text-align: left;
+}
+
+.choice:disabled {
+  cursor: default;
+}
+
+.choice.selected {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.choice-name {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.choice-value {
+  font-size: 10px;
+  color: var(--dimmer);
+}
+
+.choice.selected .choice-value {
+  color: color-mix(in oklab, var(--amber) 70%, transparent);
+}
+
+/* --- Sound meter (PRD 6.6) ----------------------------------------------- */
+
+.meter {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(242, 240, 237, 0.08);
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: var(--green);
+  transition: width 120ms linear;
+}
+
+/* --- Exposure aids (UI-17) ------------------------------------------------ */
+
+.aid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aid-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* The exposure panel's title lives in this row rather than above it, so
+   "Exposure" is not drawn twice (goal 2). */
+.aid-head h2 {
+  color: var(--dimmer);
+}
+
+.aid-head .value {
+  color: var(--dim);
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+  font-size: 13px;
 }
 
-fieldset { border: 1px solid #444; border-radius: 0.5rem; }
-fieldset:disabled { opacity: 0.5; }
-fieldset button { margin-right: 0.5rem; padding: 0.4rem 1rem; }
-fieldset button.selected { outline: 2px solid currentColor; }
-
-.readout {
-  display: grid;
-  grid-template-columns: max-content auto;
-  gap: 0.25rem 1rem;
-  margin-top: 1rem;
+.clip em {
+  font-style: normal;
+  color: var(--orange);
+  margin-left: 8px;
 }
-.readout dt { opacity: 0.7; }
-.readout dd { margin: 0; font-variant-numeric: tabular-nums; }
 
-.warnings { color: #f59e0b; }
-.refused { color: #f87171; }
+.scale {
+  position: relative;
+  height: 14px;
+}
+
+.scale-track {
+  position: absolute;
+  inset: 6px 0 auto;
+  height: 2px;
+  background: rgba(242, 240, 237, 0.14);
+  border-radius: 1px;
+}
+
+/* The 18% target is marked on the scale rather than written beside the reading:
+   "0 EV" and "18% grey" are the same fact, and goal 2 says each fact is drawn
+   once. */
+.scale-target {
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  width: 1px;
+  height: 12px;
+  background: var(--dimmer);
+}
+
+.scale-marker {
+  position: absolute;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: left 200ms ease-out;
+}
+
+.scale-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+}
+
+.histogram {
+  width: 100%;
+  height: 42px;
+  display: block;
+}
+
+.histogram polygon {
+  fill: rgba(242, 240, 237, 0.34);
+}
+
+/* --- Refusal ------------------------------------------------------------- */
+
+.refused {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--orange);
+  border: 1px solid color-mix(in oklab, var(--orange) 45%, transparent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+.dismiss {
+  margin-left: auto;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--sans);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* --- UI-10: the remote control works at phone width ----------------------- */
+
+@media (max-width: 900px) {
+  main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "header"
+      "stage"
+      "column";
+  }
+
+  .column {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 480px) {
+  main {
+    /* Room for the pinned transport bar below. */
+    padding: 12px 12px 96px;
+    gap: 14px;
+  }
+
+  /* UI-10: at phone width the reported values are a two-column grid. */
+  .reported {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 12px;
+  }
+
+  /*
+   * UI-10: the record control and timecode are pinned to the bottom of the
+   * viewport on an opaque bar, reachable without scrolling. Opaque and not
+   * translucent — this sits over a live camera image, and a record control you
+   * have to find against a moving background is one you press late.
+   */
+  .transport {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    grid-template-columns: 1fr auto;
+    background: var(--ground);
+    border-top: 1px solid var(--line);
+    padding: 10px 12px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .timecode {
+    font-size: 22px;
+  }
+
+  /* Minutes and codec drop off the pinned bar: at this width the bar has room
+     for the two things it exists for, and both are still in the panels above. */
+  .transport-right {
+    display: none;
+  }
+
+  .record {
+    min-height: 52px;
+  }
+}

@@ -3,6 +3,9 @@ package com.scenaristo.camera.domain.tooling
 import com.scenaristo.camera.domain.protocol.ClientMessage
 import com.scenaristo.camera.domain.protocol.PROTOCOL_VERSION
 import com.scenaristo.camera.domain.protocol.ServerMessage
+import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
+import com.scenaristo.camera.domain.whitebalance.LightScenario
+import com.scenaristo.camera.domain.whitebalance.presetsFor
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.SerialKind
@@ -57,6 +60,20 @@ object GenerateProtocolTypes {
             // said 2, the browser refused anything but 1, and the remote
             // control could not connect at all.
             appendLine("export const PROTOCOL_VERSION = $PROTOCOL_VERSION;")
+            appendLine()
+            // PRD 6.4's Kelvin presets, for the same reason as the version
+            // above: the remote control has to offer exactly what the phone
+            // accepts, and a hand-copied list of six integers is a hand-copied
+            // list that goes stale. Only the numbers are generated -- the words
+            // beside them ("Daylight in the room", "Lamps only") are UI copy
+            // fixed by UI-12 and belong in the bundle.
+            appendLine("export const WHITE_BALANCE_PRESETS = {")
+            LightScenario.entries.forEach { scenario ->
+                appendLine("  ${scenario.name}: [${presetsFor(scenario).joinToString(", ")}],")
+            }
+            appendLine("} as const;")
+            appendLine()
+            appendLine("export const DEFAULT_KELVIN = $DEFAULT_KELVIN;")
             appendLine()
             emitted.values.forEach { appendLine(it) }
             appendLine(union("ServerMessage", server))

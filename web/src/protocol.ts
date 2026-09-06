@@ -3,6 +3,13 @@
 
 export const PROTOCOL_VERSION = 2;
 
+export const WHITE_BALANCE_PRESETS = {
+  NATURAL_LIGHT: [4500, 5600, 6500],
+  ARTIFICIAL_LIGHT: [3200, 4500, 5600],
+} as const;
+
+export const DEFAULT_KELVIN = 5600;
+
 export interface AckMessage {
   type: "ack";
   id: string;
