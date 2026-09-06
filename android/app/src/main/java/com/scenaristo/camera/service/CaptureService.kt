@@ -55,6 +55,7 @@ import com.scenaristo.camera.domain.protocol.CommandName
 import com.scenaristo.camera.domain.protocol.DeviceStatus
 import com.scenaristo.camera.domain.protocol.Focus
 import com.scenaristo.camera.domain.protocol.FocusMode
+import com.scenaristo.camera.domain.protocol.focusAfterTap
 import com.scenaristo.camera.domain.protocol.RecordingState
 import com.scenaristo.camera.domain.protocol.SettingsPatch
 import com.scenaristo.camera.domain.protocol.Session
@@ -547,12 +548,17 @@ class CaptureService : LifecycleService() {
      * guard.
      */
     fun focusAt(x: Double, y: Double) {
+        // What a tap *means* is shared with the browser (PRD 6.8), so the rule
+        // lives in :domain rather than here: tap to lock, tap the same spot
+        // again to release. Deciding it locally would let the two surfaces
+        // disagree about whether a tap unlocks.
+        val next = focusAfterTap(session.state.settings.focus, x, y)
         lifecycleScope.launch {
             server.applyLocal(
                 Command(
                     id = "phone-af-" + System.currentTimeMillis(),
                     name = CommandName.FOCUS_SET,
-                    focus = Focus(mode = FocusMode.LOCKED, x = x, y = y),
+                    focus = next,
                 ),
             )
             _state.value = session.state

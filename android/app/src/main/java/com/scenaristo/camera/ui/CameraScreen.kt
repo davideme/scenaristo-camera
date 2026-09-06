@@ -6,6 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import com.scenaristo.camera.domain.protocol.FocusMode
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -86,8 +89,8 @@ fun CameraScreen(
 ) {
     val recording = state.recording.recording
 
-    /** Where the last tap landed, in pixels, so the reticle can be drawn there. */
-    var reticle by remember { mutableStateOf<Offset?>(null) }
+    /** The viewfinder's size in pixels, so a normalised focus point can be drawn. */
+    var viewfinder by remember { mutableStateOf(IntSize.Zero) }
 
     Box(modifier = modifier.fillMaxSize().background(Tokens.Ground)) {
         surfaceRequest?.let {
@@ -95,14 +98,13 @@ fun CameraScreen(
                 surfaceRequest = it,
                 modifier = Modifier
                     .fillMaxSize()
+                    .onSizeChanged { size -> viewfinder = size }
                     // PRD 6.1: "Tap-to-focus and lock on both phone and web."
-                    // Normalised against the viewfinder's own size and sent as a
-                    // fraction of the frame, which is what lets the same two
-                    // numbers mean the same place in the browser and in the file
-                    // (ADR-0007).
+                    // Normalised against the viewfinder and sent as a fraction of
+                    // the frame, which is what lets the same two numbers mean the
+                    // same place in the browser and in the file (ADR-0007).
                     .pointerInput(Unit) {
                         detectTapGestures { tap ->
-                            reticle = tap
                             onFocusAt(
                                 (tap.x / size.width).toDouble().coerceIn(0.0, 1.0),
                                 (tap.y / size.height).toDouble().coerceIn(0.0, 1.0),
@@ -112,15 +114,17 @@ fun CameraScreen(
             )
         }
 
-        // A tap that draws nothing is a tap the user repeats. It fades on its
-        // own rather than needing dismissal, because focus is not a mode the
-        // user has to get out of.
-        reticle?.let { at ->
-            LaunchedEffect(at) {
-                delay(RETICLE_MS)
-                reticle = null
-            }
-            FocusReticle(at)
+        // Drawn from the state document rather than from the tap, so it shows
+        // what the camera is actually doing: it stays while focus is locked and
+        // disappears the moment it returns to continuous. A transient flash
+        // would confirm the touch and tell the user nothing about the lock they
+        // just created -- which is the report that started this.
+        val focus = state.settings.focus
+        if (focus.mode == FocusMode.LOCKED && viewfinder != IntSize.Zero) {
+            FocusReticle(
+                x = ((focus.x ?: 0.5) * viewfinder.width).toFloat(),
+                y = ((focus.y ?: 0.5) * viewfinder.height).toFloat(),
+            )
         }
 
         // UI-6: a red inset border frames the whole preview while recording, and
@@ -547,25 +551,39 @@ internal fun formatTimecode(elapsedMs: Long): String {
 }
 
 /**
- * Where the tap landed (PRD 6.1).
+ * Where focus is locked (PRD 6.1).
  *
- * Deliberately not orange: UI-5 reserves orange for warnings, and a focus
- * confirmation is neither a warning nor a control.
+ * Labelled, because a bare square is a confirmation and this is a *state* — the
+ * user has turned off face priority and needs to know it, and to know that
+ * tapping it again gives it back.
+ *
+ * Deliberately not orange: UI-5 reserves orange for warnings, and a focus lock
+ * is neither a warning nor a fault.
  */
 @Composable
-private fun FocusReticle(at: Offset) {
-    Box(
-        modifier = Modifier
-            .offset { IntOffset((at.x - RETICLE_HALF_PX).toInt(), (at.y - RETICLE_HALF_PX).toInt()) }
-            .size(RETICLE_DP)
-            .border(1.dp, Tokens.Text, RoundedCornerShape(2.dp)),
-    )
+private fun FocusReticle(x: Float, y: Float) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.offset {
+            IntOffset((x - RETICLE_HALF_PX).toInt(), (y - RETICLE_HALF_PX).toInt())
+        },
+    ) {
+        Box(
+            modifier = Modifier
+                .size(RETICLE_DP)
+                .border(1.dp, Tokens.Text, RoundedCornerShape(2.dp)),
+        )
+        Text(
+            "AF LOCK",
+            color = Tokens.Text,
+            fontSize = 10.sp,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
 }
 
 private val RETICLE_DP = 72.dp
-
-/** How long the reticle stays before it fades. */
-private const val RETICLE_MS = 900L
 
 /** Half the reticle's edge in pixels, to centre it on the tap. */
 private const val RETICLE_HALF_PX = 108f
