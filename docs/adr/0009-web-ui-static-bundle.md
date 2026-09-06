@@ -54,4 +54,4 @@ Every framework option is acceptable; the decision that matters is "one static b
 ## Action Items
 1. [ ] Scaffold `web/` with Vite, TypeScript, Preact; add the `kxstsgen` Gradle task that writes `web/src/protocol.ts`.
 2. [ ] Replay protocol fixtures (ADR-0007) in the browser with Mock Service Worker's WebSocket handlers for UI development; no separate server process.
-3. [ ] Wire the `npm run build` `Exec` task and the `web/dist` resources source directory in `:app`.
+3. [x] Wire the `pnpm run build` `Exec` task and the `web/dist` resources source directory. Done in Phase 2. Two departures from the text above, neither of which changes the decision: the tasks live in **`:server`**, not `:app`, because `:server` is the module whose Ktor route serves the bundle and whose Java resources it has to land in; and the source directory is contributed through AGP 9's `androidComponents` Sources API rather than `preBuild.dependsOn` plus a `sourceSets` mutation, which AGP 9 removed (ADR-0014).

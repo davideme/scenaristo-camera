@@ -110,6 +110,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # The Android build runs `pnpm run build` and packages `web/dist` into the
+      # APK (ADR-0009 action 3), so this job needs the web toolchain too. Before
+      # it did, `assembleDebug` produced an APK whose browser routes 404 and said
+      # so only in a log line -- green CI for an app missing half its product.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
       - uses: gradle/actions/wrapper-validation@v4
       - uses: gradle/actions/setup-gradle@v4
         with:

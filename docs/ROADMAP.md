@@ -89,9 +89,11 @@ and UI-10 — the second is the phone-width case PRD 6.8 makes an acceptance cri
 first: three fields the mockups draw do not exist in `:domain` yet, and one of them (tap to focus,
 PRD 6.1 and 6.8) needs a new command rather than a field.
 
-Also in Phase 2: wire the web bundle into `:app` via AGP 9's `androidComponents` Sources API, and
-add the `kxstsgen` task that generates `web/src/protocol.ts` (ADR-0009 actions 1 and 3, deferred
-from the bootstrap by ADR-0014).
+Also in Phase 2, both now done: the web bundle is wired in via AGP 9's `androidComponents` Sources
+API — in `:server`, the module that serves it, rather than `:app` — so `pnpm run build` is an input
+to `assembleDebug` and the bundle ships inside the APK; and `web/src/protocol.ts` is generated from
+`:domain` by `./gradlew :domain:generateProtocolTypes`, with a test that fails when the committed
+file is stale (#84). ADR-0009 actions 1 and 3, deferred from the bootstrap by ADR-0014.
 
 ## Phase 3 — Android polish and P1
 
