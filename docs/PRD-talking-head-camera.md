@@ -80,7 +80,7 @@ Ordered by priority.
 | Shutter | 1/60 s (60 Hz grid) or 1/50 s (50 Hz grid) | See 6.2. Steps to 1/120 s or 1/100 s only when overexposed at base ISO (6.3). |
 | ISO | Auto, lowest that achieves target exposure | See 6.3. |
 | White balance | Locked preset, default 5600 K | See 6.4. |
-| Focus | Continuous AF with face priority, lockable | Tap-to-focus and lock on both phone and web. |
+| Focus | Continuous AF with face priority | Automatic, with no control. Tap-to-focus and focus lock move to 6.11 (decision 2026-09-06). |
 | Stabilisation | Off, both EIS and OIS | Phone is on a tripod; EIS crops and can wobble, OIS drifts. P1 toggle. (ADR-0002) |
 | Orientation | Landscape | Landscape only in v1; portrait moves to 6.11 (decision 2026-09-04). Web UI shows orientation. |
 | Camera | Rear main (wide) | Rear only in v1. The front camera moves to 6.11 as a nice-to-have (decision 2026-09-04). |
@@ -203,7 +203,7 @@ The phone runs an HTTP + WebSocket server on the local network. Any modern brows
 
 **Controls (every setting listed in 6.1–6.7 plus)**
 - Start / stop recording with a large, unambiguous control; recording state is impossible to misread (red border, elapsed timer).
-- Shutter (1/50, 1/60, override), grid frequency, ISO (auto / manual value), white balance scenario and preset, lens, focus (tap on preview, lock), audio input and level, codec readout, orientation.
+- Shutter (1/50, 1/60, override), grid frequency, ISO readout, white balance scenario and preset, lens, audio input and level, codec readout, orientation. Focus is automatic and has no control (6.1); ISO is an output of the exposure loop and is reported rather than set (6.3, ADR-0005, ADR-0022).
 - Status: shutter in use (including the flicker-safe step of 6.3), battery %, charging state, thermal state (nominal / fair / serious / critical), free storage as minutes remaining at the current bitrate, connection quality.
 - Warnings (too bright, too dark, too close, thermal, low storage, low battery) are mirrored from the phone.
 
@@ -235,6 +235,7 @@ The phone UI is intentionally minimal: preview, record button, the QR/URL panel,
 
 ### 6.11 Nice-to-have (P1)
 
+- **Tap-to-focus and focus lock** (moved here from 6.1, decision 2026-09-06). Continuous AF with face priority already does the job for a talking head, and it needs no control: the subject is a face, and the camera finds it. A tap that locks is a foot-gun — it silently switches off the very thing that was working, and the user who taps by accident has no way to know why their face went soft. It earns its place back when there is a subject the face detector cannot find: a product on a table, a whiteboard, a second person the app picks wrong. The protocol half already exists (`focus.set`, `Focus`, validation in `Session`, a golden fixture) and is unused, so returning is UI work rather than a protocol change.
 - **Portrait orientation** (moved here from 6.1, decision 2026-09-04). It needs its own HUD layout: the landscape design puts readouts and controls in strips across the long edge, and neither the strips nor the record button's clearance from the gesture zone (UI-3) survive being turned on their side.
 - **Front camera as a selectable lens** (moved here from 6.1, decision 2026-09-04). It inherits everything 6.10 requires of any lens — its own capability probe, its own gating — and 6.5's distance guidance applies to it more than to any other lens, since a selfie camera is wide and used close.
 - Pairing check for the web interface: matching number or emoji code shown on phone and browser, confirmed on the phone (see 6.8 Security).
@@ -287,6 +288,7 @@ Analytics are opt-in and local-first; no metric requires a backend in v1.
 | Question | Decision |
 |---|---|
 | Portrait in v1? | **No (2026-09-04).** Landscape only. The phone HUD specified in `spec-phone-and-remote-ui.md` UI-1 to UI-6 is a landscape layout — a top strip of readouts, a bottom strip of controls, and a preview between them — and it has no portrait design. Shipping a rotation that reflows into an untested layout is worse than not rotating. Moves to 6.11. |
+| Tap-to-focus in v1? | **No (2026-09-06).** Continuous AF with face priority is already running and already correct for a talking head — verified on the reference device, where the HAL reports `ROI kFace` and focuses on the subject unaided. A tap that locks focus disables that silently, which is a worse failure than not having the control. Moves to 6.11. |
 | Front camera in v1? | **No (2026-09-04).** v1 records from the rear main camera only. Selecting the front camera moves to 6.11 as a nice-to-have. A talking head on a tripod is framed from the rear camera, which is also the better sensor; supporting the front one doubles the per-lens capability surface (6.10) and the verification matrix for a lens the product does not recommend. |
 | Audio in v1? | Yes, as specified in 6.6. |
 | Platform order | Android first. iOS follows once the Android capture engine is proven. |
