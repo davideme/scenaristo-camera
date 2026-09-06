@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from './protocol'
 import type {
   ClientMessage,
   CommandName,
@@ -104,8 +105,17 @@ export class Connection {
       case 'hello':
         // ADR-0007: refuse an unknown major rather than mis-rendering a protocol
         // we do not understand.
-        if ((message.protocol ?? 1) !== 1) {
-          this.update({ status: 'closed', lastError: `unsupported protocol ${message.protocol}` })
+        //
+        // Compared against the generated constant, never a literal. The literal
+        // that used to be here said 1, ADR-0021 moved the phone to 2, and the
+        // remote control then refused every connection it was offered -- the
+        // second hand-maintained copy of a protocol fact going stale, which is
+        // the failure ADR-0009 exists to prevent.
+        if ((message.protocol ?? PROTOCOL_VERSION) !== PROTOCOL_VERSION) {
+          this.update({
+            status: 'closed',
+            lastError: `phone speaks protocol ${message.protocol}, this page speaks ${PROTOCOL_VERSION}`,
+          })
           this.socket?.close()
         }
         break

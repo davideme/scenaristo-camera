@@ -1,6 +1,7 @@
 package com.scenaristo.camera.domain.tooling
 
 import com.scenaristo.camera.domain.protocol.ClientMessage
+import com.scenaristo.camera.domain.protocol.PROTOCOL_VERSION
 import com.scenaristo.camera.domain.protocol.ServerMessage
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -46,6 +47,16 @@ object GenerateProtocolTypes {
         return buildString {
             appendLine("// Generated from the :domain @Serializable classes. Do not edit (ADR-0009).")
             appendLine("// Regenerate with: cd android && ./gradlew :domain:generateProtocolTypes")
+            appendLine()
+            // The protocol major, which a client compares against `hello.protocol`
+            // and refuses when it does not match (ADR-0007). It is not a
+            // @Serializable class, so it does not fall out of the descriptor
+            // walk -- but the browser needs the number, and the only other way
+            // to give it one is to write it down a second time by hand. That
+            // copy went stale the moment ADR-0021 bumped the version: the phone
+            // said 2, the browser refused anything but 1, and the remote
+            // control could not connect at all.
+            appendLine("export const PROTOCOL_VERSION = $PROTOCOL_VERSION;")
             appendLine()
             emitted.values.forEach { appendLine(it) }
             appendLine(union("ServerMessage", server))
