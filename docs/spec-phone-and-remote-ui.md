@@ -218,17 +218,20 @@ PRD §6.8 acceptance criterion: *"Given the browser is on a phone-sized screen, 
 - [ ] Distance guidance reads "Wide lens — sit 1.5–2 m back" and is dismissible for the session (PRD §6.5).
 
 ---
-**UI-16 — Tap to focus**
+**UI-16 — Focus is automatic, and has no control**
 
-PRD §6.1 ("continuous AF with face priority, lockable; tap-to-focus and lock on both phone and web") and §6.8. Landed in `:domain` as the `focus.set` command, with `docs/protocol/fixtures/cmd-focus-set.json` as its golden fixture.
+PRD §6.1, as amended on 2026-09-06: continuous AF with face priority, and nothing to press.
 
-- [ ] A tap on the preview — phone or browser — focuses there and locks. A control returns to continuous autofocus.
-- [ ] The tap point is sent normalised in the frame, `0.0` to `1.0` on each axis. Not pixels: the browser is looking at a 960 × 540 preview of a 3840 × 2160 recording. Normalised **in the frame** rather than in the preview image, which is only unambiguous because §6.8 crops the preview to the recording's aspect ratio — that crop is what makes one pair of numbers mean the same point on both surfaces and in the file.
-- [ ] Focus works **while recording**. It is the one control that does, and the reason is that refocusing leaves nothing in the file an editor has to explain, where a lens switch or a colour shift does.
-- [ ] The current focus state is in the snapshot, so a second remote sees where focus went.
-- [ ] A lens that cannot focus on a region reports `NOT_CAPABLE` and the control is labelled unavailable rather than inert ([ADR-0011](adr/0011-per-lens-capability-gating.md), UI-12). `:domain` cannot make that call — it holds no capability table — so the capture layer does.
-- [ ] Not drawn on any artboard yet: the mockups show the preview without a focus indicator. Whatever is drawn must not sit over the subject's face, which is exactly where the tap will usually land.
+- [ ] Neither surface draws a focus control, a focus indicator, or a tap target on the preview. A tap on the preview does nothing.
+- [ ] Focus state stays in the snapshot, because a remote showing what the camera is doing is worth having even when it cannot change it.
 
+Verified on the reference device rather than assumed: with no `CONTROL_AF_MODE` set anywhere in the app, CameraX's default continuous AF runs with the HAL's own face detection, reporting `ROI kFace` and `status kFocused` with a subject in frame. The feature was already working before anything was built for it.
+
+**What was tried, and why it was dropped.** #86 implemented tap-to-focus against the original §6.1 wording. On the device it made things worse: a tap locked focus and silently disabled face priority, which is the one behaviour a talking-head app must not lose. Tapping the same point again to release, plus an `AF LOCK` badge, made it survivable — but a control whose main risk is turning off the thing that was already working does not earn its place. Closed unmerged.
+
+The protocol half remains and is unused: `focus.set`, `Focus(mode, x, y)`, validation in `Session`, and `cmd-focus-set.json`. It is left alone deliberately — removing it is a non-additive protocol change for no gain, and it is what tap-to-focus would be rebuilt on if §6.11 ever brings it back for a subject the face detector cannot find.
+
+---
 ### Nice-to-have
 
 - **UI-13** Countdown before record (3-2-1), on both surfaces (PRD §6.11).
@@ -258,7 +261,7 @@ All are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"additi
 
 | Need | Where it belongs | PRD | Status |
 |---|---|---|---|
-| Tap to focus, and focus lock | Its own command rather than a patch field: it is allowed while recording, carries no `expectRev`, and a point and a mode only mean anything together | §6.1 "Tap-to-focus and lock on both phone and web", §6.8 | **Landed.** `focus.set` carrying `Focus(mode, x, y)`, `focus` on `CaptureSettings`, validation in `Session`, and `cmd-focus-set.json` as its golden fixture |
+| Tap to focus, and focus lock | Its own command rather than a patch field: it is allowed while recording, carries no `expectRev`, and a point and a mode only mean anything together | §6.11 (moved out of §6.1, decision 2026-09-06) | **Landed but unused.** `focus.set`, `Focus(mode, x, y)`, `focus` on `CaptureSettings`, validation in `Session`, and `cmd-focus-set.json`. Nothing sends it and nothing applies it: focus is automatic (UI-16). Kept rather than removed — deleting it is a non-additive protocol change for no gain, and it is what §6.11 would rebuild on |
 | Framing-guide toggles (thirds, eye line) | `SettingsPatch` plus a field on `CaptureSettings`, or client-local state if the guides are not meant to be shared between remotes | §6.8 "Preview shows framing overlays … toggleable from the web UI" | Open |
 | Preview-link quality | `DeviceStatus` | §6.8 "connection quality" | Open |
 
