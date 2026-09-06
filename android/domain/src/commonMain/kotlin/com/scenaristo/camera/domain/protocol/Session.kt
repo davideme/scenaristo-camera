@@ -124,12 +124,19 @@ class Session(
     }
 
     /**
-     * Focus is the one control that stays live while recording.
+     * Focus does not take the recording guard the settings do.
      *
-     * Refocusing mid-take is ordinary — the speaker leans in, or continuous AF
-     * drifted onto the bookcase — and unlike the changes [settings] refuses it
-     * leaves nothing in the file an editor has to explain. So this deliberately
-     * does not take the recording guard (PRD 6.1, 6.8).
+     * Refocusing mid-take would be ordinary — the speaker leans in, or
+     * continuous AF drifted onto the bookcase — and unlike the changes
+     * [settings] refuses it leaves nothing in the file an editor has to explain.
+     *
+     * Nothing sends this command today. PRD 6.1 dropped tap-to-focus on
+     * 2026-09-06: focus is automatic, continuous, face-priority, and has no
+     * control on either surface (UI-16). The command and this rule are kept
+     * because removing them is a non-additive protocol change for no gain, and
+     * because PRD 6.11 is where tap-to-focus would come back — for a subject the
+     * face detector cannot find. Until then this validates a message no client
+     * sends.
      *
      * What it will not do is guess. Half a point, or a point handed to continuous
      * autofocus, is a client bug rather than an intention worth interpreting, and
