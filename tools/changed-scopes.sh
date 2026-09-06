@@ -41,10 +41,17 @@ emit() { # name, regex
 # under `android/` changes -- or until the merge, since every push to main runs
 # the complete gate unfiltered. That is where a broken job definition surfaces.
 #
-# `web/` is deliberately NOT in the android scope today. It becomes part of it
-# in Phase 2, when ADR-0009 action 1 wires the web bundle into `:app` through
-# AGP's Sources API and `pnpm run build` becomes an input to `assembleDebug`
-# (deferred from the bootstrap by ADR-0014). Add `|^web/` here in the same
-# change, or the Android build will stop seeing bundle regressions.
-emit android '^android/'
+# `web/` is deliberately NOT in the android scope today -- with one exception.
+# `web/src/protocol.ts` is generated from `:domain` (ADR-0009), and the test that
+# fails when it has gone stale runs in the `android` job, so a hand-edit of that
+# one file has to pull the job in. Without it the two ways drift can arrive are
+# covered asymmetrically: changing `:domain` and forgetting to regenerate is
+# caught, editing the generated file directly is not (#84).
+#
+# The rest of `web/` becomes part of the android scope in Phase 2, when ADR-0009
+# action 1 wires the web bundle into `:app` through AGP's Sources API and
+# `pnpm run build` becomes an input to `assembleDebug` (deferred from the
+# bootstrap by ADR-0014). Widen the pattern to `|^web/` in that same change, or
+# the Android build will stop seeing bundle regressions.
+emit android '^android/|^web/src/protocol\.ts$'
 emit web '^web/'

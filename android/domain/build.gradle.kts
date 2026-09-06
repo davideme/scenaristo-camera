@@ -42,8 +42,16 @@ kotlin {
 val protocolFixtures: String =
     rootProject.layout.projectDirectory.dir("../docs/protocol/fixtures").asFile.absolutePath
 
+// The generated TypeScript, for the test that fails when it has gone stale
+// (ADR-0009, #84). Same reasoning as the fixtures: it lives outside the Gradle
+// tree, so the path is resolved at configuration time rather than guessed from
+// a working directory.
+val generatedProtocolTypes: String =
+    rootProject.layout.projectDirectory.file("../web/src/protocol.ts").asFile.absolutePath
+
 tasks.withType<Test>().configureEach {
     systemProperty("scenaristo.protocol.fixtures", protocolFixtures)
+    systemProperty("scenaristo.protocol.typescript", generatedProtocolTypes)
 }
 
 // ADR-0009: the TypeScript protocol types are generated from these classes and
