@@ -249,6 +249,21 @@ h1 {
   background: #000;
 }
 
+/*
+ * Mirroring, per browser (spec §8).
+ *
+ * A transform on the <img>, which is as far from the encoder as it is possible
+ * to be: the phone is not told, no other remote is affected, and the recorded
+ * file cannot be touched from here.
+ *
+ * The flip is on the image and not on `.preview-frame`, deliberately — the
+ * recording border of UI-6 lives on the frame, and mirroring that would put the
+ * border's own rounding on the wrong corners for no reason.
+ */
+.preview.mirrored {
+  transform: scaleX(-1);
+}
+
 /* UI-6: a red inset border frames the whole preview while recording, and red
    appears nowhere else in the interface. */
 main.recording .preview-frame::after {

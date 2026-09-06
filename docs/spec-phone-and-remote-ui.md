@@ -264,6 +264,21 @@ Requested by Davide on 2026-09-06: *"add T-Stops in the web interface"*. Issue #
 Measured on the reference device: the Pixel 10's main lens reports **24 mm equivalent at f/1.70**, which gives **T1.77**.
 
 ---
+**UI-19 — Mirror the preview, per browser**
+
+Requested by Davide on 2026-09-06.
+
+- [ ] The remote control can flip its preview horizontally, from a **View** panel in the control column.
+- [ ] The switch carries the sentence "Preview only — the recording is never mirrored", next to the switch and not in a help page.
+- [ ] The setting is **client-local**: stored in this browser, never sent, and a second remote is unaffected.
+- [ ] It survives a reload, and a browser that cannot store it still honours it for the session.
+- [ ] The flip is on the preview image, not on its frame — UI-6's recording border lives on the frame, and mirroring that would put its rounding on the wrong corners.
+
+**Why it is not protocol.** §8 already reasons this out for the framing guides: *"two remotes watching one phone may reasonably want different overlays, in which case the toggle is not protocol at all."* Mirroring is the same shape of thing and more so — a speaker framing themselves wants the flip, and at the same moment a producer reading the whiteboard behind them does not. Whether the preview should be flipped depends on who is looking at it.
+
+**Why the copy matters.** A mirror control that turned out to have flipped the take would be discovered in an edit, which is far too late. Verified on the reference device rather than argued: with mirroring on in the browser, a recorded file's first frame matches the *unmirrored* view, and the container carries no display matrix or rotation side data. The transform is a CSS property on an `<img>`, three processes away from the encoder, so it could not reach the file — but the interface states the boundary rather than leaving the user to work that out.
+
+---
 ### Nice-to-have
 
 - **UI-13** Countdown before record (3-2-1), on both surfaces (PRD §6.11).

@@ -72,3 +72,12 @@ export const WaveIcon = () => (
     <path d="M3 12h2l2-6 3 14 3-11 2 5 2-2h4" />
   </svg>
 )
+
+/** A shape and its reflection, which is the whole of what the control does. */
+export const MirrorIcon = () => (
+  <svg {...base} class="icon">
+    <path d="M12 3v18" />
+    <path d="M8 7 4 12l4 5V7Z" />
+    <path d="M16 7l4 5-4 5V7Z" />
+  </svg>
+)

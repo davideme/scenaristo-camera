@@ -10,8 +10,10 @@ import {
   MainsPanel,
   PhonePanel,
   SoundPanel,
+  ViewPanel,
 } from './panels'
 import type { GridFrequency, State, Warning } from './protocol'
+import { loadViewPrefs, saveViewPrefs, type ViewPrefs } from './viewprefs'
 
 /**
  * The remote control (PRD 6.8; spec-phone-and-remote-ui UI-9 and UI-10).
@@ -32,6 +34,9 @@ export function App() {
   const connection = useRef<Connection | null>(null)
   const [refused, setRefused] = useState<string | null>(null)
   const [, tick] = useState(0)
+  // Client-local, and never sent (spec §8): whether the preview is flipped
+  // depends on who is looking at it, not on what the camera is doing.
+  const [view, setView] = useState<ViewPrefs>(loadViewPrefs)
 
   useEffect(() => {
     const c = new Connection(setSnapshot)
@@ -115,7 +120,11 @@ export function App() {
         {/* Keyed on nothing, and never conditionally rendered: recreating this
             element restarts the MJPEG stream and shows a flash of nothing. */}
         <div class="preview-frame">
-          <img class="preview" src="/preview.mjpg" alt="Live preview from the phone" />
+          <img
+            class={`preview${view.mirror ? ' mirrored' : ''}`}
+            src="/preview.mjpg"
+            alt="Live preview from the phone"
+          />
         </div>
 
         <Transport
@@ -152,6 +161,14 @@ export function App() {
             />
             <LensPanel state={state} />
             <SoundPanel state={state} />
+            <ViewPanel
+              mirror={view.mirror}
+              onMirror={(mirror) => {
+                const next = { ...view, mirror }
+                setView(next)
+                saveViewPrefs(next)
+              }}
+            />
           </>
         ) : (
           <section class="panel reported-panel">

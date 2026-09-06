@@ -1,5 +1,14 @@
 import { ABSENT, minutesLeft, optics, remotes } from './format'
-import { BatteryIcon, LensIcon, LightIcon, MicIcon, StorageIcon, ThermalIcon, WaveIcon } from './icons'
+import {
+  BatteryIcon,
+  LensIcon,
+  LightIcon,
+  MicIcon,
+  MirrorIcon,
+  StorageIcon,
+  ThermalIcon,
+  WaveIcon,
+} from './icons'
 import type { GridFrequency, State } from './protocol'
 import { SCENARIOS, presetFor, scenarioOf } from './whitebalance'
 
@@ -272,6 +281,42 @@ export function LensPanel({ state }: { state: State }) {
           shown without it or it without the f/-number. */}
       {glass ? <p class="lock-note">T assumes 92% transmission · informational</p> : null}
     </section>
+  )
+}
+
+/**
+ * How this browser draws the preview — not what the camera does (spec §8).
+ *
+ * A control, so it is framed and amber-labelled like any other. What makes it
+ * unlike the others is that it sends nothing: the phone never learns this
+ * happened, and a second remote is unaffected.
+ */
+export function ViewPanel({
+  mirror,
+  onMirror,
+}: {
+  mirror: boolean
+  onMirror: (mirror: boolean) => void
+}) {
+  return (
+    <Panel title="View" icon={<MirrorIcon />}>
+      <div class="choices">
+        <button
+          type="button"
+          class={mirror ? 'choice selected' : 'choice'}
+          aria-pressed={mirror}
+          onClick={() => onMirror(!mirror)}
+        >
+          <span class="choice-name">Mirror preview</span>
+          <span class="choice-value mono">{mirror ? 'on' : 'off'}</span>
+        </button>
+      </div>
+      {/* Said plainly, and next to the switch. A mirror control that turned out
+          to have flipped the take would be discovered in an edit, which is far
+          too late — so the interface states the boundary rather than leaving
+          the user to assume it. */}
+      <p class="lock-note">Preview only — the recording is never mirrored</p>
+    </Panel>
   )
 }
 
