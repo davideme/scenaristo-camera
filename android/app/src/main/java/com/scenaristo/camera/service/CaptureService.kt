@@ -167,8 +167,8 @@ class CaptureService : LifecycleService() {
     /** Last white balance handed to the sensor, so the tick only pushes changes. */
     private var appliedKelvin: Int? = null
 
-    /** Last (isoLock, shutterLock) pushed, for the same reason (PRD 6.3, #51). */
-    private var appliedLocks: Pair<Int?, Int?>? = null
+    /** Last shutter lock pushed, for the same reason (PRD 6.3, #51). */
+    private var appliedShutterLock: Int? = null
 
     /** Last grid and lens written to storage, for the same reason. */
     private var appliedGrid: GridFrequency? = null
@@ -484,10 +484,10 @@ class CaptureService : LifecycleService() {
             // command handler, because ADR-0007 keeps that handler pure and
             // platform-free -- the camera work happens here, one step behind,
             // exactly as it does for recording.
-            val locks = session.state.settings.let { it.isoLock to it.shutterLock }
-            if (locks != appliedLocks) {
-                appliedLocks = locks
-                exposure?.onLocksChanged(locks.first, locks.second, System.currentTimeMillis())
+            val shutterLock = session.state.settings.shutterLock
+            if (shutterLock != appliedShutterLock) {
+                appliedShutterLock = shutterLock
+                exposure?.onShutterLockChanged(shutterLock, System.currentTimeMillis())
             }
             val kelvin = session.state.settings.whiteBalanceKelvin
             if (kelvin != appliedKelvin) {

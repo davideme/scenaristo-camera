@@ -63,6 +63,14 @@ That is the argument for doing it now rather than deferring it, and it is also t
 
 B is free today and pays for itself in confusion; the value's existence is already costing a paragraph in `ExposureLoop` explaining why nothing raises it. C keeps the version stable at the cost of the clearer name. A spends the one moment when a breaking protocol change is free — no shipped client, no second implementation — on making the protocol match the product, and that window closes at Phase 2.
 
+## Amendment, 2026-09-06 (before release)
+
+`isoLock` was added to `CaptureSettings` and `SettingsPatch` in #81 and removed again the same day, when Davide replaced the manual ISO lock with two automatic responsiveness modes (ADR-0022). **The version stays at 2** rather than becoming 3.
+
+The rule in ADR-0007 — "renaming or removing bumps this number" — exists to protect clients from a field disappearing underneath them. There are no clients: the browser UI is Phase 2 and does not exist, `web/src/protocol.ts` is generated rather than written, and version 2 has never been in anyone's hands. A field that was added and removed between two merges on the same afternoon was never part of the contract v2 describes, so bumping to 3 would record a compatibility event that never happened.
+
+If v2 ships anywhere before another non-additive change, this reasoning stops applying and the next removal bumps.
+
 ## Consequences
 
 - Easier: `Warning` has four members and four producers. The Phase 2 browser and the Phase 4 iOS port both inherit a protocol with nothing to explain.
