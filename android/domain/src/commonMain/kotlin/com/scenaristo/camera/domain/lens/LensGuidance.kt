@@ -119,3 +119,45 @@ private val WIDE_BAND = 23..25
 
 /** PRD 6.5: "If the device has a longer lens (48 mm+ telephoto)". */
 private const val RECOMMENDED_FROM = 48
+
+/**
+ * The T-stop the app shows beside the f/-number (PRD 6.8; Davide, 2026-09-06).
+ *
+ * **This is a stated assumption, not a measurement, and the interface says so by
+ * showing both numbers.** A real T-stop is the f/-number corrected for how much
+ * light the glass actually passes, and no phone reports its own transmission:
+ * Android offers `LENS_INFO_AVAILABLE_APERTURES` and nothing about efficiency.
+ * Measuring it would mean a grey card at a known illuminance, per lens, per
+ * device — the method #24 used for the Kelvin curve — and the result would be a
+ * fact about one Pixel 10 rather than about phones (ADR-0017).
+ *
+ * So the app assumes [TRANSMISSION] and is honest about it. That is a defensible
+ * thing to draw *only* because the f/-number is drawn next to it: a reader who
+ * knows what a T-stop is can see the assumption in the gap between the two, and
+ * a reader who does not is looking at a number labelled informational either
+ * way. It is not defensible on its own, which is why nothing here returns a
+ * T-stop without the f/-number that produced it.
+ */
+object TStop {
+
+    /**
+     * Assumed light transmission through the lens (Davide, 2026-09-06).
+     *
+     * 92 % is the neighbourhood of a modern coated multi-element phone lens and
+     * costs about a sixth of a stop: `log2(1 / 0.92)` is 0.12 EV. Not measured
+     * on any device in this project's matrix.
+     */
+    const val TRANSMISSION: Double = 0.92
+
+    /**
+     * `T = N / sqrt(transmission)`, the standard definition.
+     *
+     * A stop is a ratio of *areas*, and transmission scales the light passing an
+     * area — so the correction goes under a square root. Applying it linearly is
+     * the usual mistake and would double the error it is trying to describe.
+     */
+    fun of(fNumber: Double, transmission: Double = TRANSMISSION): Double? {
+        if (fNumber <= 0.0 || transmission <= 0.0 || transmission > 1.0) return null
+        return fNumber / kotlin.math.sqrt(transmission)
+    }
+}

@@ -297,6 +297,22 @@ object ManualControls {
      * lens that reports a range is a zoom, and PRD 6.5's distortion question is
      * about the widest thing it can do -- which is where a face is at risk.
      */
+    /**
+     * The lens's fixed f/-number (PRD 6.8, #101).
+     *
+     * `float[1]` on every phone in the matrix: the aperture does not move, so
+     * this is a lens constant rather than a live value. The smallest is taken
+     * for the same reason the focal length takes the smallest -- a logical
+     * camera that fronts several physical lenses lists all of theirs, and the
+     * widest is the one bound by default.
+     */
+    fun aperture(cameraInfo: CameraInfo): Double? =
+        Camera2CameraInfo.from(cameraInfo)
+            .getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
+            ?.minOrNull()
+            ?.toDouble()
+            ?.takeIf { it > 0.0 }
+
     fun equivalentFocalLength(cameraInfo: CameraInfo): Int? {
         val info = Camera2CameraInfo.from(cameraInfo)
         val focal = info.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)

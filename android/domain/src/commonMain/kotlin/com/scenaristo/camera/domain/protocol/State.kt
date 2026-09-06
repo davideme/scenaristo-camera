@@ -34,6 +34,8 @@ data class State(
     val encoding: Encoding = Encoding(),
     /** The exposure aids on the remote control (PRD 6.3, 6.8; #97). Defaulted, as above. */
     val exposure: ExposureReadout = ExposureReadout(),
+    /** What the active lens is, optically (PRD 6.5, 6.8; #101). Defaulted, as above. */
+    val optics: Optics = Optics(),
     /**
      * The phone's clock when this snapshot was built. Elapsed recording time is
      * derived from this rather than sent directly, so it stays right across a
@@ -174,6 +176,25 @@ data class Encoding(
      * the producer is a unit the consumer has to trust.
      */
     val bitrate: Int = 0,
+)
+
+/**
+ * The active lens as an optic, rather than as a thing to switch (PRD 6.5, 6.8).
+ *
+ * Reported: none of it is settable, and all of it is fixed for the lens the
+ * `lensId` names. It is separate from [CaptureSettings] for exactly that reason
+ * -- every field there is something a browser may change, and none of these is.
+ *
+ * Null rather than zero when unknown. A lens that has not been probed has no
+ * focal length; drawing that as `0 mm` would be a claim, and 0 is a value an
+ * aperture cannot have.
+ */
+@Serializable
+data class Optics(
+    /** 35 mm-equivalent focal length, the only focal length worth showing (PRD 6.5). */
+    val equivalentFocalLengthMm: Int? = null,
+    /** The lens's fixed f/-number, from the platform's own characteristics. */
+    val apertureFNumber: Double? = null,
 )
 
 /**

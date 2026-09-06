@@ -249,6 +249,21 @@ Measured on the reference device: adding the histogram to the metering walk cost
 > **Open, for Davide:** where in UI-9's column order these sit. They are Reported, so the row above the preview is the natural home, but that row is currently one line and a histogram is not. The alternative is a block at the top of the control column, above **Phone**, which breaks §5's "Reported lives above the preview" rule for the one value that needs vertical space.
 
 ---
+**UI-18 — The lens as an optic: f/-number and T-stop**
+
+Requested by Davide on 2026-09-06: *"add T-Stops in the web interface"*. Issue #101.
+
+- [ ] The remote shows the active lens's **f/-number and T-stop together**, on the Lens control, as reported values with the 35 mm-equivalent focal length. Both, never one alone.
+- [ ] Both are labelled **informational** (Davide, 2026-09-06). Neither is a control and neither changes: a phone's aperture is fixed, so this is a lens constant, not a live readout.
+- [ ] The T-stop is derived in the browser from `Optics.apertureFNumber`, never sent. A derived number on the wire is one iOS could derive differently.
+- [ ] Rounded to one decimal: `f/1.7 · T1.8`. The platform reports `1.7000000476837158`.
+- [ ] Nothing is drawn when the lens reports no aperture. Not `T0.0` — the entire argument for drawing this is that a reader can see what it is.
+
+**The T-stop is an assumption, and showing both numbers is what makes it honest.** A real T-stop is the f/-number corrected for how much light the glass actually passes, and no phone reports its transmission — Android offers `LENS_INFO_AVAILABLE_APERTURES` and nothing about efficiency. Measuring it would mean a grey card at a known illuminance, per lens, per device (the method #24 used for the Kelvin curve), and per [ADR-0017](adr/0017-phase-0-verification-matrix.md) the answer would be a fact about one Pixel 10 rather than about phones. So the app assumes **92 % transmission** — about a sixth of a stop, `log2(1 / 0.92)` = 0.120 EV — and draws the f/-number beside it, so the assumption is visible in the gap between the two rather than hidden inside one number.
+
+Measured on the reference device: the Pixel 10's main lens reports **24 mm equivalent at f/1.70**, which gives **T1.77**.
+
+---
 ### Nice-to-have
 
 - **UI-13** Countdown before record (3-2-1), on both surfaces (PRD §6.11).
@@ -281,6 +296,7 @@ All are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"additi
 | Tap to focus, and focus lock | Its own command rather than a patch field: it is allowed while recording, carries no `expectRev`, and a point and a mode only mean anything together | §6.11 (moved out of §6.1, decision 2026-09-06) | **Landed but unused.** `focus.set`, `Focus(mode, x, y)`, `focus` on `CaptureSettings`, validation in `Session`, and `cmd-focus-set.json`. Nothing sends it and nothing applies it: focus is automatic (UI-16). Kept rather than removed — deleting it is a non-additive protocol change for no gain, and it is what §6.11 would rebuild on |
 | Framing-guide toggles (thirds, eye line) | `SettingsPatch` plus a field on `CaptureSettings`, or client-local state if the guides are not meant to be shared between remotes | §6.8 "Preview shows framing overlays … toggleable from the web UI" | Open |
 | Preview-link quality | `DeviceStatus` | §6.8 "connection quality" | Open |
+| The lens as an optic: focal length and f/-number | `Optics` on `State` | §6.5, §6.8 (UI-18, #101) | **Landed.** `equivalentFocalLengthMm`, `apertureFNumber`. The T-stop is derived in the browser and deliberately not on the wire |
 | Exposure aids: stops from correct, and a histogram | `ExposureReadout` on `State` | §6.3, §6.8 (UI-17, #97) | **Landed.** `stopsFromTarget`, `histogram` (64 bins), `metering`. Measured in the metering walk of ADR-0018, so the reading and the loop cannot disagree |
 
 The guides row has a design question inside it rather than a shape question: two remotes watching one phone may reasonably want different overlays, in which case the toggle is not protocol at all.

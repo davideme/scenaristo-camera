@@ -41,6 +41,7 @@ export interface State {
   audio?: AudioState;
   encoding?: Encoding;
   exposure?: ExposureReadout;
+  optics?: Optics;
   serverTimeMs: number;
 }
 
@@ -106,6 +107,11 @@ export interface ExposureReadout {
   stopsFromTarget?: number;
   histogram?: number[];
   metering?: boolean;
+}
+
+export interface Optics {
+  equivalentFocalLengthMm?: number | null;
+  apertureFNumber?: number | null;
 }
 
 export interface CmdMessage {

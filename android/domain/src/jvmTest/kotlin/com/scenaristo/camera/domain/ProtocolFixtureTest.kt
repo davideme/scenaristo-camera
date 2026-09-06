@@ -2,6 +2,7 @@ package com.scenaristo.camera.domain
 
 import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.exposure.Histogram
+import com.scenaristo.camera.domain.lens.TStop
 import com.scenaristo.camera.domain.protocol.Ack
 import com.scenaristo.camera.domain.protocol.ClientMessage
 import com.scenaristo.camera.domain.protocol.Command
@@ -107,6 +108,12 @@ class ProtocolFixtureTest {
             state.exposure.histogram.size,
             "the fixture must carry a full histogram, not a truncated one",
         )
+        // #101: the lens as an optic. The T-stop is derived, never sent -- it is
+        // an assumption about transmission (TStop.TRANSMISSION), and a derived
+        // number on the wire is one iOS could derive differently.
+        assertEquals(24, state.optics.equivalentFocalLengthMm)
+        assertEquals(1.7, state.optics.apertureFNumber!!, absoluteTolerance = 1e-9)
+        assertEquals(1.7 / kotlin.math.sqrt(TStop.TRANSMISSION), TStop.of(1.7)!!, absoluteTolerance = 1e-12)
         // PRD 6.7's naming, which UI-9's transport row shows next to the timecode.
         assertEquals("Scenaristo_2026-09-06_14-32-05", state.recording.fileName)
         assertTrue(
