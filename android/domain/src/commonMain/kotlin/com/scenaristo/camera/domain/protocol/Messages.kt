@@ -167,11 +167,6 @@ data class SettingsPatch(
     val whiteBalanceKelvin: Int? = null,
     val lensId: String? = null,
     /**
-     * Lock ISO to this value, [CLEAR_LOCK] to return to the loop
-     * (PRD 6.3: "ISO manual lock available (phone and web)").
-     */
-    val isoLock: Int? = null,
-    /**
      * Lock the shutter to this rung, as reciprocal seconds, or [CLEAR_LOCK].
      *
      * Only a rung of the grid's own ladder is accepted — 50 or 100 on a 50 Hz

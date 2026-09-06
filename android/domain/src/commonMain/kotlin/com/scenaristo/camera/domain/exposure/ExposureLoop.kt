@@ -94,27 +94,23 @@ class ExposureLoop(
     }
 
     /**
-     * The user locked or released ISO or the shutter (PRD 6.3).
+     * The user locked or released the shutter (PRD 6.3).
      *
-     * Locking is not merely "stop moving": it takes effect immediately, because
-     * a lock the sensor has not been told about is a value the UI is reporting
-     * and the camera is not using. Releasing sets nothing — the loop picks up
-     * from wherever the lock left it, which is the exposure the user was
-     * looking at when they released.
+     * Locking takes effect immediately, because a lock the sensor has not been
+     * told about is a value the UI is reporting and the camera is not using.
+     * Releasing sets nothing — the ladder picks up from the rung the lock left
+     * it on, which is the exposure the user was looking at.
      */
-    fun onLocksChanged(
+    fun onShutterLockChanged(
         state: ExposureState,
-        isoLock: Int?,
         shutterLock: Int?,
         nowMs: Long,
     ): ExposureState {
-        if (isoLock == state.isoLock && shutterLock == state.shutterLock) return state
+        if (shutterLock == state.shutterLock) return state
         val ladder = shutterLadder(state.grid)
         val rung = shutterLock?.let { ladder.indexOf(it) }?.takeIf { it >= 0 } ?: state.rung
         val next = state.copy(
-            isoLock = isoLock,
             shutterLock = shutterLock,
-            iso = isoLock?.coerceIn(iso.min, iso.max) ?: state.iso,
             rung = rung,
             awaitingEcho = true,
             changedAtMs = nowMs,
@@ -211,11 +207,6 @@ class ExposureLoop(
      * of base ISO would miss in any dim room.
      */
     private fun moveIso(state: ExposureState, acquiring: Boolean, nowMs: Long): ExposureState {
-        // A pinned ISO is the user saying "stop choosing". The loop keeps
-        // metering -- the error still drives the warnings, which is the whole
-        // point of a warning on a locked exposure -- it simply stops acting.
-        if (state.isoLock != null) return state
-
         val moveEv = if (acquiring) {
             state.errorEv
         } else {
@@ -366,8 +357,6 @@ data class ExposureState(
     val changedAtMs: Long? = null,
     /** The exposure warnings only (PRD 6.3); the caller merges in the rest. */
     val warnings: Set<Warning> = emptySet(),
-    /** ISO pinned by the user, or null when the loop is choosing (PRD 6.3). */
-    val isoLock: Int? = null,
     /** Shutter rung pinned by the user, which also disables the ladder (PRD 6.3). */
     val shutterLock: Int? = null,
 ) {
