@@ -61,7 +61,7 @@ class ExposureLoop(
         val acquiring = !state.acquired
         val error =
             if (acquiring) sample
-            else state.errorEv + config.emaAlpha * (sample - state.errorEv)
+            else state.errorEv + state.damping(config).emaAlpha * (sample - state.errorEv)
 
         val metered = state.copy(errorEv = error, acquired = true)
         val decided = decide(metered, acquiring, nowMs)
@@ -92,6 +92,21 @@ class ExposureLoop(
         if (abs(iso - state.iso) > slack) return state
         return state.copy(awaitingEcho = false)
     }
+
+    /**
+     * Recording started or stopped (ADR-0022).
+     *
+     * The only thing that changes is how *fast* the loop is allowed to move. It
+     * keeps metering the same scene against the same 18 % grey target and it
+     * does not jump at the transition — by the time anyone presses record the
+     * loop has settled, so the new damping has nothing to undo.
+     *
+     * Fast while lighting, damped while recording, and the split is the point:
+     * a creator moving a lamp needs to see the effect now, and a creator
+     * recording needs the exposure not to visibly move (PRD 6.1's locked look).
+     */
+    fun onRecordingChanged(state: ExposureState, recording: Boolean): ExposureState =
+        if (recording == state.recording) state else state.copy(recording = recording)
 
     /**
      * The user locked or released the shutter (PRD 6.3).
@@ -175,7 +190,7 @@ class ExposureLoop(
             )
         }
 
-        if (abs(state.errorEv) <= config.deadBandEv) return state
+        if (abs(state.errorEv) <= state.damping(config).deadBandEv) return state
 
         // PRD 6.3: overexposed at base ISO steps the shutter one flicker-safe
         // rung and shows no warning. The rung is exactly one stop faster, so the
@@ -211,7 +226,7 @@ class ExposureLoop(
             state.errorEv
         } else {
             val sinceMs = state.changedAtMs?.let { nowMs - it } ?: Long.MAX_VALUE
-            val minIntervalMs = 1000.0 * config.stepEv / config.maxSlewEvPerSecond
+            val minIntervalMs = 1000.0 * config.stepEv / state.damping(config).maxSlewEvPerSecond
             if (sinceMs < minIntervalMs) return state
             if (state.errorEv > 0) config.stepEv else -config.stepEv
         }
@@ -249,7 +264,7 @@ class ExposureLoop(
             // the warning that follows a step being unavailable.
             if (state.iso <= iso.min &&
                 (state.rung == ladder.lastIndex || state.shutterLock != null) &&
-                state.errorEv < -config.deadBandEv
+                state.errorEv < -state.damping(config).deadBandEv
             ) {
                 add(Warning.OVEREXPOSED_AT_BASE_ISO)
             }
@@ -307,19 +322,20 @@ data class ExposureConfig(
     val targetLuma: Double = 0.45,
     /** Encoding gamma of the metered frames, used to linearise before comparing. */
     val toneGamma: Double = 2.2,
-    /** Errors smaller than this are noise in the scene, not a change in it. */
-    val deadBandEv: Double = 0.15,
+
     /** ISO moves in sixths of a stop. Deliberately larger than [deadBandEv]. */
     val stepEv: Double = 1.0 / 6.0,
-    /** Frames in the moving average that damps the metering. */
-    val emaFrames: Int = 5,
-    /** How fast ISO may travel. Above this the change is visible on camera. */
-    val maxSlewEvPerSecond: Double = 1.0,
+
+
     /**
      * Above this ISO the image is noisy enough to tell the user about (PRD 6.3's
      * "per-device noise threshold, default ISO 800"). Phase 0 sets it per device.
      */
     val noiseWarningIso: Int = 800,
+    /** How the loop behaves while the user is lighting the scene (ADR-0022). */
+    val setup: Damping = Damping.SETUP,
+    /** How it behaves once a take is running (ADR-0022). */
+    val recording: Damping = Damping.RECORDING,
     /**
      * How far the sensor's reported ISO may sit from the requested one and still
      * count as the echo the loop is waiting for.
@@ -331,8 +347,48 @@ data class ExposureConfig(
      */
     val sensorEchoTolerance: Double = 0.02,
 ) {
+    fun damping(recording: Boolean): Damping = if (recording) this.recording else setup
+}
+
+/**
+ * How hard the loop is allowed to chase the light — the only thing that differs
+ * between ADR-0022's two modes.
+ *
+ * Everything else about metering is shared: the same 18 % grey target, the same
+ * face weighting, the same sixth-of-a-stop step. A mode is not a different
+ * opinion about correct exposure, only about how quickly to get there.
+ */
+data class Damping(
+    /** Errors smaller than this are noise in the scene, not a change in it. */
+    val deadBandEv: Double,
+    /** How fast ISO may travel. Above this the change is visible on camera. */
+    val maxSlewEvPerSecond: Double,
+    /** Frames in the moving average that damps the metering. */
+    val emaFrames: Int,
+) {
     /** The standard exponential-moving-average weight for an [emaFrames] window. */
     val emaAlpha: Double get() = 2.0 / (emaFrames + 1)
+
+    companion object {
+        /**
+         * Lighting the scene: react now.
+         *
+         * Someone moving a lamp is asking a question and waiting for the answer,
+         * and a two-second settle makes that a conversation nobody can have. Four
+         * stops per second settles a two-stop change in about 0.6 s. There is no
+         * take to spoil, so there is nothing to protect.
+         */
+        val SETUP = Damping(deadBandEv = 0.10, maxSlewEvPerSecond = 4.0, emaFrames = 3)
+
+        /**
+         * Recording: ADR-0005's original numbers, unchanged.
+         *
+         * PRD 6.3's "settles within 2 s and does not oscillate by more than one
+         * stop" is scoped to *when recording*, which is exactly why the fast mode
+         * above does not violate it.
+         */
+        val RECORDING = Damping(deadBandEv = 0.15, maxSlewEvPerSecond = 1.0, emaFrames = 5)
+    }
 }
 
 /**
@@ -359,6 +415,14 @@ data class ExposureState(
     val warnings: Set<Warning> = emptySet(),
     /** Shutter rung pinned by the user, which also disables the ladder (PRD 6.3). */
     val shutterLock: Int? = null,
+    /**
+     * Whether a take is running, which selects the damping (ADR-0022).
+     *
+     * Not a copy of `RecordingState.recording` for its own sake: it is here so
+     * the loop is a pure function of its own state, replayable frame by frame
+     * in a test with the mode switching part-way through.
+     */
+    val recording: Boolean = false,
 ) {
     /**
      * The shutter in use, as reciprocal seconds. Never longer than the grid's
@@ -368,4 +432,7 @@ data class ExposureState(
 
     /** True when the shutter is on ADR-0005's step rather than PRD 6.1's default. */
     val stepped: Boolean get() = rung > 0
+
+    /** Which of ADR-0022's two modes is in force. */
+    fun damping(config: ExposureConfig): Damping = config.damping(recording)
 }

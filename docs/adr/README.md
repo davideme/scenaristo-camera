@@ -38,6 +38,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0019](0019-stop-the-service-when-idle.md) | Stop the capture service when the user leaves the app and neither a recording nor a remote is using it; explicit stop action | Proposed | 6.8, 6.9 |
 | [0020](0020-record-into-mediastore.md) | Takes go to the app's own folder by default; the shared gallery (`Movies/Scenaristo Camera/`) is a setting | Proposed | 6.7, 3 |
 | [0021](0021-remove-too-bright-and-bump-the-protocol.md) | Remove the unused `TOO_BRIGHT` warning; `PROTOCOL_VERSION` becomes 2 | Proposed | 6.3, 6.8 |
+| [0022](0022-two-exposure-responsiveness-modes.md) | Two exposure damping modes: quick while lighting the scene, damped while recording; replaces the manual ISO lock | Proposed | 6.1, 6.3 |
 
 ## Challenges to positions stated in the PRD
 

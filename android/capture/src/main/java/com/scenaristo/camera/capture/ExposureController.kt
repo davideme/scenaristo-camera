@@ -142,6 +142,18 @@ class ExposureController(
     }
 
     /**
+     * A take started or stopped (ADR-0022).
+     *
+     * Nothing is pushed to the sensor: the mode changes how fast the loop may
+     * move, not where it is. The next metered frame acts on the new damping.
+     */
+    fun onRecordingChanged(recording: Boolean) {
+        synchronized(lock) {
+            _state.value = loop.onRecordingChanged(_state.value, recording)
+        }
+    }
+
+    /**
      * The user locked or released the shutter (PRD 6.3, #51).
      *
      * Pushed to the sensor immediately, like every other change here: a lock the

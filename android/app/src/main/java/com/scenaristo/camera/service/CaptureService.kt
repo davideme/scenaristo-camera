@@ -484,6 +484,10 @@ class CaptureService : LifecycleService() {
             // command handler, because ADR-0007 keeps that handler pure and
             // platform-free -- the camera work happens here, one step behind,
             // exactly as it does for recording.
+            // ADR-0022: the loop is quick while the user lights the scene and
+            // damped once a take is running. Driven from the state document so
+            // a take started from the browser switches it too.
+            exposure?.onRecordingChanged(session.state.recording.recording)
             val shutterLock = session.state.settings.shutterLock
             if (shutterLock != appliedShutterLock) {
                 appliedShutterLock = shutterLock
