@@ -1,4 +1,5 @@
 import { LENS_RECOMMENDED_FROM, LENS_WIDE_BAND } from './protocol'
+import type { State } from './protocol'
 
 /**
  * PRD 6.5's rules about a focal length, applied to the same number the phone
@@ -63,4 +64,23 @@ export function dismissDistanceGuidance(): void {
   } catch {
     // Nothing to tell anyone: it stays dismissed in memory for this render.
   }
+}
+
+/**
+ * The focal length actually in use, which is the framing's and not the base
+ * lens's.
+ *
+ * `Optics.equivalentFocalLengthMm` is probed once at bind and describes the
+ * base lens — 24 mm on the reference device. Every rule PRD 6.5 states is about
+ * the field of view being *recorded*, so once the framing is a zoom ratio
+ * (UI-21) those rules have to read the framing.
+ *
+ * Getting this wrong is not subtle: it showed "Wide lens — sit 1.5-2 m back" on
+ * the 13 mm ultrawide and on the 120 mm telephoto alike, because both were being
+ * judged as the 24 mm lens underneath them.
+ */
+export function activeFocalLengthMm(state: State): number | null {
+  const ratio = state.settings.zoomRatio ?? 1
+  const framing = (state.lenses ?? []).find((l) => l.zoomRatio === ratio)
+  return framing?.equivalentFocalLengthMm ?? state.optics?.equivalentFocalLengthMm ?? null
 }

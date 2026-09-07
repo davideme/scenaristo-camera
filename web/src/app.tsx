@@ -5,6 +5,7 @@ import { ABSENT, bitrate, codecName, format, minutesLeft, timecode } from './for
 import { LensIcon, WarningIcon } from './icons'
 import { FramingGuides } from './guides'
 import {
+  activeFocalLengthMm,
   dismissDistanceGuidance,
   distanceGuidanceDismissed,
   needsDistanceGuidance,
@@ -125,7 +126,7 @@ export function App() {
         */}
         {state != null &&
         !guidanceDismissed &&
-        needsDistanceGuidance(state.optics?.equivalentFocalLengthMm) ? (
+        needsDistanceGuidance(activeFocalLengthMm(state)) ? (
           <p class="guidance">
             <LensIcon />
             Wide lens — sit 1.5–2 m back
@@ -384,7 +385,9 @@ function warningText(warning: Warning, state: State): string {
     case 'TOO_DARK':
       return `Add light — ISO ${state.settings.iso} will look noisy`
     case 'TOO_CLOSE_TO_LENS': {
-      const mm = state.optics?.equivalentFocalLengthMm
+      // The framing's focal length, not the base lens's: at 5x the advice to
+      // sit back is about a 120 mm field of view, not a 24 mm one.
+      const mm = activeFocalLengthMm(state)
       return mm
         ? `Sit further back — 1.5–2 m for the ${mm} mm lens`
         : 'Sit further back — 1.5–2 m from the lens'
