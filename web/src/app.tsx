@@ -167,6 +167,26 @@ export function App() {
               browser paints itself (ADR-0008), and drawing into it would mean a
               canvas and a copy of every frame for two straight lines. */}
           <FramingGuides thirds={view.thirds} eyeLine={view.eyeLine} />
+          {/*
+            #116: the phone's screen is off, so CameraX's `Preview` has no
+            surface, so there are no frames for the ADR-0018 tap to tap. The
+            server, the state document and any recording are all completely
+            unaffected — only the picture stops.
+
+            Without this the browser shows a black rectangle indistinguishable
+            from a dark room, while everything else looks healthy. Davide's call,
+            2026-09-07: the behaviour is accepted, so the interface owes an
+            explanation. It says what to do and what is *not* wrong, because the
+            second is what stops someone abandoning a take that is running fine.
+          */}
+          {state != null && state.device.previewProducing === false ? (
+            <p class="preview-idle">
+              <span>Wake the phone&rsquo;s screen to see the preview</span>
+              <span class="preview-idle-note">
+                The phone is fine — a take in progress keeps recording
+              </span>
+            </p>
+          ) : null}
         </div>
 
         <Transport

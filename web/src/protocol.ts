@@ -95,6 +95,7 @@ export interface DeviceStatus {
   charging: boolean;
   thermal: ThermalState;
   storageMinutesRemaining: number;
+  previewProducing?: boolean;
 }
 
 export type ThermalState = "NOMINAL" | "FAIR" | "SERIOUS" | "CRITICAL";
