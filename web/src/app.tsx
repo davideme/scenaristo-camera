@@ -4,6 +4,7 @@ import { ExposureScale, Histogram } from './exposure'
 import { ABSENT, bitrate, codecName, format, minutesLeft, timecode } from './format'
 import { LensIcon, WarningIcon } from './icons'
 import { FramingGuides } from './guides'
+import { LevelOverlay } from './level'
 import {
   activeFocalLengthMm,
   dismissDistanceGuidance,
@@ -167,6 +168,9 @@ export function App() {
               browser paints itself (ADR-0008), and drawing into it would mean a
               canvas and a copy of every frame for two straight lines. */}
           <FramingGuides thirds={view.thirds} eyeLine={view.eyeLine} />
+          {view.level ? (
+            <LevelOverlay mount={state?.mount} mirrored={view.mirror} recording={recording} />
+          ) : null}
           {/*
             #116: the phone's screen is off, so CameraX's `Preview` has no
             surface, so there are no frames for the ADR-0018 tap to tap. The

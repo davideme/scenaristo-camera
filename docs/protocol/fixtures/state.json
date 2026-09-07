@@ -135,6 +135,12 @@
         "equivalentFocalLengthMm": 120
       }
     ],
+    "mount": {
+      "rollDegrees": 0.0,
+      "pitchDegrees": 0.0,
+      "steady": true,
+      "measuring": false
+    },
     "serverTimeMs": 1788500123456
   }
 }

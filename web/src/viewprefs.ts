@@ -43,9 +43,18 @@ export interface ViewPrefs {
    * edit, and the interface says so next to the switch for the same reason.
    */
   mirror: boolean
+  /**
+   * A horizon line over the preview (PRD 6.11).
+   *
+   * Off by default and per browser, like the other three. It is a setup aid: it
+   * earns its place while the tripod is being placed and is clutter over
+   * someone's face for the rest of the session, which is the same argument
+   * [eyeLine] makes for being separate from [thirds].
+   */
+  level: boolean
 }
 
-const DEFAULTS: ViewPrefs = { mirror: false, thirds: false, eyeLine: false }
+const DEFAULTS: ViewPrefs = { mirror: false, thirds: false, eyeLine: false, level: false }
 
 /**
  * Reads the stored preferences, falling back to the defaults.
@@ -63,6 +72,7 @@ export function loadViewPrefs(): ViewPrefs {
       mirror: parsed.mirror === true,
       thirds: parsed.thirds === true,
       eyeLine: parsed.eyeLine === true,
+      level: parsed.level === true,
     }
   } catch {
     return DEFAULTS

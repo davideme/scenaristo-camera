@@ -55,6 +55,7 @@ export interface State {
   optics?: Optics;
   capabilities?: Capabilities;
   lenses?: LensChoice[];
+  mount?: MountAttitude;
   serverTimeMs: number;
 }
 
@@ -143,6 +144,13 @@ export interface Capabilities {
 export interface LensChoice {
   zoomRatio: number;
   equivalentFocalLengthMm: number;
+}
+
+export interface MountAttitude {
+  rollDegrees?: number;
+  pitchDegrees?: number;
+  steady?: boolean;
+  measuring?: boolean;
 }
 
 export interface CmdMessage {

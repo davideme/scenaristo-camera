@@ -293,6 +293,22 @@ PRD §6.5 and UI-12: *"Distance guidance reads 'Wide lens — sit 1.5–2 m back
 - [ ] The band comes from `:domain` (`LENS_WIDE_BAND`), generated rather than written down twice: a browser deciding at 26 mm what the phone decides at 25 is two surfaces disagreeing about the shot in front of them.
 
 ---
+**UI-23 — The horizon overlay**
+
+PRD §6.11, ADR-0027. PRD §6.1 switches both stabilisers off because *"phone is on a tripod"*; this is the only thing in the product that checks that premise.
+
+- [ ] A **fourth switch in the same View panel** as UI-19 and UI-20, off by default and client-local for §8's reason. It is a setup aid, and clutter over someone's face once the tripod is placed.
+- [ ] Two lines over the preview: a fixed horizontal reference, and the horizon as the camera sees it. Level is when they coincide. Thin and dimmed, like UI-20's, and never bright enough to compete with the subject.
+- [ ] **Drawn in pixel space, not in UI-20's SVG.** That SVG is stretched to the stage (`preserveAspectRatio="none"`), which is harmless for lines that are axis-aligned and ruinous for one that is not: a tilt of 0.6° would render at whatever angle the stage's shape made of it.
+- [ ] **Mirrored with the preview**, unlike UI-20 — the first overlay in this app of which that is true. UI-20 gets to ignore UI-19 because its lines are symmetric about the centre; a tilted line is not, and one drawn the wrong way round tells someone to correct their tripod in the wrong direction.
+- [ ] **No left or right in the copy, anywhere.** A tilt is a left-or-right fact and UI-19 takes left and right away per viewer, so *"raise the right side"* is the right instruction and the wrong one depending on a preference the phone knows nothing about. The words carry the size (`1.4° off level`), the line carries the direction, and the phone is levelled by turning it until the line lies flat.
+- [ ] Under a third of a degree it reads `Level` rather than a number: a readout that never quite reads level is one somebody keeps adjusting against.
+- [ ] An unsteady mount is the **same line, drawn broken** — the same device UI-20 uses to tell two lines apart without colour — reading `Unsteady — check the mount`.
+- [ ] **This raises no warning chip and recolours nothing** (UI-5). A tilt is a standing fact about the setup rather than something that just became true, which is UI-22's distinction, and it is the *only* surface: there is no phone-side level readout, on UI-3's grounds that the phone shows what the phone is uniquely placed to show, and someone levelling a tripod is looking at the tripod.
+- [ ] Pitch — where the lens is aimed relative to horizontal — is reported beside it and **never framed as wrong**. Aiming slightly up at a seated speaker is a decision as often as an accident. Up and down also survive the mirror, which is why this one names a direction.
+- [ ] **It says when it is not measuring, and does not freeze.** The accelerometer is unregistered for the duration of a take (ADR-0023), so the overlay reads *"Levelling pauses while recording — the take is unaffected"*: the same register as the empty-preview note, saying what is happening and what is not wrong. With the camera released (ADR-0025) it draws nothing at all, because there is nothing to say.
+
+---
 **UI-20 — Framing guides**
 
 PRD §6.8: *"Preview shows framing overlays (rule-of-thirds, eye-line guide) toggleable from the web UI."* Issue #3.
@@ -354,6 +370,7 @@ All are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"additi
 | Preview-link quality | `DeviceStatus` | §6.8 "connection quality" | Open |
 | The lens list, as selectable framings | `LensChoice` list on `State`, `zoomRatio` on `CaptureSettings` and `SettingsPatch` | §6.5, §6.8 (UI-21, #77) | **Landed.** A phone's other lenses are zoom ratios, not cameras |
 | The lens as an optic: focal length and f/-number | `Optics` on `State` | §6.5, §6.8 (UI-18, #101) | **Landed.** `equivalentFocalLengthMm`, `apertureFNumber`. The T-stop is derived in the browser and deliberately not on the wire |
+| How the phone sits on its mount: level and steadiness | `MountAttitude` on `State` | §6.11 (UI-23, ADR-0027) | **Landed.** `rollDegrees`, `pitchDegrees`, `steady`, `measuring`. Reported only, and quantised with a deadband before it reaches the wire so a still phone costs no revision (ADR-0024). The overlay's *toggle* is client-local, like UI-20's; only the measurement is protocol |
 | Exposure aids: stops from correct, and a histogram | `ExposureReadout` on `State` | §6.3, §6.8 (UI-17, #97) | **Landed.** `stopsFromTarget`, `histogram` (64 bins), `metering`. Measured in the metering walk of ADR-0018, so the reading and the loop cannot disagree |
 
 The guides row has a design question inside it rather than a shape question: two remotes watching one phone may reasonably want different overlays, in which case the toggle is not protocol at all.

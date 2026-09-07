@@ -341,6 +341,89 @@ h1 {
   color: var(--dimmer);
 }
 
+/* PRD 6.11 / UI-23: the horizon overlay.
+
+   Drawn in pixel space rather than in the guides' SVG, because that SVG is
+   stretched to the stage (preserveAspectRatio="none") and would turn a tilt of
+   0.6 degrees into whatever angle the stage's shape made of it. Every line in
+   the guides is axis-aligned, so the stretch has never mattered there; here it
+   is the whole measurement. */
+.level {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Wider than the frame, so the ends stay off-screen once it is rotated and the
+   line never appears to stop short of the edge. */
+.level-reference,
+.level-horizon {
+  position: absolute;
+  top: 50%;
+  left: -20%;
+  width: 140%;
+  height: 0;
+  border-top: 1px solid rgba(242, 240, 237, 0.28);
+}
+
+.level-horizon {
+  border-top-color: rgba(242, 240, 237, 0.78);
+  transform-origin: 50% 50%;
+  /* Long enough not to look like a jump, short enough to feel attached to the
+     phone. The reading it follows is published once a second. */
+  transition: transform 220ms ease-out;
+}
+
+/* Broken rather than recoloured, for the same reason the eye line is dashed:
+   two lines of the same weight have to be tellable apart without colour. */
+.level-horizon.unsteady {
+  border-top-style: dashed;
+  transition: none;
+}
+
+.level-readout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.level-pitch {
+  font-size: 11px;
+  color: var(--dimmer);
+}
+
+/* The take is running, so the accelerometer is not (ADR-0023). Same register as
+   the empty-preview note: what is happening, and what is not wrong. */
+.level-paused {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.level-paused-note {
+  font-size: 11px;
+  color: var(--dimmer);
+}
+
 /* UI-6: a red inset border frames the whole preview while recording, and red
    appears nowhere else in the interface. */
 main.recording .preview-frame::after {
