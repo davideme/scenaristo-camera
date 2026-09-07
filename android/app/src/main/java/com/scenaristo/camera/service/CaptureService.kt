@@ -473,8 +473,10 @@ class CaptureService : LifecycleService() {
                     lenses = framings,
                 )
             }
-            // The saved framing has to be re-applied across a rebind, or a shot
-            // set up at 2x silently reverts to 1x when the service restarts.
+            // Re-applied on every bind, which covers both ways a framing is
+            // otherwise lost: a rebind inside one service lifetime (the lens
+            // sweep unbinds everything), and a fresh start, where the ratio
+            // comes back from `Settings` through `startingState`.
             applyZoom(bound, session.state.settings.zoomRatio)
             startExposureLoop(bound)
             val codecReport = CodecReport.of(lens.cameraId)
@@ -626,6 +628,11 @@ class CaptureService : LifecycleService() {
             val wantedZoom = session.state.settings.zoomRatio
             if (wantedZoom != appliedZoom) {
                 boundCamera?.let { applyZoom(it, wantedZoom) }
+                // Persisted alongside the other settings: someone who framed up
+                // at 2x and came back would otherwise be at 1x having changed
+                // nothing, and it is the one setting whose loss is invisible
+                // until you look at the shot.
+                settings.zoomRatio = wantedZoom
             }
             val shutterLock = session.state.settings.shutterLock
             if (shutterLock != appliedShutterLock) {
@@ -1174,6 +1181,7 @@ class CaptureService : LifecycleService() {
             lensId = settings.lensId,
             saveToGallery = settings.saveToGallery,
             lockExposureWhileRecording = settings.lockExposureWhileRecording,
+            zoomRatio = settings.zoomRatio,
         ),
         recording = RecordingState(recording = false),
         device = DeviceStatus(0, false, ThermalState.NOMINAL, 0),
