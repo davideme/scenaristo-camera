@@ -157,21 +157,33 @@ class ControlServer(
     }
 
     private suspend fun streamFrames(call: ApplicationCall) {
+        val pacer = FramePacer(FRAME_INTERVAL_MS)
+        // The frame last put on the wire, by identity. `latest()` hands back the
+        // same array until the producer replaces it, so without this the loop
+        // re-sends a frame the client already has whenever it comes back before
+        // a new one was encoded -- paying full bandwidth for a duplicate. It
+        // became reachable when the pacing tightened below.
+        var sent: ByteArray? = null
         call.respondBytesWriter(contentType = io.ktor.http.ContentType.parse(Mjpeg.CONTENT_TYPE)) {
             // The channel closes when the browser navigates away or the tab is
             // shut, which is the only signal that a viewer has gone.
             while (!isClosedForWrite) {
                 val jpeg = frames.latest()
-                if (jpeg == null) {
+                if (jpeg == null || jpeg === sent) {
                     delay(FRAME_POLL_MS)
                     continue
                 }
                 writeFully(Mjpeg.partHeader(jpeg.size))
                 writeFully(jpeg)
                 // The suspending write is the backpressure: a slow client stalls
-                // here rather than queueing stale frames (ADR-0008).
+                // here rather than queueing stale frames (ADR-0008). Unchanged
+                // by the pacing below -- what changed is only that the wait
+                // afterwards is the remainder of the interval rather than a
+                // fixed sleep added on top of however long the write took.
                 flush()
-                delay(FRAME_INTERVAL_MS)
+                sent = jpeg
+                val wait = pacer.afterSend(now())
+                if (wait > 0) delay(wait)
             }
             writeFully(Mjpeg.tail())
         }
