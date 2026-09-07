@@ -1,6 +1,5 @@
 package com.scenaristo.camera.server
 
-import com.scenaristo.camera.domain.net.LanOnly
 import com.scenaristo.camera.domain.protocol.ClientMessage
 import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.Hello
@@ -9,16 +8,12 @@ import com.scenaristo.camera.domain.protocol.ProtocolJson
 import com.scenaristo.camera.domain.protocol.ServerMessage
 import com.scenaristo.camera.domain.protocol.Session
 import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticResources
-import io.ktor.server.plugins.origin
-import io.ktor.server.request.host
-import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -50,8 +45,9 @@ fun interface PreviewFrames {
  * It binds once to every interface and enforces LAN-only per request, because
  * Ktor fixes its connectors when the server is built — binding per interface
  * would mean restarting the server, and dropping every WebSocket, on each
- * Wi-Fi-to-hotspot transition (ADR-0006). The admission rule itself lives in
- * `:domain` so iOS applies the identical one in Phase 4.
+ * Wi-Fi-to-hotspot transition (ADR-0006). That per-request check is [LanGuard],
+ * installed below on the whole application rather than route by route; the rule
+ * it applies lives in `:domain` so iOS applies the identical one in Phase 4.
  *
  * Whether the port opens at all is not this class's decision: ADR-0026 has the
  * caller hold it closed unless the phone is on a local network, which is the one
@@ -123,6 +119,11 @@ class ControlServer(
     fun start() {
         if (engine != null) return
         engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
+            // First, and at the application level rather than per route: ADR-0006
+            // asks for one plugin, and one plugin is what makes the rule hold for
+            // the static bundle, for `/ws` before it upgrades, and for whatever
+            // route is added next without anyone rereading this file.
+            install(LanGuard)
             install(WebSockets) {
                 // RFC 6455 pings, which browsers answer with no JavaScript. On
                 // timeout Ktor closes the session and the handler's finally block
@@ -136,14 +137,8 @@ class ControlServer(
                 // is what makes the remote zero-install: the laptop types an IP
                 // and gets a page, with nothing to download and no store.
                 staticResources("/", "web") { default("index.html") }
-                get("/preview.mjpg") {
-                    if (!admit(call)) return@get
-                    streamPreview(call)
-                }
-                webSocket("/ws") {
-                    if (!admit(call)) return@webSocket
-                    serve()
-                }
+                get("/preview.mjpg") { streamPreview(call) }
+                webSocket("/ws") { serve() }
             }
         }.also { it.start(wait = false) }
     }
@@ -163,20 +158,6 @@ class ControlServer(
 
     /** Whether the port is open (ADR-0026). */
     val listening: Boolean get() = engine != null
-
-    /**
-     * Both checks from ADR-0006, applied to every request rather than at bind
-     * time. The `Host` literal check is the one that defeats DNS rebinding: the
-     * phone's own URLs are always IP literals, and a rebinding attack necessarily
-     * arrives with a hostname.
-     */
-    private suspend fun admit(call: ApplicationCall): Boolean {
-        val remote = call.request.origin.remoteAddress
-        val host = call.request.host()
-        if (LanOnly.allows(remote, host)) return true
-        call.respond(HttpStatusCode.Forbidden, "LAN only")
-        return false
-    }
 
     /**
      * One browser's preview stream, counted for its whole life (ADR-0025).
