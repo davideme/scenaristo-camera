@@ -65,6 +65,16 @@ class ControlServer(
      * Runs on a Ktor thread, so it must not block.
      */
     onViewersChanged: (Int) -> Unit = {},
+    /**
+     * Asked for a JPEG quality when the link's behaviour says it should change
+     * (PRD 6.8, ADR-0008). Default does nothing, so a caller that does not care
+     * about degradation gets the old behaviour.
+     *
+     * A callback rather than a reference to the encoder, because `:server` must
+     * not know what produces the frames -- `PreviewFrames` is deliberately the
+     * whole of that contract, and Phase 4's iOS server implements the same one.
+     */
+    private val onQualityChanged: (Int) -> Unit = {},
 ) {
     private val clients = CopyOnWriteArraySet<Client>()
 
@@ -77,6 +87,13 @@ class ControlServer(
      * first viewer arriving, the last one leaving -- rather than the number.
      */
     private val viewers = ViewerCount(onViewersChanged)
+
+    /**
+     * PRD 6.8's degradation: quality follows the link rather than the preview
+     * freezing. One instance for the server, because there is one encoder and
+     * therefore one quality -- see [PreviewQuality].
+     */
+    private val quality = PreviewQuality(FRAME_INTERVAL_MS)
     private val lock = Mutex()
     private var engine: EmbeddedServer<*, *>? = null
 
@@ -173,6 +190,7 @@ class ControlServer(
                     delay(FRAME_POLL_MS)
                     continue
                 }
+                val startedAt = now()
                 writeFully(Mjpeg.partHeader(jpeg.size))
                 writeFully(jpeg)
                 // The suspending write is the backpressure: a slow client stalls
@@ -182,7 +200,15 @@ class ControlServer(
                 // fixed sleep added on top of however long the write took.
                 flush()
                 sent = jpeg
-                val wait = pacer.afterSend(now())
+                val finishedAt = now()
+                // How long that write took is the only view this server has of
+                // the link, and it is enough: a write outlasting the frame
+                // interval means frames are arriving faster than the socket
+                // drains.
+                if (quality.onFrameWritten(finishedAt - startedAt)) {
+                    onQualityChanged(quality.quality)
+                }
+                val wait = pacer.afterSend(finishedAt)
                 if (wait > 0) delay(wait)
             }
             writeFully(Mjpeg.tail())
