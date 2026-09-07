@@ -329,6 +329,17 @@ class CaptureService : LifecycleService() {
             session = session,
             frames = PreviewFrames { jpeg.latest() },
             onViewersChanged = ::onViewersChanged,
+            // PRD 6.8's degradation. One encoder, one quality: the server
+            // decides it from how its own writes behave, and this only carries
+            // the answer across the module boundary.
+            onQualityChanged = {
+                jpeg.quality = it
+                // Logged because it is otherwise invisible: the picture gets
+                // softer and nothing says why. A bug report that says "the
+                // preview looked bad" is worth much more with a line saying the
+                // link asked for it.
+                Log.i(PREVIEW_TAG, "preview quality now $it (PRD 6.8: link under pressure)")
+            },
         )
 
         // Before anything can write a new marker, and before the camera binds:
@@ -1533,6 +1544,8 @@ class CaptureService : LifecycleService() {
         private const val SWEEP_TAG = "LensSweep"
 
         private const val ZOOM_TAG = "Framing"
+
+        private const val PREVIEW_TAG = "PreviewQuality"
 
         /** #20's sweep, startable over adb so the phone need not be unlocked. */
         const val ACTION_LENS_SWEEP = "com.scenaristo.camera.LENS_SWEEP"
