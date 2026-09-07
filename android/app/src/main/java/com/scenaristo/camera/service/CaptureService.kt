@@ -58,6 +58,7 @@ import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
 import com.scenaristo.camera.domain.protocol.DeviceStatus
 import com.scenaristo.camera.domain.protocol.RecordingState
+import com.scenaristo.camera.domain.protocol.Optics
 import com.scenaristo.camera.domain.recording.TakeName
 import com.scenaristo.camera.domain.protocol.SettingsPatch
 import com.scenaristo.camera.domain.protocol.Session
@@ -407,6 +408,18 @@ class CaptureService : LifecycleService() {
             backCameraId = lens.cameraId
             camera.logicalCameraId = lens.cameraId
             _lensMm.value = ManualControls.equivalentFocalLength(bound.cameraInfo)
+            // #101: the remote shows the lens as an optic -- focal length and
+            // f/-number, and the T-stop :domain derives from the second. Lens
+            // constants, so they are published once at bind rather than on the
+            // status tick.
+            session.update(System.currentTimeMillis()) {
+                it.copy(
+                    optics = Optics(
+                        equivalentFocalLengthMm = _lensMm.value,
+                        apertureFNumber = ManualControls.aperture(bound.cameraInfo),
+                    ),
+                )
+            }
             startExposureLoop(bound)
             val codecReport = CodecReport.of(lens.cameraId)
             _codecLabel.value = when {

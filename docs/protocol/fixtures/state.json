@@ -112,6 +112,10 @@
       ],
       "metering": true
     },
+    "optics": {
+      "equivalentFocalLengthMm": 24,
+      "apertureFNumber": 1.7
+    },
     "serverTimeMs": 1788500123456
   }
 }
