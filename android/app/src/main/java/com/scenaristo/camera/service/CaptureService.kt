@@ -50,6 +50,7 @@ import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.PreviewJpegSource
 import com.scenaristo.camera.capture.PreviewTapProcessor
+import com.scenaristo.camera.domain.exposure.ExposureState
 import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.exposure.shutterLadder
 import com.scenaristo.camera.domain.lens.framingsFor
@@ -74,6 +75,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.time.LocalDateTime
 
@@ -201,6 +204,44 @@ class CaptureService : LifecycleService() {
     @Volatile
     private var previewWatched = false
 
+    /**
+     * Whether the phone's own screen is showing the camera (ADR-0025).
+     *
+     * The activity reports this; the service cannot see it. Note that this is
+     * the *stopped* signal, which is a different question from ADR-0019's
+     * *destroyed* one -- backgrounding the app releases the camera here, and
+     * only leaving the app entirely stops the service there.
+     */
+    @Volatile
+    private var uiVisible = false
+
+    /** Whether the camera is bound right now (ADR-0025). */
+    private var cameraBound = false
+
+    /** Pending ADR-0025 standby, cancelled the moment demand returns. */
+    private var standby: Job? = null
+
+    /** Last reason logged by [reconcileCamera], so only changes are logged. */
+    private var lastWantReason: String? = "not yet evaluated"
+
+    /**
+     * Serialises binding, releasing and starting a take (ADR-0025).
+     *
+     * The three cannot interleave. A release that lands between the recording
+     * state flipping and the recorder starting takes the camera out from under
+     * a take that the state document already says is running.
+     */
+    private val cameraLock = Mutex()
+
+    /** The exposure publisher for the current bind, cancelled when it ends. */
+    private var exposurePublisher: Job? = null
+
+    /**
+     * Where the exposure loop had got to when the camera was released, so the
+     * next bind opens there rather than at the sensor floor (ADR-0025).
+     */
+    private var lastExposure: ExposureState? = null
+
     /** ADR-0005's loop, alive only once a camera is bound. */
     @Volatile
     private var exposure: ExposureController? = null
@@ -294,7 +335,12 @@ class CaptureService : LifecycleService() {
         // whatever is on disk now is a claim about the *previous* run.
         _interrupted.value = takeInterruptedTakeIfAny()
         followDisplayRotation()
-        lifecycleScope.launch { bindCamera() }
+        // Bound here rather than waiting for demand: this service was started by
+        // a visible activity, which is the moment ADR-0003 requires, and a first
+        // preview that waits on a camera is a worse greeting than one that is
+        // already there. If nothing turns out to want it, the standby timer
+        // takes it away a few seconds later.
+        lifecycleScope.launch { cameraLock.withLock { bindCamera() } }
         server.start()
         _url.value = LocalAddress.url()
 
@@ -351,6 +397,153 @@ class CaptureService : LifecycleService() {
     }
 
     /**
+     * Whether anything actually needs the camera right now (ADR-0025).
+     *
+     * Three terms, and each is somebody looking at the picture: a take being
+     * recorded, the phone's own viewfinder, or a browser -- either holding the
+     * control socket or pulling the preview. Deliberately ADR-0019's idle test
+     * with one term added, because it is the same question asked of the camera
+     * rather than of the service.
+     *
+     * What is *not* here matters as much. The screen being on is not a term, and
+     * neither is the service running: PRD 6.8's flow is a phone left alone while
+     * the user walks to a laptop, and the laptop is expected to arrive at a
+     * server that is still answering. Only the camera sleeps.
+     */
+    private fun cameraWanted(): Boolean = whyCameraWanted() != null
+
+    /**
+     * Which term of [cameraWanted] is holding the camera, or null if none is.
+     *
+     * A reason rather than a boolean because this is the question asked of a
+     * phone lying face down on a tripod, where the only way to ask it is
+     * `logcat` -- and "the camera is still on" with no reason attached is a
+     * bug report nobody can act on.
+     */
+    private fun whyCameraWanted(): String? = when {
+        session.state.recording.recording -> "recording"
+        uiVisible -> "the phone screen is showing it"
+        session.state.clients > 0 -> "${session.state.clients} remote(s) attached"
+        previewWatched -> "a browser is pulling the preview"
+        else -> null
+    }
+
+    /**
+     * The phone's screen showed or stopped showing the camera (ADR-0025).
+     *
+     * Called by the activity, which is the only thing that knows. Binding is
+     * immediate and releasing is not: coming back to the app should not wait on
+     * a camera, and leaving it for a moment should not tear one down.
+     */
+    fun setUiVisible(visible: Boolean) {
+        if (uiVisible == visible) return
+        Log.i(STANDBY_TAG, "phone screen ${if (visible) "showing" else "hidden"}")
+        uiVisible = visible
+        reconcileCamera()
+    }
+
+    /**
+     * Match the camera to demand (ADR-0025).
+     *
+     * Cheap and idempotent, so it can be called from every edge that might have
+     * changed the answer -- and it is, including once a second from
+     * [publishStatus], which is what catches a browser attaching or dropping the
+     * control socket without touching the preview.
+     */
+    private fun reconcileCamera() {
+        val reason = whyCameraWanted()
+        // Logged on change rather than on the tick: the answer is wanted when a
+        // phone is face down and logcat is the only way to ask, and a line a
+        // second would bury it.
+        if (reason != lastWantReason) {
+            Log.i(STANDBY_TAG, "camera wanted: ${reason ?: "no -- nothing is watching"}")
+            lastWantReason = reason
+        }
+        if (reason != null) {
+            if (standby != null) Log.i(STANDBY_TAG, "standby cancelled: $reason")
+            standby?.cancel()
+            standby = null
+            if (!cameraBound) lifecycleScope.launch { wakeCamera() }
+        } else if (cameraBound && standby == null) {
+            Log.i(STANDBY_TAG, "nothing is watching; releasing in ${STANDBY_GRACE_MS}ms")
+            scheduleStandby()
+        }
+    }
+
+    /**
+     * Release the camera shortly, unless demand comes back first (ADR-0025).
+     *
+     * The grace period is the same argument ADR-0019 makes for its shutdown
+     * delay: an app switched away from for a moment, or an activity being
+     * recreated, must not cost a full camera teardown and rebuild. The condition
+     * is re-read *after* the wait rather than before, because the whole point is
+     * that it may have changed during it.
+     */
+    private fun scheduleStandby() {
+        standby = lifecycleScope.launch {
+            delay(STANDBY_GRACE_MS)
+            cameraLock.withLock {
+                whyCameraWanted()?.let {
+                    Log.i(STANDBY_TAG, "staying awake: $it")
+                    return@withLock
+                }
+                if (!cameraBound) return@withLock
+                Log.i(STANDBY_TAG, "nothing watching; releasing the camera")
+                releaseCamera()
+            }
+            standby = null
+        }
+    }
+
+    private suspend fun wakeCamera() {
+        cameraLock.withLock {
+            if (cameraBound) return@withLock
+            val reason = whyCameraWanted() ?: return@withLock
+            Log.i(STANDBY_TAG, "binding the camera: $reason")
+            bindCamera()
+        }
+    }
+
+    /**
+     * Give the camera back, keeping everything that is not the camera (ADR-0025).
+     *
+     * The server, the port, the notification and the state document are all
+     * untouched: a browser must still be able to reach a phone in standby, and
+     * its arrival is what brings the camera back.
+     *
+     * The order is not arbitrary. The exposure publisher is cancelled before the
+     * controller is dropped, because it collects a `StateFlow` that never
+     * completes and would otherwise survive as one stray coroutine per wake. The
+     * surface request is cleared because the one held is invalid the moment the
+     * use case unbinds, and the viewfinder would hand a dead request to CameraX
+     * if the activity came back a frame before the rebind. The last JPEG goes
+     * for the reason [PreviewJpegSource.forget] gives: a frame from before the
+     * sleep is not the shot, and showing it as live is worse than showing
+     * nothing.
+     *
+     * The tap is deliberately *not* released. Releasing it quits its thread for
+     * good, and every frame after that would be silently dropped -- so it
+     * outlives any number of these cycles and is torn down only in [onDestroy].
+     */
+    private suspend fun releaseCamera() {
+        lastExposure = exposure?.state?.value
+        exposurePublisher?.cancel()
+        exposurePublisher = null
+        exposure = null
+        runCatching {
+            ProcessCameraProvider.awaitInstance(this).unbind(camera.sessionConfig)
+        }.onFailure { Log.w(STANDBY_TAG, "unbind failed", it) }
+        cameraBound = false
+        _surfaceRequest.value = null
+        jpeg.forget()
+        // Rotation is re-applied on the next bind rather than assumed to have
+        // survived it; the guard in applyDisplayRotation would otherwise skip a
+        // rotation that had not changed since before the sleep.
+        appliedRotation = null
+        updateNotification(describe())
+    }
+
+    /**
      * The number of browsers watching the preview changed (ADR-0025).
      *
      * Called on a Ktor thread. Dropping the last frame when the last viewer
@@ -360,6 +553,10 @@ class CaptureService : LifecycleService() {
     private fun onViewersChanged(viewers: Int) {
         previewWatched = viewers > 0
         if (viewers == 0) jpeg.forget()
+        // The first viewer is the wake signal (ADR-0025): a browser opening the
+        // preview is how it asks for the camera, and the stream's own poll for a
+        // first frame is what covers the bind.
+        reconcileCamera()
     }
 
     /**
@@ -476,6 +673,7 @@ class CaptureService : LifecycleService() {
                 CameraSelector.DEFAULT_BACK_CAMERA,
                 camera.sessionConfig,
             )
+            cameraBound = true
             val lens = camera.capabilities(bound.cameraInfo)
             backCameraId = lens.cameraId
             camera.logicalCameraId = lens.cameraId
@@ -534,7 +732,15 @@ class CaptureService : LifecycleService() {
             // Logged as well as shown: #21's answer is a number to paste into an
             // ADR, and reading it off a screenshot means unlocking the phone.
             Log.i("CodecReport", report)
-        }.onFailure { updateNotification("Camera unavailable: ${it.message}") }
+            // The rotation guard compares against the last value applied, and a
+            // release resets it, so this is what puts a woken camera back at the
+            // display's rotation rather than the one it was built in.
+            applyDisplayRotation()
+        }.onFailure {
+            cameraBound = false
+            Log.w(STANDBY_TAG, "bind failed", it)
+            updateNotification("Camera unavailable: ${it.message}")
+        }
     }
 
     /**
@@ -559,6 +765,9 @@ class CaptureService : LifecycleService() {
             cameraControl = bound.cameraControl,
             awbMode = ManualControls.awbModeFor(session.state.settings.whiteBalanceKelvin),
             lockWhileRecording = session.state.settings.lockExposureWhileRecording,
+            // ADR-0025: a camera released while nobody was watching comes back
+            // where it left off, so a wake is not a visibly dark first second.
+            resumeFrom = lastExposure,
         )
         exposure = controller
         // A fresh controller starts life believing no take is running. That is
@@ -567,8 +776,36 @@ class CaptureService : LifecycleService() {
         // meters -- so it is told, rather than left to the next transition.
         controller.onRecordingChanged(session.state.recording.recording)
         controller.start()
+        restoreSettings(controller)
         Log.i(EXPOSURE_TAG, "exposure loop running, ISO ${isoRange.min}..${isoRange.max}")
-        lifecycleScope.launch { publishExposure(controller) }
+        // One publisher per bind, and the previous one is already cancelled by
+        // releaseCamera -- a StateFlow collector never completes on its own, so
+        // an uncancelled one would survive as a stray writer per wake.
+        exposurePublisher?.cancel()
+        exposurePublisher = lifecycleScope.launch { publishExposure(controller) }
+    }
+
+    /**
+     * Hand a freshly built loop everything the state document already says
+     * (ADR-0025).
+     *
+     * Without this a woken camera runs at defaults while the interface shows the
+     * user's settings, which is the worst shape a bug can take: nothing looks
+     * broken. The reconciliation in [publishStatus] cannot cover it, because it
+     * pushes only what *changed* and none of these changed -- the sensor did.
+     *
+     * Pushed straight at the controller rather than through those change
+     * detectors on purpose. Going through them would mean clearing them, and
+     * clearing `appliedGrid` would re-run the grid branch, which writes
+     * `gridOverride` to storage -- quietly converting a detected mains frequency
+     * into one the user is recorded as having chosen by hand.
+     */
+    private fun restoreSettings(controller: ExposureController) {
+        val settings = session.state.settings
+        val now = System.currentTimeMillis()
+        controller.onGridChanged(settings.grid, now)
+        controller.onWhiteBalanceChanged(ManualControls.awbModeFor(settings.whiteBalanceKelvin))
+        controller.onShutterLockChanged(settings.shutterLock, now)
     }
 
     /**
@@ -593,7 +830,10 @@ class CaptureService : LifecycleService() {
         // this table is longer than that with four lenses.
         text.lineSequence().forEach { Log.i(SWEEP_TAG, it) }
         // The sweep unbound everything, including the preview the browser reads.
-        bindCamera()
+        cameraLock.withLock {
+            cameraBound = false
+            bindCamera()
+        }
     }
 
     /**
@@ -702,6 +942,10 @@ class CaptureService : LifecycleService() {
             }
             server.broadcastSnapshot()
             _state.value = session.state
+            // ADR-0025: the tick is what notices a browser attaching or dropping
+            // the control socket. The preview and the phone's own UI report
+            // themselves the moment they change; this covers everything else.
+            reconcileCamera()
             updateNotification(describe())
             delay(1_000)
         }
@@ -791,7 +1035,16 @@ class CaptureService : LifecycleService() {
                 // setup-speed ISO at the head of a locked take would be exactly
                 // the thing the user asked not to have.
                 exposure?.onRecordingChanged(true)
-                startRecording()
+                // ADR-0025: a take may be asked for while the camera is asleep --
+                // a browser that attached and pressed Record faster than the
+                // reconcile tick noticed it. Binding and starting hold the lock
+                // together, so a standby already in flight cannot land between
+                // them and pull the camera out of a take the state document
+                // says is running.
+                cameraLock.withLock {
+                    if (!cameraBound) bindCamera()
+                    startRecording()
+                }
             }
             if (!shouldRecord && wasRecording) {
                 stopRecording()
@@ -1115,9 +1368,15 @@ class CaptureService : LifecycleService() {
             ?.let { (System.currentTimeMillis() - it) / 1000 }
             ?.let { "%d:%02d".format(it / 60, it % 60) }
         val clients = if (state.clients > 0) " · ${state.clients} watching" else ""
+        val address = _url.value?.let { " · $it" } ?: ""
         return when {
             elapsed != null -> "Recording $elapsed$clients"
-            else -> "Ready${clients}${_url.value?.let { " · $it" } ?: ""}"
+            // ADR-0025: "Asleep" rather than "Ready" because the difference is
+            // visible -- the camera indicator is out and the first preview will
+            // take a moment -- and a notification that claimed Ready would be
+            // the only place the phone lied about what it was doing.
+            !cameraBound -> "Asleep$clients$address"
+            else -> "Ready$clients$address"
         }
     }
 
@@ -1251,6 +1510,19 @@ class CaptureService : LifecycleService() {
          * user who closed the app does not wonder why the camera light is on.
          */
         private const val IDLE_SHUTDOWN_GRACE_MS = 5_000L
+
+        private const val STANDBY_TAG = "CameraStandby"
+
+        /**
+         * How long the camera stays bound with nothing watching it (ADR-0025).
+         *
+         * Longer than [IDLE_SHUTDOWN_GRACE_MS] on purpose. That one races an
+         * activity being recreated, which takes milliseconds; this one races a
+         * person -- glancing at a notification, answering a message, coming
+         * back. A camera torn down and rebuilt for a ten-second detour costs
+         * more than it saves, and the cost is paid where it is most visible.
+         */
+        private const val STANDBY_GRACE_MS = 15_000L
 
         /**
          * Where the meter calls it clipping. Not 1.0: a signal that reaches full
