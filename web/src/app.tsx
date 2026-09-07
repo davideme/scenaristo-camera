@@ -2,8 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import { Connection, elapsedSeconds, type Snapshot } from './connection'
 import { ExposureScale, Histogram } from './exposure'
 import { ABSENT, bitrate, codecName, format, minutesLeft, timecode } from './format'
-import { WarningIcon } from './icons'
+import { LensIcon, WarningIcon } from './icons'
 import { FramingGuides } from './guides'
+import {
+  activeFocalLengthMm,
+  dismissDistanceGuidance,
+  distanceGuidanceDismissed,
+  needsDistanceGuidance,
+} from './lens'
 import {
   ExposurePanel,
   LensPanel,
@@ -38,6 +44,10 @@ export function App() {
   // Client-local, and never sent (spec §8): whether the preview is flipped
   // depends on who is looking at it, not on what the camera is doing.
   const [view, setView] = useState<ViewPrefs>(loadViewPrefs)
+  // PRD 6.5's guidance is dismissible for the session (UI-12), so this is
+  // sessionStorage rather than a preference: the next session is a different
+  // shot with a different person in front of the camera.
+  const [guidanceDismissed, setGuidanceDismissed] = useState(distanceGuidanceDismissed)
 
   useEffect(() => {
     const c = new Connection(setSnapshot)
@@ -69,6 +79,7 @@ export function App() {
     grid?: GridFrequency
     whiteBalanceKelvin?: number
     lockExposureWhileRecording?: boolean
+    zoomRatio?: number
   }) => {
     const c = connection.current
     if (!c) return
@@ -106,6 +117,31 @@ export function App() {
             the same order, as the phone's top strip — plus the preview's own
             format, which only this surface has. */}
         <Reported state={state} />
+
+        {/*
+          PRD 6.5's distance guidance. Deliberately not a `State.warnings` chip
+          (UI-5): a warning is something that just became true, and this is a
+          standing fact about the framing in use — true for the whole session,
+          which is also why it can be dismissed once read.
+        */}
+        {state != null &&
+        !guidanceDismissed &&
+        needsDistanceGuidance(activeFocalLengthMm(state)) ? (
+          <p class="guidance">
+            <LensIcon />
+            Wide lens — sit 1.5–2 m back
+            <button
+              type="button"
+              class="dismiss"
+              onClick={() => {
+                dismissDistanceGuidance()
+                setGuidanceDismissed(true)
+              }}
+            >
+              Dismiss
+            </button>
+          </p>
+        ) : null}
 
         {state?.warnings?.length ? (
           <ul class="warnings">
@@ -164,7 +200,11 @@ export function App() {
                 void patch({ lockExposureWhileRecording })
               }
             />
-            <LensPanel state={state} />
+            <LensPanel
+              state={state}
+              locked={recording}
+              onSet={(zoomRatio) => void patch({ zoomRatio })}
+            />
             <SoundPanel state={state} />
             <ViewPanel
               view={view}
@@ -345,7 +385,9 @@ function warningText(warning: Warning, state: State): string {
     case 'TOO_DARK':
       return `Add light — ISO ${state.settings.iso} will look noisy`
     case 'TOO_CLOSE_TO_LENS': {
-      const mm = state.optics?.equivalentFocalLengthMm
+      // The framing's focal length, not the base lens's: at 5x the advice to
+      // sit back is about a 120 mm field of view, not a 24 mm one.
+      const mm = activeFocalLengthMm(state)
       return mm
         ? `Sit further back — 1.5–2 m for the ${mm} mm lens`
         : 'Sit further back — 1.5–2 m from the lens'

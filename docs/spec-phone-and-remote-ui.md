@@ -258,10 +258,38 @@ Requested by Davide on 2026-09-06: *"add T-Stops in the web interface"*. Issue #
 - [ ] The T-stop is derived in the browser from `Optics.apertureFNumber`, never sent. A derived number on the wire is one iOS could derive differently.
 - [ ] Rounded to one decimal: `f/1.7 · T1.8`. The platform reports `1.7000000476837158`.
 - [ ] Nothing is drawn when the lens reports no aperture. Not `T0.0` — the entire argument for drawing this is that a reader can see what it is.
+- [ ] **Shown only at the framing it was probed at (1×).** `LENS_INFO_AVAILABLE_APERTURES` describes the logical camera and is `float[1]` on the reference device: one number, whichever sensor the HAL is using. Once the lens is a zoom ratio (UI-21), a longer framing is served by different glass with a different and unreported aperture, so drawing `f/1.7` at 5× would be a number about the wrong lens. At any other framing the readout says the device does not report it — the same choice as a thermal state that costs nothing and a meter that is not running.
 
 **The T-stop is an assumption, and showing both numbers is what makes it honest.** A real T-stop is the f/-number corrected for how much light the glass actually passes, and no phone reports its transmission — Android offers `LENS_INFO_AVAILABLE_APERTURES` and nothing about efficiency. Measuring it would mean a grey card at a known illuminance, per lens, per device (the method #24 used for the Kelvin curve), and per [ADR-0017](adr/0017-phase-0-verification-matrix.md) the answer would be a fact about one Pixel 10 rather than about phones. So the app assumes **92 % transmission** — about a sixth of a stop, `log2(1 / 0.92)` = 0.120 EV — and draws the f/-number beside it, so the assumption is visible in the gap between the two rather than hidden inside one number.
 
 Measured on the reference device: the Pixel 10's main lens reports **24 mm equivalent at f/1.70**, which gives **T1.77**.
+
+---
+**UI-21 — The lens list is a list of framings**
+
+Corrects UI-8 and UI-9 for what a phone actually is (Davide, 2026-09-06: *"the other lens are zoom accessible"*). Issue #77.
+
+**A phone's other lenses are not selectable cameras.** On the reference device the ultrawide and telephoto sit behind the back logical camera and cannot be chosen at all: lens choice is a **zoom ratio**, and the HAL decides which sensor serves it — possibly mid-session, while recording (`PinnedLensProbe`). UI-8's "each lens is a card" and UI-9's "the lens list is the only way to switch lens" were written against a device model that does not exist.
+
+- [ ] The Lens control offers **zoom ratios, labelled by the field of view they produce**: `13 mm · 0.6×`, `24 mm · 1×`, `48 mm · 2×`, `120 mm · 5×` on the reference device.
+- [ ] The label is a focal length and never a lens name. The app knows the field of view a ratio produces; CameraX 1.6.2 will not say whether glass or a crop delivers it, and a focal length is true either way — it is also the number PRD §6.5's guidance is written in.
+- [ ] `48 mm+` carries "recommended" (PRD §6.5). On this device that is only reachable by zooming, which is exactly what the list is for.
+- [ ] Nothing beyond 5× is offered however far the device zooms: past the longest real lens, more zoom is a crop of a sensor already cropped to 16:9 at 4K, and offering it as a lens would be offering a softer picture as a choice.
+- [ ] A device with fewer than two framings gets a **reported** panel, not a control — goal 5.
+- [ ] Locked during a take, like every other setting (UI-6, Q1).
+- [ ] A ratio the phone never offered is answered `INVALID`, not clamped.
+
+`lensId` keeps meaning the camera device it always meant; the new `zoomRatio` is what a client sets.
+
+---
+**UI-22 — Distance guidance is not a warning**
+
+PRD §6.5 and UI-12: *"Distance guidance reads 'Wide lens — sit 1.5–2 m back' and is dismissible for the session."* Issue #5.
+
+- [ ] Shown when the framing in use is in PRD §6.5's 23–25 mm band, above the preview.
+- [ ] Drawn **quieter than a warning chip**: no orange, no warning icon, a plain bordered line. UI-5 reserves that shape for something that just became true; this is a standing fact about the lens for the whole session.
+- [ ] Dismissible, and dismissed for the **session only** — the next session is a different shot with a different person in front of the camera, and a preference that outlived it would silence PRD §6.5 permanently after one click.
+- [ ] The band comes from `:domain` (`LENS_WIDE_BAND`), generated rather than written down twice: a browser deciding at 26 mm what the phone decides at 25 is two surfaces disagreeing about the shot in front of them.
 
 ---
 **UI-20 — Framing guides**
@@ -323,6 +351,7 @@ All are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"additi
 | Tap to focus, and focus lock | Its own command rather than a patch field: it is allowed while recording, carries no `expectRev`, and a point and a mode only mean anything together | §6.11 (moved out of §6.1, decision 2026-09-06) | **Landed but unused.** `focus.set`, `Focus(mode, x, y)`, `focus` on `CaptureSettings`, validation in `Session`, and `cmd-focus-set.json`. Nothing sends it and nothing applies it: focus is automatic (UI-16). Kept rather than removed — deleting it is a non-additive protocol change for no gain, and it is what §6.11 would rebuild on |
 | Framing-guide toggles (thirds, eye line) | `SettingsPatch` plus a field on `CaptureSettings`, or client-local state if the guides are not meant to be shared between remotes | §6.8 "Preview shows framing overlays … toggleable from the web UI" | Open |
 | Preview-link quality | `DeviceStatus` | §6.8 "connection quality" | Open |
+| The lens list, as selectable framings | `LensChoice` list on `State`, `zoomRatio` on `CaptureSettings` and `SettingsPatch` | §6.5, §6.8 (UI-21, #77) | **Landed.** A phone's other lenses are zoom ratios, not cameras |
 | The lens as an optic: focal length and f/-number | `Optics` on `State` | §6.5, §6.8 (UI-18, #101) | **Landed.** `equivalentFocalLengthMm`, `apertureFNumber`. The T-stop is derived in the browser and deliberately not on the wire |
 | Exposure aids: stops from correct, and a histogram | `ExposureReadout` on `State` | §6.3, §6.8 (UI-17, #97) | **Landed.** `stopsFromTarget`, `histogram` (64 bins), `metering`. Measured in the metering walk of ADR-0018, so the reading and the loop cannot disagree |
 

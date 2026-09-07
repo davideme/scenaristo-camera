@@ -114,11 +114,18 @@ fun List<Lens>.recommendedForTalkingHead(): Lens? =
 /** The diagonal of a 36 x 24 mm frame, which is what "35 mm equivalent" is equivalent to. */
 private const val FULL_FRAME_DIAGONAL_MM = 43.266615305567875
 
-/** PRD 6.5: "If the equivalent focal length is 23-25 mm ... show persistent guidance". */
-private val WIDE_BAND = 23..25
+/**
+ * PRD 6.5: "If the equivalent focal length is 23-25 mm ... show persistent guidance".
+ *
+ * Public because the remote control applies the same rule to the same number,
+ * and it is generated into `web/src/protocol.ts` rather than written down twice
+ * (ADR-0009). A browser deciding at 26 mm what the phone decides at 25 is two
+ * surfaces disagreeing about the shot in front of them.
+ */
+val WIDE_BAND = 23..25
 
 /** PRD 6.5: "If the device has a longer lens (48 mm+ telephoto)". */
-private const val RECOMMENDED_FROM = 48
+const val RECOMMENDED_FROM = 48
 
 /**
  * The T-stop the app shows beside the f/-number (PRD 6.8; Davide, 2026-09-06).
@@ -161,3 +168,51 @@ object TStop {
         return fNumber / kotlin.math.sqrt(transmission)
     }
 }
+
+/**
+ * The framings to offer for a device's zoom range (PRD 6.5, #77).
+ *
+ * A phone's other lenses are reached by zoom ratio rather than by camera id
+ * (Davide, 2026-09-06), so "which lenses does this device have" becomes "which
+ * ratios are worth putting in front of someone". The answer here is a small
+ * ladder rather than the whole range: a slider from 0.5x to 30x is the stock
+ * camera app's answer and PRD section 1 is a rejection of that.
+ *
+ * The ladder is [LADDER], clamped to what the device reports, with the device's
+ * own minimum always included -- that is where an ultrawide lives when there is
+ * one, and it is a real optic on every phone that has it.
+ *
+ * **What this deliberately does not claim is which ratios are optical.** CameraX
+ * 1.6.2 will not say where the physical sensors hand over; `LensSweep` finds out
+ * empirically by reading the sensor id off capture results, and that takes a
+ * sweep nobody wants to run at every launch. So each choice is labelled by the
+ * field of view it produces, which is true whether glass or a crop delivers it,
+ * and is also the number PRD 6.5's guidance is written in.
+ */
+fun framingsFor(
+    minZoomRatio: Double,
+    maxZoomRatio: Double,
+    baseEquivalentFocalLengthMm: Int,
+): List<com.scenaristo.camera.domain.protocol.LensChoice> {
+    if (baseEquivalentFocalLengthMm <= 0 || maxZoomRatio <= 0.0) return emptyList()
+    val ratios = LinkedHashSet<Double>()
+    if (minZoomRatio in 0.0..1.0) ratios.add(minZoomRatio)
+    LADDER.filterTo(ratios) { it in minZoomRatio..maxZoomRatio }
+    return ratios.sorted().map { ratio ->
+        com.scenaristo.camera.domain.protocol.LensChoice(
+            zoomRatio = ratio,
+            // Zooming scales the field of view, so it scales the equivalent
+            // focal length by the same factor. That is what the number means.
+            equivalentFocalLengthMm = (baseEquivalentFocalLengthMm * ratio).roundToInt(),
+        )
+    }
+}
+
+/**
+ * The ratios phone makers put physical lenses at, plus 1x.
+ *
+ * Stops beyond 5x are left out on purpose: past the longest real lens a phone
+ * has, further zoom is a crop of a sensor already cropped to 16:9 at 4K, and
+ * offering it as a "lens" would be offering a softer picture as a choice.
+ */
+private val LADDER = listOf(1.0, 2.0, 5.0)

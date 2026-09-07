@@ -10,6 +10,9 @@ export const WHITE_BALANCE_PRESETS = {
 
 export const DEFAULT_KELVIN = 5600;
 
+export const LENS_WIDE_BAND = { min: 23, max: 25 } as const;
+export const LENS_RECOMMENDED_FROM = 48;
+
 export interface AckMessage {
   type: "ack";
   id: string;
@@ -50,6 +53,7 @@ export interface State {
   encoding?: Encoding;
   exposure?: ExposureReadout;
   optics?: Optics;
+  lenses?: LensChoice[];
   serverTimeMs: number;
 }
 
@@ -63,6 +67,7 @@ export interface CaptureSettings {
   saveToGallery?: boolean;
   lockExposureWhileRecording?: boolean;
   focus?: Focus;
+  zoomRatio?: number;
 }
 
 export type GridFrequency = "HZ_50" | "HZ_60";
@@ -122,6 +127,11 @@ export interface Optics {
   apertureFNumber?: number | null;
 }
 
+export interface LensChoice {
+  zoomRatio: number;
+  equivalentFocalLengthMm: number;
+}
+
 export interface CmdMessage {
   type: "cmd";
   id: string;
@@ -141,6 +151,7 @@ export interface SettingsPatch {
   saveToGallery?: boolean | null;
   lockExposureWhileRecording?: boolean | null;
   shutterLock?: number | null;
+  zoomRatio?: number | null;
 }
 
 export type ServerMessage = AckMessage | HelloMessage | NackMessage | StateMessage;

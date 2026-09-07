@@ -52,6 +52,7 @@ import com.scenaristo.camera.capture.PreviewJpegSource
 import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.exposure.shutterLadder
+import com.scenaristo.camera.domain.lens.framingsFor
 import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
 import com.scenaristo.camera.domain.protocol.CaptureSettings
 import com.scenaristo.camera.domain.protocol.Command
@@ -182,6 +183,12 @@ class CaptureService : LifecycleService() {
 
     /** ADR-0023's mode, as last handed to the exposure loop and to storage. */
     private var appliedExposureLock: Boolean? = null
+
+    /** The bound camera, for the framing control (#77). Null until the first bind. */
+    private var boundCamera: androidx.camera.core.Camera? = null
+
+    /** The framing last pushed at the camera, so the tick only acts on a change. */
+    private var appliedZoom: Double = 1.0
 
     /** ADR-0005's loop, alive only once a camera is bound. */
     @Volatile
@@ -395,6 +402,38 @@ class CaptureService : LifecycleService() {
         }
     }
 
+    /**
+     * Sets the framing (#77).
+     *
+     * `setZoomRatio` and not a rebind: on a phone the other lenses live behind
+     * one logical camera, so this is a request to the HAL rather than a new
+     * session -- no dropped preview, no restarted exposure loop, and nothing for
+     * the browser's MJPEG stream to notice.
+     *
+     * `appliedZoom` is set before the call and not after, so a ratio the camera
+     * refuses is not retried once a second forever.
+     *
+     * The result is a future, and a refusal arrives through it rather than as a
+     * thrown exception -- so a `runCatching` around the call alone would report
+     * success for every zoom the camera declined. The listener is what turns
+     * that into something a log can show, and it reads the camera's *own*
+     * `zoomState` back rather than echoing the value just sent: that is the
+     * difference between "we asked" and "the camera did it", which is the whole
+     * distinction a state document cannot make on its own.
+     */
+    private fun applyZoom(camera: androidx.camera.core.Camera, ratio: Double) {
+        appliedZoom = ratio
+        val future = runCatching { camera.cameraControl.setZoomRatio(ratio.toFloat()) }
+            .onFailure { Log.w(ZOOM_TAG, "zoom to ${ratio}x refused: ${it.message}") }
+            .getOrNull() ?: return
+        future.addListener({
+            val reported = camera.cameraInfo.zoomState.value?.zoomRatio
+            runCatching { future.get() }
+                .onSuccess { Log.i(ZOOM_TAG, "zoom ${ratio}x applied; camera reports ${reported}x") }
+                .onFailure { Log.w(ZOOM_TAG, "zoom ${ratio}x refused: ${it.message}; camera at ${reported}x") }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
     private suspend fun bindCamera() {
         camera.preview.setSurfaceProvider { _surfaceRequest.value = it }
         val provider = ProcessCameraProvider.awaitInstance(this)
@@ -412,14 +451,33 @@ class CaptureService : LifecycleService() {
             // f/-number, and the T-stop :domain derives from the second. Lens
             // constants, so they are published once at bind rather than on the
             // status tick.
+            // #77: the other lenses on a phone are reached by zoom ratio, not by
+            // camera id -- the ultrawide and telephoto sit behind the back
+            // logical camera and cannot be selected at all (Davide, 2026-09-06).
+            // So the lens list is a list of framings, and the range comes from
+            // the camera itself rather than from a table of device names.
+            val zoom = bound.cameraInfo.zoomState.value
+            val base = _lensMm.value ?: 0
+            val framings = framingsFor(
+                minZoomRatio = (zoom?.minZoomRatio ?: 1f).toDouble(),
+                maxZoomRatio = (zoom?.maxZoomRatio ?: 1f).toDouble(),
+                baseEquivalentFocalLengthMm = base,
+            )
+            boundCamera = bound
             session.update(System.currentTimeMillis()) {
                 it.copy(
                     optics = Optics(
-                        equivalentFocalLengthMm = _lensMm.value,
+                        equivalentFocalLengthMm = base,
                         apertureFNumber = ManualControls.aperture(bound.cameraInfo),
                     ),
+                    lenses = framings,
                 )
             }
+            // Re-applied on every bind, which covers both ways a framing is
+            // otherwise lost: a rebind inside one service lifetime (the lens
+            // sweep unbinds everything), and a fresh start, where the ratio
+            // comes back from `Settings` through `startingState`.
+            applyZoom(bound, session.state.settings.zoomRatio)
             startExposureLoop(bound)
             val codecReport = CodecReport.of(lens.cameraId)
             _codecLabel.value = when {
@@ -563,6 +621,18 @@ class CaptureService : LifecycleService() {
                 appliedExposureLock = exposureLock
                 settings.lockExposureWhileRecording = exposureLock
                 exposure?.onExposureLockChanged(exposureLock)
+            }
+            // #77: the framing, watched on the tick for the same reason the white
+            // balance is -- ADR-0007 keeps the command handler pure and
+            // platform-free, so the camera work happens here, one step behind.
+            val wantedZoom = session.state.settings.zoomRatio
+            if (wantedZoom != appliedZoom) {
+                boundCamera?.let { applyZoom(it, wantedZoom) }
+                // Persisted alongside the other settings: someone who framed up
+                // at 2x and came back would otherwise be at 1x having changed
+                // nothing, and it is the one setting whose loss is invisible
+                // until you look at the shot.
+                settings.zoomRatio = wantedZoom
             }
             val shutterLock = session.state.settings.shutterLock
             if (shutterLock != appliedShutterLock) {
@@ -1111,6 +1181,7 @@ class CaptureService : LifecycleService() {
             lensId = settings.lensId,
             saveToGallery = settings.saveToGallery,
             lockExposureWhileRecording = settings.lockExposureWhileRecording,
+            zoomRatio = settings.zoomRatio,
         ),
         recording = RecordingState(recording = false),
         device = DeviceStatus(0, false, ThermalState.NOMINAL, 0),
@@ -1155,6 +1226,8 @@ class CaptureService : LifecycleService() {
          */
         private const val CLIPPING_LEVEL = 0.99
         private const val SWEEP_TAG = "LensSweep"
+
+        private const val ZOOM_TAG = "Framing"
 
         /** #20's sweep, startable over adb so the phone need not be unlocked. */
         const val ACTION_LENS_SWEEP = "com.scenaristo.camera.LENS_SWEEP"

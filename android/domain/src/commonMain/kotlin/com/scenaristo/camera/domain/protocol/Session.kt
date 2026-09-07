@@ -140,6 +140,15 @@ class Session(
         // silently retuned to a rung the user did not choose.
         if (shutterLock != null && shutterLock !in shutterLadder(grid)) return invalid(command)
 
+        // PRD 6.5's framings are whatever the phone reported it can do. A ratio
+        // it never offered is refused rather than clamped -- a client asking for
+        // 3x on a device whose stops are 1x and 5x has a stale idea of the
+        // camera, which is worth telling it (ADR-0007's rule for the Kelvin
+        // range, applied to the same kind of mistake).
+        if (patch.zoomRatio != null && state.lenses.none { it.zoomRatio == patch.zoomRatio }) {
+            return invalid(command)
+        }
+
         val updated = state.settings.copy(
             grid = grid,
             whiteBalanceKelvin = patch.whiteBalanceKelvin ?: state.settings.whiteBalanceKelvin,
@@ -148,6 +157,7 @@ class Session(
             lockExposureWhileRecording = patch.lockExposureWhileRecording
                 ?: state.settings.lockExposureWhileRecording,
             shutterLock = shutterLock,
+            zoomRatio = patch.zoomRatio ?: state.settings.zoomRatio,
         )
         if (updated == state.settings) return remember(command, nowMs, changed = false)
         val settableChanged = updated.settable != state.settings.settable

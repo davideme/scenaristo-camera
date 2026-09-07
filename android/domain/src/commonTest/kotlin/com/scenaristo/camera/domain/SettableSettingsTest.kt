@@ -37,6 +37,7 @@ class SettableSettingsTest {
         "saveToGallery",
         "shutterLock",
         "lockExposureWhileRecording",
+        "zoomRatio",
     )
 
     @Test
@@ -68,6 +69,7 @@ class SettableSettingsTest {
             base.copy(lockExposureWhileRecording = true).settable,
             "ADR-0023's mode is a user choice, so a stale tab must not undo it",
         )
+        assertNotEquals(base.settable, base.copy(zoomRatio = 5.0).settable)
     }
 
     /**

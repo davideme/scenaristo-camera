@@ -75,6 +75,23 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putString(KEY_LENS, value).apply()
 
     /**
+     * The framing in use, as a zoom ratio (PRD 6.5, #77).
+     *
+     * Persisted like every other thing the user chooses. Someone who framed up
+     * at 2x and came back to the app would otherwise find themselves at 1x
+     * having changed nothing -- and it is the one setting whose loss is
+     * invisible until you look at the shot.
+     *
+     * A float because `SharedPreferences` has no double, widened on the way out.
+     * The ratios come from the camera and are floats there too, so nothing is
+     * lost. A stored ratio the device no longer offers is caught by `Session`,
+     * which validates against the framings the camera reported this time.
+     */
+    var zoomRatio: Double
+        get() = prefs.getFloat(KEY_ZOOM, DEFAULT_ZOOM).toDouble()
+        set(value) = prefs.edit().putFloat(KEY_ZOOM, value.toFloat()).apply()
+
+    /**
      * PRD 6.2's detection chain, with the stored override in front of it.
      *
      * This is where `resolveGrid` finally gets called. Until now the grid was the
@@ -110,8 +127,12 @@ class Settings(context: Context) {
         const val KEY_LENS = "lens-id"
         const val KEY_GALLERY = "save-to-gallery"
         const val KEY_EXPOSURE_LOCK = "lock-exposure-while-recording"
+        const val KEY_ZOOM = "zoom-ratio"
 
         /** PRD 6.1's default camera, as the platform's own id for it. */
         const val DEFAULT_LENS = "0"
+
+        /** 1x is the base lens, which is where a phone camera starts. */
+        const val DEFAULT_ZOOM = 1.0f
     }
 }

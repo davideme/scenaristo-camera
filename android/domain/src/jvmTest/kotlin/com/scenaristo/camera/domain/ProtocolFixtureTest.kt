@@ -2,7 +2,9 @@ package com.scenaristo.camera.domain
 
 import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.exposure.Histogram
+import com.scenaristo.camera.domain.lens.LensAdvice
 import com.scenaristo.camera.domain.lens.TStop
+import com.scenaristo.camera.domain.lens.adviceFor
 import com.scenaristo.camera.domain.protocol.Ack
 import com.scenaristo.camera.domain.protocol.ClientMessage
 import com.scenaristo.camera.domain.protocol.Command
@@ -114,6 +116,22 @@ class ProtocolFixtureTest {
         assertEquals(24, state.optics.equivalentFocalLengthMm)
         assertEquals(1.7, state.optics.apertureFNumber!!, absoluteTolerance = 1e-9)
         assertEquals(1.7 / kotlin.math.sqrt(TStop.TRANSMISSION), TStop.of(1.7)!!, absoluteTolerance = 1e-12)
+        // #77: the lens list is a list of framings, because a phone's other
+        // lenses are reached by zoom ratio and not as separate cameras. These
+        // are the reference device's own, measured 2026-09-06.
+        assertEquals(4, state.lenses.size)
+        assertEquals(listOf(13, 24, 48, 120), state.lenses.map { it.equivalentFocalLengthMm })
+        assertEquals(1.0, state.settings.zoomRatio, absoluteTolerance = 1e-9)
+        // PRD 6.5's list exists to move people off the wide lens, and on this
+        // device only zooming reaches the recommended band.
+        assertEquals(
+            LensAdvice.WIDE_DISTANCE_GUIDANCE,
+            adviceFor(state.lenses.first { it.zoomRatio == 1.0 }.equivalentFocalLengthMm),
+        )
+        assertEquals(
+            LensAdvice.RECOMMENDED_FOR_TALKING_HEAD,
+            adviceFor(state.lenses.first { it.zoomRatio == 5.0 }.equivalentFocalLengthMm),
+        )
         // PRD 6.7's naming, which UI-9's transport row shows next to the timecode.
         assertEquals("Scenaristo_2026-09-06_14-32-05", state.recording.fileName)
         assertTrue(

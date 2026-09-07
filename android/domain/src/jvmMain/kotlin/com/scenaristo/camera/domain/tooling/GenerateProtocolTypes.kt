@@ -2,6 +2,8 @@ package com.scenaristo.camera.domain.tooling
 
 import com.scenaristo.camera.domain.protocol.ClientMessage
 import com.scenaristo.camera.domain.protocol.PROTOCOL_VERSION
+import com.scenaristo.camera.domain.lens.RECOMMENDED_FROM
+import com.scenaristo.camera.domain.lens.WIDE_BAND
 import com.scenaristo.camera.domain.protocol.ServerMessage
 import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
 import com.scenaristo.camera.domain.whitebalance.LightScenario
@@ -74,6 +76,13 @@ object GenerateProtocolTypes {
             appendLine("} as const;")
             appendLine()
             appendLine("export const DEFAULT_KELVIN = $DEFAULT_KELVIN;")
+            appendLine()
+            // PRD 6.5's bands, for the same reason as the presets above: the
+            // remote applies the same rule to the same focal length, and a
+            // browser deciding at 26 mm what the phone decides at 25 is two
+            // surfaces disagreeing about the shot in front of them.
+            appendLine("export const LENS_WIDE_BAND = { min: ${WIDE_BAND.first}, max: ${WIDE_BAND.last} } as const;")
+            appendLine("export const LENS_RECOMMENDED_FROM = $RECOMMENDED_FROM;")
             appendLine()
             emitted.values.forEach { appendLine(it) }
             appendLine(union("ServerMessage", server))

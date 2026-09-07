@@ -37,6 +37,11 @@ data class State(
     /** What the active lens is, optically (PRD 6.5, 6.8; #101). Defaulted, as above. */
     val optics: Optics = Optics(),
     /**
+     * The framings a client may choose between (PRD 6.5, 6.8; #77). Empty until
+     * the camera has bound and reported its zoom range.
+     */
+    val lenses: List<LensChoice> = emptyList(),
+    /**
      * The phone's clock when this snapshot was built. Elapsed recording time is
      * derived from this rather than sent directly, so it stays right across a
      * reconnect and does not drift with the browser's clock (ADR-0007).
@@ -88,6 +93,14 @@ data class CaptureSettings(
      * for added fields.
      */
     val focus: Focus = Focus(),
+    /**
+     * The framing in use, as a zoom ratio (PRD 6.5, 6.8; #77).
+     *
+     * 1.0 is the base lens. Settable, unlike [lensId], because on a phone this
+     * is what choosing a lens actually is — see [LensChoice]. Defaulted, so an
+     * older snapshot still decodes (ADR-0007).
+     */
+    val zoomRatio: Double = 1.0,
 ) {
     /**
      * The fields a client can actually ask for, which is what a settings guard
@@ -115,6 +128,7 @@ data class CaptureSettings(
             saveToGallery,
             shutterLock,
             lockExposureWhileRecording,
+            zoomRatio,
         )
 }
 
@@ -204,6 +218,33 @@ data class Encoding(
      * the producer is a unit the consumer has to trust.
      */
     val bitrate: Int = 0,
+)
+
+/**
+ * One framing the user can pick, as a zoom ratio and the field of view it gives
+ * (PRD 6.5, 6.8).
+ *
+ * **A phone's other lenses are not separate cameras.** On the reference device
+ * the ultrawide and telephoto sit behind the back logical camera and cannot be
+ * selected at all: lens choice is a zoom ratio, and the HAL decides which sensor
+ * serves it — possibly mid-session (confirmed by Davide, 2026-09-06; see
+ * `PinnedLensProbe`). So the control is a ratio, and `lensId` keeps meaning the
+ * camera device it always meant.
+ *
+ * It is labelled by [equivalentFocalLengthMm] rather than by a lens name,
+ * because that is the honest thing to say: the app knows the field of view the
+ * ratio produces, and CameraX 1.6.2 will not tell it whether a given ratio is
+ * served by glass or by a crop. A focal length is true either way, and it is
+ * also the number PRD 6.5's guidance is written in.
+ */
+@Serializable
+data class LensChoice(
+    val zoomRatio: Double,
+    /**
+     * The 35 mm equivalent at this ratio — the base lens's equivalent scaled by
+     * the ratio, which is what zooming does to a field of view.
+     */
+    val equivalentFocalLengthMm: Int,
 )
 
 /**
