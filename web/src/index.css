@@ -203,6 +203,25 @@ h1 {
   color: var(--dimmer);
 }
 
+/*
+ * PRD 6.5's distance guidance.
+ *
+ * Deliberately quieter than a warning chip: no orange, no warning icon. UI-5
+ * reserves that shape for things that just became true, and this is a standing
+ * fact about the lens for the whole session.
+ */
+.guidance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dim);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin: 0 0 10px;
+}
+
 /* --- Warnings (UI-5) ----------------------------------------------------- */
 
 .warnings {
@@ -559,6 +578,14 @@ main.recording .preview-frame::after {
 
 .choice.selected .choice-value {
   color: color-mix(in oklab, var(--amber) 70%, transparent);
+}
+
+/* The framings are a row of equals, so they get equal width rather than each
+   sizing to its own label — a list where "12 mm" is narrower than "120 mm"
+   reads as a hierarchy that is not there. */
+.lens-choices .choice {
+  flex: 1 1 0;
+  min-width: 62px;
 }
 
 /* --- Sound meter (PRD 6.6) ----------------------------------------------- */

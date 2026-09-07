@@ -11,6 +11,7 @@ import {
 } from './icons'
 import type { GridFrequency, State } from './protocol'
 import type { ViewPrefs } from './viewprefs'
+import { isRecommended } from './lens'
 import { SCENARIOS, presetFor, scenarioOf } from './whitebalance'
 
 /**
@@ -258,20 +259,72 @@ export function MainsPanel({
  * outright. What can be shown honestly is the lens in use: its 35 mm-equivalent
  * focal length, its f/-number, and the T-stop derived from that.
  */
-export function LensPanel({ state }: { state: State }) {
+export function LensPanel({
+  state,
+  locked,
+  onSet,
+}: {
+  state: State
+  locked: boolean
+  onSet: (zoomRatio: number) => void
+}) {
   const glass = optics(state.optics?.apertureFNumber)
-  const mm = state.optics?.equivalentFocalLengthMm
+  const lenses = state.lenses ?? []
+  const active = state.settings.zoomRatio ?? 1
+
+  // A control with nothing to choose between is not a control. Before the camera
+  // has bound, or on a device with no zoom at all, this reports and does not
+  // offer — goal 5: nothing in the interface claims a capability the protocol
+  // cannot carry.
+  if (lenses.length < 2) {
+    const mm = state.optics?.equivalentFocalLengthMm
+    return (
+      <section class="panel reported-panel">
+        <h2>
+          <LensIcon /> Lens
+        </h2>
+        <dl class="stack">
+          <div>
+            <dt>Focal length</dt>
+            <dd class="mono">{mm ? `${mm} mm equivalent` : ABSENT}</dd>
+          </div>
+          <div>
+            <dt>Aperture</dt>
+            <dd class="mono">{glass ?? ABSENT}</dd>
+          </div>
+        </dl>
+        {glass ? <p class="lock-note">T assumes 92% transmission · informational</p> : null}
+      </section>
+    )
+  }
 
   return (
-    <section class="panel reported-panel">
-      <h2>
-        <LensIcon /> Lens
-      </h2>
+    <Panel title="Lens" icon={<LensIcon />} locked={locked}>
+      <div class="choices lens-choices">
+        {lenses.map((lens) => {
+          const selected = lens.zoomRatio === active
+          return (
+            <button
+              key={lens.zoomRatio}
+              type="button"
+              class={selected ? 'choice selected' : 'choice'}
+              aria-pressed={selected}
+              disabled={locked}
+              onClick={() => onSet(lens.zoomRatio)}
+            >
+              <span class="choice-name">{lens.equivalentFocalLengthMm} mm</span>
+              <span class="choice-value mono">
+                {formatRatio(lens.zoomRatio)}
+                {/* PRD 6.5: "If the device has a longer lens (48 mm+
+                    telephoto)", say so — the list exists to move people off the
+                    wide one. */}
+                {isRecommended(lens.equivalentFocalLengthMm) ? ' · recommended' : ''}
+              </span>
+            </button>
+          )
+        })}
+      </div>
       <dl class="stack">
-        <div>
-          <dt>Focal length</dt>
-          <dd class="mono">{mm ? `${mm} mm equivalent` : ABSENT}</dd>
-        </div>
         <div>
           <dt>Aperture</dt>
           <dd class="mono">{glass ?? ABSENT}</dd>
@@ -281,8 +334,13 @@ export function LensPanel({ state }: { state: State }) {
           what makes drawing it defensible, and it is why the f/-number is never
           shown without it or it without the f/-number. */}
       {glass ? <p class="lock-note">T assumes 92% transmission · informational</p> : null}
-    </section>
+    </Panel>
   )
+}
+
+/** `0.5x`, `1x`, `5x` — a trailing `.0` on a zoom ratio reads as false precision. */
+function formatRatio(ratio: number): string {
+  return `${Number.isInteger(ratio) ? ratio : ratio.toFixed(1)}×`
 }
 
 /**

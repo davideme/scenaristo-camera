@@ -12,7 +12,8 @@
         "mode": "locked",
         "x": 0.42,
         "y": 0.33
-      }
+      },
+      "zoomRatio": 1.0
     },
     "recording": {
       "recording": true,
@@ -116,6 +117,24 @@
       "equivalentFocalLengthMm": 24,
       "apertureFNumber": 1.7
     },
+    "lenses": [
+      {
+        "zoomRatio": 0.5557733774185181,
+        "equivalentFocalLengthMm": 13
+      },
+      {
+        "zoomRatio": 1.0,
+        "equivalentFocalLengthMm": 24
+      },
+      {
+        "zoomRatio": 2.0,
+        "equivalentFocalLengthMm": 48
+      },
+      {
+        "zoomRatio": 5.0,
+        "equivalentFocalLengthMm": 120
+      }
+    ],
     "serverTimeMs": 1788500123456
   }
 }

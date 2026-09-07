@@ -222,6 +222,17 @@ data class SettingsPatch(
      * states directly.
      */
     val shutterLock: Int? = null,
+    /**
+     * The framing to switch to, as a zoom ratio (PRD 6.5, #77).
+     *
+     * Only a ratio the phone actually offered in `State.lenses` is accepted.
+     * Anything else is refused rather than clamped, for the reason the Kelvin
+     * range is: a value the phone silently repaired is a bug the client never
+     * learns it has — and a client that asked for 3x on a device whose stops are
+     * 1x and 5x has a stale idea of what the camera can do, which is worth
+     * telling it.
+     */
+    val zoomRatio: Double? = null,
 ) {
     companion object {
         /**
