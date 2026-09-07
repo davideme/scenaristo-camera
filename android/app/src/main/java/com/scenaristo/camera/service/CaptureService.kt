@@ -381,6 +381,14 @@ class CaptureService : LifecycleService() {
                     // TOO_CLOSE_TO_LENS is PRD 6.5's and is not raised yet, so
                     // there is nothing here to merge with.
                     warnings = exposure.warnings.toList(),
+                    // #97: the sign is flipped on the way out. The loop states
+                    // its error as what it must do -- "needs 0.4 stops more
+                    // light" -- and the remote states what the picture is:
+                    // 0.4 stops under. Same number, opposite audience.
+                    exposure = state.exposure.copy(
+                        stopsFromTarget = -exposure.errorEv,
+                        metering = exposure.acquired,
+                    ),
                 )
             }
         }
@@ -507,6 +515,16 @@ class CaptureService : LifecycleService() {
                         storageMinutesRemaining = (free / BYTES_PER_MINUTE).toInt(),
                     ),
                 )
+            }
+            // #97: the histogram changes on every metered frame, where the rest
+            // of the exposure state usually does not. Sampled on this tick
+            // rather than published from the tap, so a 64-element array does not
+            // put the GL thread's cadence on the wire -- the same reason
+            // publishExposure does not broadcast.
+            exposure?.histogram?.value?.let { histogram ->
+                session.update(System.currentTimeMillis()) {
+                    it.copy(exposure = it.exposure.copy(histogram = histogram.bins))
+                }
             }
             // PRD 6.6 asks the app to show which input is active, and a user
             // checking their microphone before a take is the whole point -- so

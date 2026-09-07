@@ -232,6 +232,23 @@ Verified on the reference device rather than assumed: with no `CONTROL_AF_MODE` 
 The protocol half remains and is unused: `focus.set`, `Focus(mode, x, y)`, validation in `Session`, and `cmd-focus-set.json`. It is left alone deliberately — removing it is a non-additive protocol change for no gain, and it is what tap-to-focus would be rebuilt on if §6.11 ever brings it back for a subject the face detector cannot find.
 
 ---
+**UI-17 — Exposure aids on the remote control**
+
+Requested by Davide on 2026-09-06: a grey indicator and a histogram on the browser surface. PRD §6.3 and §6.8; issue #97.
+
+- [ ] Both live in the **Reported** grammar, not *Yours* (§5): they are what the camera settled on, they are outputs of the [ADR-0005](adr/0005-exposure-control-own-metering-loop.md) loop, and there is nothing to press. Dimmed, unframed, no amber label.
+- [ ] The reading is **stops from correct**, not percent grey: `-0.4 EV`, negative under. It reads zero exactly when the exposure loop says the shot is right, which makes the loop's own work legible, and stops are the unit anyone who has metered a shot thinks in. Percent grey is perceptually non-linear — equal-looking errors read as very different numbers — and does not say which way to move. (Decision 2026-09-06, Davide.)
+- [ ] The 18 % target is named **on the scale**, not as a second number beside the reading. Goal 2: no fact appears twice.
+- [ ] The histogram is drawn on a gamma-encoded scale, low to high, 64 bins. Not linear: equal bin widths must be equal perceived steps, or everything a talking head cares about is squeezed into the leftmost eighth.
+- [ ] Neither is drawn when `ExposureReadout.metering` is false. A meter reading zero says the scene is correctly exposed; a meter that is not running says nothing at all, and drawing the second as the first is how someone trusts an aid that is measuring nothing.
+
+**Where the numbers come from is settled and is not a browser concern.** Both are measured on the phone, in the frame walk `FaceWeightedMeter` already runs on every tapped frame ([ADR-0018](adr/0018-preview-tap-for-metering-and-preview-frames.md)). The rejected alternative was reading the MJPEG preview back off a canvas in the browser: it costs the phone nothing, but it measures a downscaled JPEG and can therefore disagree with both the recording and the app's own metering — and an exposure aid that disagrees with the thing it advises about is worse than no aid. Measuring once on the phone also means every remote sees the same numbers, and Phase 4 gets them on iOS unchanged ([ADR-0013](adr/0013-multiplatform-strategy.md)).
+
+Measured on the reference device: adding the histogram to the metering walk cost **no frames** — a 72 s 4K30 take records 2161 frames at 29.990 fps, which is #23's baseline exactly.
+
+> **Open, for Davide:** where in UI-9's column order these sit. They are Reported, so the row above the preview is the natural home, but that row is currently one line and a histogram is not. The alternative is a block at the top of the control column, above **Phone**, which breaks §5's "Reported lives above the preview" rule for the one value that needs vertical space.
+
+---
 ### Nice-to-have
 
 - **UI-13** Countdown before record (3-2-1), on both surfaces (PRD §6.11).
@@ -264,6 +281,7 @@ All are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"additi
 | Tap to focus, and focus lock | Its own command rather than a patch field: it is allowed while recording, carries no `expectRev`, and a point and a mode only mean anything together | §6.11 (moved out of §6.1, decision 2026-09-06) | **Landed but unused.** `focus.set`, `Focus(mode, x, y)`, `focus` on `CaptureSettings`, validation in `Session`, and `cmd-focus-set.json`. Nothing sends it and nothing applies it: focus is automatic (UI-16). Kept rather than removed — deleting it is a non-additive protocol change for no gain, and it is what §6.11 would rebuild on |
 | Framing-guide toggles (thirds, eye line) | `SettingsPatch` plus a field on `CaptureSettings`, or client-local state if the guides are not meant to be shared between remotes | §6.8 "Preview shows framing overlays … toggleable from the web UI" | Open |
 | Preview-link quality | `DeviceStatus` | §6.8 "connection quality" | Open |
+| Exposure aids: stops from correct, and a histogram | `ExposureReadout` on `State` | §6.3, §6.8 (UI-17, #97) | **Landed.** `stopsFromTarget`, `histogram` (64 bins), `metering`. Measured in the metering walk of ADR-0018, so the reading and the loop cannot disagree |
 
 The guides row has a design question inside it rather than a shape question: two remotes watching one phone may reasonably want different overlays, in which case the toggle is not protocol at all.
 

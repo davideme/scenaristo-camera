@@ -9,6 +9,7 @@ import com.scenaristo.camera.domain.exposure.ExposureState
 import com.scenaristo.camera.domain.exposure.FaceWeightedMeter
 import com.scenaristo.camera.domain.exposure.FrameRect
 import com.scenaristo.camera.domain.exposure.GridFrequency
+import com.scenaristo.camera.domain.exposure.Histogram
 import com.scenaristo.camera.domain.exposure.IsoRange
 import com.scenaristo.camera.domain.exposure.LumaFrame
 import com.scenaristo.camera.domain.exposure.LumaSampler
@@ -72,6 +73,23 @@ class ExposureController(
     /** What the phone and the browser read: shutter, ISO and the warnings (PRD 6.8). */
     val state: StateFlow<ExposureState> = _state.asStateFlow()
 
+    private val _histogram = MutableStateFlow(Histogram())
+
+    /**
+     * The tonal distribution of the last metered frame (#97).
+     *
+     * Its own flow rather than a field on [ExposureState], because
+     * [ExposureState] is pure replayable data that PRD 6.3's acceptance criteria
+     * are checked against frame by frame -- and a 64-element array on it would
+     * make every one of those comparisons a comparison of arrays, for a value
+     * the loop never reads.
+     *
+     * It also changes on **every** frame where the loop's state usually does
+     * not, so it is deliberately not something [state]'s collectors get woken
+     * for. The service samples it on its own one-second tick instead.
+     */
+    val histogram: StateFlow<Histogram> = _histogram.asStateFlow()
+
     /**
      * Face rectangles are not wired yet, so the meter uses its centre window.
      *
@@ -106,11 +124,22 @@ class ExposureController(
         // there is nothing to do would contend with the camera thread's capture
         // results for no reason. A lost race costs one metered frame, which the
         // loop's own guard then discards.
-        if (_state.value.locked) return
+        if (_state.value.locked) {
+            // ADR-0023 is explicit that a locked take meters nothing, and the
+            // exposure aids (#97) have to say so rather than keep drawing the
+            // last histogram from before the lock. A stale distribution beside a
+            // frozen EV reading is the same lie `AudioState.metering` exists to
+            // prevent: a meter that is not running says nothing at all, and
+            // drawing that as a measurement is how somebody trusts it.
+            if (_histogram.value.measured) _histogram.value = Histogram()
+            return
+        }
 
+        val measured = meter.measure(frameOf(image), faces)
+        _histogram.value = measured.histogram
         val next = synchronized(lock) {
             val before = _state.value
-            val after = loop.onFrame(before, meter.meter(frameOf(image), faces), nowMs)
+            val after = loop.onFrame(before, measured.luma, nowMs)
             _state.value = after
             after.takeIf { it.iso != before.iso || it.shutterHz != before.shutterHz }
         }

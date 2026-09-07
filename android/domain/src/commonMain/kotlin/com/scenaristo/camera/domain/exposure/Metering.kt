@@ -37,9 +37,28 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
      * the linear ones — a power law commutes with it — so metering in encoded
      * space here and linearising in the loop are the same operation done once.
      */
-    fun meter(frame: LumaFrame, faces: List<FrameRect> = emptyList()): Double {
+    fun meter(frame: LumaFrame, faces: List<FrameRect> = emptyList()): Double =
+        measure(frame, faces).luma
+
+    /**
+     * Meter one frame *and* count where its pixels fall, in one walk.
+     *
+     * The histogram is the remote control's exposure aid (PRD 6.8, #97). It is
+     * built here rather than anywhere else because the expensive part -- reading
+     * a pixel out of a platform buffer -- is already being paid, and doing it a
+     * second time elsewhere would double the cost of the one thing that runs on
+     * every preview frame.
+     *
+     * Unlike the metering average, the histogram is **not** weighted and not
+     * windowed: every sampled pixel counts once, wherever it is. A histogram
+     * that quietly emphasised the face would not be a histogram, and the
+     * clipping it exists to reveal is usually in the background -- the window
+     * behind the speaker is exactly the thing being looked for.
+     */
+    fun measure(frame: LumaFrame, faces: List<FrameRect> = emptyList()): Metered {
         val windows = faces.ifEmpty { listOf(config.centreWindow) }
         val stride = config.sampleStride.coerceAtLeast(1)
+        val bins = IntArray(Histogram.BINS)
 
         var weightedLog = 0.0
         var weight = 0.0
@@ -61,9 +80,11 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
                         break
                     }
                 }
+                val luma = frame.sampler.lumaAt(col, row)
+                bins[Histogram.binOf(luma)]++
                 val w = if (inWindow) 1.0 else config.backgroundWeight
                 if (w > 0.0) {
-                    weightedLog += w * ln(frame.sampler.lumaAt(col, row))
+                    weightedLog += w * ln(luma)
                     weight += w
                 }
                 col += stride
@@ -71,7 +92,50 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
             row += stride
         }
 
-        return if (weight == 0.0) 0.0 else exp(weightedLog / weight)
+        return Metered(
+            luma = if (weight == 0.0) 0.0 else exp(weightedLog / weight),
+            histogram = Histogram(bins.toList()),
+        )
+    }
+}
+
+/** One metered frame: the number the loop acts on, and the shape of the picture it came from. */
+data class Metered(
+    val luma: Double,
+    val histogram: Histogram,
+)
+
+/**
+ * Where a frame's sampled pixels fall on the tonal scale (PRD 6.8, #97).
+ *
+ * Gamma-encoded luma, not linear, because that is what a histogram means on
+ * every camera anyone has used: equal bin widths are equal *perceived*
+ * steps, so midtones get the space they deserve and a linear one would squeeze
+ * everything a talking head cares about into the leftmost eighth.
+ *
+ * [BINS] is a compromise between resolution and the wire. 64 bins resolve a
+ * quarter of a stop across the range, which is finer than anyone reads off a
+ * 200 px wide drawing, and cost a few hundred bytes in a snapshot ADR-0007
+ * already sends twice a second.
+ */
+data class Histogram(val bins: List<Int> = emptyList()) {
+
+    /** True when there is a distribution to draw rather than nothing to say. */
+    val measured: Boolean get() = bins.isNotEmpty()
+
+    companion object {
+        const val BINS: Int = 64
+
+        /**
+         * Which bin a gamma-encoded luma falls in.
+         *
+         * 1.0 belongs in the last bin rather than one past the end, which is the
+         * off-by-one this is a named function to avoid -- and the value it
+         * happens on, pure white, is the one a clipping indicator is entirely
+         * about.
+         */
+        fun binOf(luma: Double): Int =
+            (luma * BINS).toInt().coerceIn(0, BINS - 1)
     }
 }
 

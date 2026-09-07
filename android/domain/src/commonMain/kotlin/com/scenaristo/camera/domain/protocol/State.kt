@@ -32,6 +32,8 @@ data class State(
      * row (UI-9). Defaulted for the same compatibility reason as [audio].
      */
     val encoding: Encoding = Encoding(),
+    /** The exposure aids on the remote control (PRD 6.3, 6.8; #97). Defaulted, as above. */
+    val exposure: ExposureReadout = ExposureReadout(),
     /**
      * The phone's clock when this snapshot was built. Elapsed recording time is
      * derived from this rather than sent directly, so it stays right across a
@@ -172,6 +174,53 @@ data class Encoding(
      * the producer is a unit the consumer has to trust.
      */
     val bitrate: Int = 0,
+)
+
+/**
+ * What the exposure loop can see, for someone judging the shot from a laptop
+ * (PRD 6.3, 6.8; #97).
+ *
+ * Reported, never set: everything here is an output of the ADR-0005 loop, which
+ * is why it belongs to the spec's **Reported** grammar and has no control beside
+ * it (spec-phone-and-remote-ui §5).
+ *
+ * Measured on the phone, in the same frame walk the loop already runs
+ * (ADR-0018), rather than in the browser off the MJPEG preview. Decision by
+ * Davide, 2026-09-06: a reading taken from a downscaled JPEG can disagree with
+ * both the recording and the app's own metering, and an exposure aid that
+ * disagrees with the thing it is advising about is worse than none. Measuring
+ * once on the phone also means every remote sees the same numbers, and Phase 4
+ * gets them on iOS for free (ADR-0013).
+ */
+@Serializable
+data class ExposureReadout(
+    /**
+     * How far the metered scene is from correct, in stops. **Negative is
+     * under-exposed**, which is the direction anyone who has metered a shot
+     * expects, and zero is exactly where the ADR-0005 loop is trying to be.
+     *
+     * The sign is flipped from `ExposureState.errorEv`, which is stated as what
+     * the *loop* must do ("needs this much more light") rather than what the
+     * *picture* is. Same number, opposite audience.
+     *
+     * Damped, not raw: the loop's own damped error, so the reading does not
+     * flicker faster than the correction it describes (ADR-0022).
+     */
+    val stopsFromTarget: Double = 0.0,
+    /**
+     * Sampled pixel counts across the tonal scale, gamma-encoded, low to high.
+     * Empty when nothing has been metered yet.
+     */
+    val histogram: List<Int> = emptyList(),
+    /**
+     * False when there is no reading to show rather than a reading of zero.
+     *
+     * The same distinction [AudioState.metering] makes, for the same reason: a
+     * meter reading zero says the scene is correctly exposed, and a meter that
+     * is not running says nothing at all. Drawing the second as the first is how
+     * someone trusts an aid that is not measuring anything.
+     */
+    val metering: Boolean = false,
 )
 
 /**
