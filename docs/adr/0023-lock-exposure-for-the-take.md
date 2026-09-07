@@ -196,6 +196,12 @@ window should not.
     restores the repair without putting anything back in the filter.
   - Two exposure behaviours to describe, on top of ADR-0022's two speeds that nobody sees. The phone
     control says `Track` / `Lock` and the browser says it in words; neither mentions metering.
+  - **A locked take reports the loop's belief, not the sensor's.** During the 2026-09-07 run the
+    HUD read ISO 2109 while the sensor was delivering 1879, because the state document is published
+    from `ExposureState` and a locked loop stops folding echoes into it. It did not matter for the
+    take that was measured -- by record start the two had converged on 1879 -- but a locked take is
+    exactly the case where nothing later reconciles them. Worth its own decision rather than a
+    silent fix.
   - The size of the thermal saving is unknown, and stays unknown. That is a deliberate gap rather
     than an outstanding task: the mode's worst case is today's behaviour, so the only thing a
     measurement could change is how loudly the saving is advertised. If it turns out to be nil, the
@@ -211,12 +217,29 @@ window should not.
 ## Action Items
 
 1. [ ] Amend PRD 6.3 with the locked-mode sentence under Decision, once this ADR is Accepted.
-2. [ ] On the reference device, record a full-length locked take **under constant light** and read
-       the sensor's own reported `iso` and `shutterHz` out of the capture results throughout
-       (`ManualKeyEcho`, `onCaptureResult`). The question is not whether the app refrains from
-       changing exposure — the host tests settle that, and a wrong take under changed light is the
-       mode working as designed — but whether the **sensor keeps honouring a manual request that is
-       never re-asserted**. Folds into ADR-0018 action item 3, which asks for the same numbers under
-       the same conditions; the lock is only what makes them matter. Also check that exposure
-       resumes within a second of the take ending, which is the part the wiring alone can get wrong.
+2. [x] **Measured 2026-09-07 on the Pixel 10** (`frankel`, Android 17, SDK 37, build
+       `CP2A.260805.005`; wide lens, 24 mm), under constant light. **The sensor holds a manual
+       request that is never re-asserted, for a full take.** The take was a real 3840x2160 at
+       29.99 fps (`90000/3001`), 3127 frames, 104.27 s, H.264 + AAC, 475 MB. Across the locked
+       window, 104 samples of the capture results at 1 Hz -- one result in thirty, so roughly
+       3 100 results in all:
+
+       | Key | Requested | Reported | Deviation | Tolerance | Verdict |
+       |---|---|---|---|---|---|
+       | `SENSOR_SENSITIVITY` | 1879 | 1879 | 0.0000 % | 1 % | **EXACT on every sample** |
+       | `SENSOR_EXPOSURE_TIME` | 20 000 000 ns | 19 995 066 ns | 0.0247 % | 1 % | QUANTISED |
+       | `SENSOR_FRAME_DURATION` | 33 333 333 ns | 33 340 454 ns | 0.0214 % | 0.1 % | QUANTISED (29.994 fps) |
+       | `CONTROL_AWB_MODE` | 5 (`DAYLIGHT`, the locked preset for 5600 K under ADR-0011) | 5 | -- | exact | HONOURED |
+
+       Not one value moved for the length of the take, and `awaitingEcho` was false throughout, so
+       the loop was settled rather than stalled. The Harder bullet above stands as a **risk that did
+       not materialise on this device**: no defence is needed, and none was built. Resume was
+       checked too -- the take stopped at 09:36:32.004 and the first capture result after it already
+       carried a new request, which is the `acquired` snap, inside one second.
+
+       Two limits on this result. It is one lens on one handset (ADR-0017), and the probe read four
+       of `ManualKey`'s six keys -- `CONTROL_AE_MODE` and `LENS_OPTICAL_STABILIZATION_MODE` were not
+       covered, so ADR-0018 action item 3 is advanced rather than closed. The measurement used a
+       temporary log line in `ExposureController.onCaptureResult` which is **not** part of this
+       change; the binary differed from the shipped one by that statement alone.
 3. [ ] Decide, after a session of real use, whether the frozen warnings need Option B after all.

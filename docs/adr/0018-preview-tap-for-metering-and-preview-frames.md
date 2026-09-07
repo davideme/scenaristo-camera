@@ -166,8 +166,15 @@ the extra GPU pass breaks the thermal budget, Option B is the fallback and this 
 2. [x] Crop to the recording's aspect ratio in that pass, and add a test that fails if the tapped
        frame's aspect ratio differs from `VideoCapture.resolutionInfo`'s. `PreviewCrop`, six host
        tests.
-3. [ ] Re-run #20's key-echo measurement against this session shape, while recording, for a full
+3. [~] Re-run #20's key-echo measurement against this session shape, while recording, for a full
        take length — the numbers so far were taken without analysis and without recording.
+       **Partially measured 2026-09-07 on the Pixel 10** (wide lens), during a 104 s 3840×2160
+       H.264 take with the effect tap attached, while ADR-0023's exposure lock held the request
+       still: `SENSOR_SENSITIVITY` echoed **exactly** (1879 requested, 1879 reported, on all 104
+       sampled results), `SENSOR_EXPOSURE_TIME` 0.0247 % low and `SENSOR_FRAME_DURATION` 0.0214 %
+       high — both inside their tolerances — and `CONTROL_AWB_MODE` held its locked preset. Still
+       open: `CONTROL_AE_MODE` and `LENS_OPTICAL_STABILIZATION_MODE` were not read, and only one
+       lens was covered. Numbers and method in ADR-0023 action item 2.
 4. [~] Measure the tap's thermal and frame-rate cost as part of #23, against the same baseline.
        **Corrected 2026-09-04.** A run first reported as "11 minutes of continuous 4K30 recording"
        was actually **~2 minutes of recording followed by ~9 minutes of preview only**: pulling the
