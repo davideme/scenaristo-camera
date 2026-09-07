@@ -1,6 +1,8 @@
 // Generated from the :domain @Serializable classes. Do not edit (ADR-0009).
 // Regenerate with: cd android && ./gradlew :domain:generateProtocolTypes
 
+export const PROTOCOL_VERSION = 2;
+
 export interface AckMessage {
   type: "ack";
   id: string;
