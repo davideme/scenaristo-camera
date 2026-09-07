@@ -191,7 +191,7 @@ The phone runs an HTTP + WebSocket server on the local network. Any modern brows
 - If no Wi-Fi is available, the app explains that the phone's hotspot can be used and shows the same URL.
 
 **Security**
-- **v1: open LAN access** (decision 2026-09-03). Any client on the local network that can reach the URL can view the preview and control the camera. The phone shows how many clients are connected so an unexpected viewer is visible.
+- **v1: open LAN access** (decision 2026-09-03). Any client on the local network that can reach the URL can view the preview, control the camera, and download any take the app has recorded (amended 2026-09-07, ADR-0028). The phone shows how many clients are connected so an unexpected viewer is visible, and a download can only come from a client that count already includes.
 - **Later version (P1): pairing check.** On first connection from a new browser, both the phone and the browser display the same short code (a number or an emoji sequence). The user confirms on the phone that the codes match before the browser is granted control. Confirmed browsers are remembered until the app is reinstalled or the user revokes them from the phone. This proves the person at the browser can also see the phone, without typing secrets.
 - Plain HTTP in both versions (self-signed TLS on LAN causes browser warnings and helps nobody). Consequence: the page is not a secure context, so browser APIs that require one (WebCodecs among them) are unavailable to the web UI. The interface must never be reachable off-LAN: the server rejects any request whose remote address is not a private LAN address and any request whose `Host` header is not an IP literal, which defends against DNS rebinding from a website on the same LAN; cellular interfaces receive no inbound connections. (ADR-0006)
 
@@ -220,6 +220,9 @@ The phone runs an HTTP + WebSocket server on the local network. Any modern brows
 - Given a second browser on the same network opens the URL, then it sees the same preview and state, and the phone's connected-client count reads 2.
 - Given a request from a non-private remote address, then the server answers 403.
 - Given a request whose `Host` header is not an IP literal, then the server answers 403.
+- Given a request for a take whose remote address is not private, or whose `Host` is not an IP literal, then the server answers 403 like every other route (ADR-0028).
+- Given a take is recording, when any take is requested, then the server answers 409 and no bytes are read (ADR-0028).
+- Given a download is interrupted partway, when the browser resumes it, then the server answers 206 for the remainder and the completed file is byte-identical to the take on the phone (ADR-0028).
 - Given the user changes WB on the phone, then the web UI reflects it within 200 ms, and vice versa.
 - Given recording is started from the browser, when Wi-Fi is turned off on the laptop, then the phone keeps recording and the file is complete on stop.
 - Given a 4K/30 recording is running, then preview frames continue and recorded frame rate stays at 30 (preview must not steal encoder time).
@@ -242,7 +245,7 @@ The phone UI is intentionally minimal: preview, record button, the QR/URL panel,
 - **Portrait orientation** (moved here from 6.1, decision 2026-09-04). It needs its own HUD layout: the landscape design puts readouts and controls in strips across the long edge, and neither the strips nor the record button's clearance from the gesture zone (UI-3) survive being turned on their side.
 - **Front camera as a selectable lens** (moved here from 6.1, decision 2026-09-04). It inherits everything 6.10 requires of any lens — its own capability probe, its own gating — and 6.5's distance guidance applies to it more than to any other lens, since a selfie camera is wide and used close.
 - Pairing check for the web interface: matching number or emoji code shown on phone and browser, confirmed on the phone (see 6.8 Security).
-- Download the last recording (or any recording from this session) from the web UI.
+- Download a take from the web UI: the browser lists the takes on the phone, newest first, and each is a plain download link. Refused while a take is recording, and resumable, because a 4K take is ~250 MB per minute (6.7) on a link that can drop. Takes saved to the gallery are not listed — they are already in Photos and over USB, and this exists for the app's own folder, which nothing else can reach (ADR-0020, ADR-0028).
 - "Auto once" white balance snap to nearest preset.
 - Face-size "too close" detector.
 - Stabilisation toggle.

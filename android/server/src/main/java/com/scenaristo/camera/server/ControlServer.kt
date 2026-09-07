@@ -7,13 +7,20 @@ import com.scenaristo.camera.domain.protocol.Platform
 import com.scenaristo.camera.domain.protocol.ProtocolJson
 import com.scenaristo.camera.domain.protocol.ServerMessage
 import com.scenaristo.camera.domain.protocol.Session
+import com.scenaristo.camera.domain.recording.TakeName
+import io.ktor.http.ContentDisposition
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.RangeUnits
+import io.ktor.http.contentRangeHeaderValue
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticResources
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -22,11 +29,15 @@ import io.ktor.server.websocket.webSocket
 import io.ktor.utils.io.writeFully
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
+import io.ktor.utils.io.ByteWriteChannel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.util.concurrent.CopyOnWriteArraySet
 
 /** A source of JPEG frames for the preview stream (ADR-0008, fed by the tap of ADR-0018). */
@@ -76,6 +87,20 @@ class ControlServer(
      * whole of that contract, and Phase 4's iOS server implements the same one.
      */
     private val onQualityChanged: (Int) -> Unit = {},
+    /**
+     * Where the takes come from (PRD 6.11, ADR-0028). Defaults to a source with
+     * nothing in it, so a caller that does not serve takes -- the spike screen,
+     * and every existing test -- gets 404s rather than a constructor to update.
+     */
+    private val takes: Takes = Takes { _, _ -> null },
+    /**
+     * Told how many takes are being downloaded, whenever that changes
+     * (ADR-0028). The service uses it to stay alive and to hold the Wi-Fi lock
+     * while a transfer is running; it must **not** be used to bind the camera.
+     *
+     * Runs on a Ktor thread, so it must not block.
+     */
+    onDownloadsChanged: (Int) -> Unit = {},
 ) {
     private val clients = CopyOnWriteArraySet<Client>()
 
@@ -88,6 +113,12 @@ class ControlServer(
      * first viewer arriving, the last one leaving -- rather than the number.
      */
     private val viewers = ViewerCount(onViewersChanged)
+
+    /**
+     * Downloads in flight (ADR-0028). Deliberately not a second [ViewerCount] --
+     * see [DownloadCount] for why the distinction is worth a class.
+     */
+    private val downloads = DownloadCount(onDownloadsChanged)
 
     /**
      * PRD 6.8's degradation: quality follows the link rather than the preview
@@ -138,6 +169,10 @@ class ControlServer(
                 // and gets a page, with nothing to download and no store.
                 staticResources("/", "web") { default("index.html") }
                 get("/preview.mjpg") { streamPreview(call) }
+                // PRD 6.11, ADR-0028. A second HTTP route rather than anything
+                // over `/ws`, which ADR-0007 keeps to JSON text frames -- the
+                // same split the preview already uses for the same reason.
+                get("${TakeName.PATH_PREFIX}{name}.${TakeName.EXTENSION}") { serveTake(call) }
                 webSocket("/ws") { serve() }
             }
         }.also { it.start(wait = false) }
@@ -175,6 +210,146 @@ class ControlServer(
             streamFrames(call)
         } finally {
             viewers.leave()
+        }
+    }
+
+    /**
+     * One take, downloaded (PRD 6.11, ADR-0028).
+     *
+     * The refusals, in order, and the order matters:
+     *
+     * 1. A name that is not PRD 6.7's shape is **404**. Not 400: a probe learns
+     *    only that there is nothing there.
+     * 2. A take in progress is **409**, and this check comes before anything
+     *    touches the disk. A file's existence cannot stand in for "finished" --
+     *    the recorder writes progressively, which is exactly what makes #17's
+     *    force-killed take playable -- so without this the route would happily
+     *    stream a file still being written, and hand the user a take that is
+     *    shorter than the one they watched being made. It is also the thermal
+     *    and IO argument: a 2.5 GB read competing with a 36 Mbit/s UHD write is
+     *    the load PRD 6.1's frame rate is least able to absorb.
+     * 3. No such take is **404**, which covers a row the browser still has
+     *    listed for a file that has since been deleted.
+     *
+     * `LanGuard` has already refused anything off-LAN before routing ran
+     * (ADR-0006), so there is no origin check here and there must not be one:
+     * the last time this route-level reasoning was duplicated per route, the
+     * static bundle was the route that got missed.
+     */
+    private suspend fun serveTake(call: ApplicationCall) {
+        val name = call.parameters["name"]
+        if (name == null || !TakeName.PATTERN.matches(name)) {
+            call.respond(HttpStatusCode.NotFound, NO_SUCH_TAKE)
+            return
+        }
+        if (session.snapshot().state.recording.recording) {
+            call.respond(HttpStatusCode.Conflict, RECORDING_NOW)
+            return
+        }
+
+        val requested = call.request.headers[HttpHeaders.Range]
+        // Opened at zero first, because the range cannot be decided without the
+        // length and the length is a property of the open file. Reopened below
+        // if a range turns out to be wanted, which costs one extra open on the
+        // resume path and keeps the offset arithmetic in one place.
+        val probe = withContext(Dispatchers.IO) { takes.open(name, 0L) }
+        if (probe == null) {
+            call.respond(HttpStatusCode.NotFound, NO_SUCH_TAKE)
+            return
+        }
+        val length = probe.totalBytes
+        val range = TakeRange.of(requested, length)
+        if (range is TakeRange.Unsatisfiable) {
+            probe.close()
+            call.response.headers.append(HttpHeaders.ContentRange, "bytes */$length")
+            call.respond(HttpStatusCode.RequestedRangeNotSatisfiable, BAD_RANGE)
+            return
+        }
+
+        val from = (range as? TakeRange.Partial)?.range?.first ?: 0L
+        val stream = if (from == 0L) probe else {
+            probe.close()
+            withContext(Dispatchers.IO) { takes.open(name, from) } ?: run {
+                call.respond(HttpStatusCode.NotFound, NO_SUCH_TAKE)
+                return
+            }
+        }
+
+        val sending = when (range) {
+            is TakeRange.Partial -> range.range.last - range.range.first + 1
+            else -> length
+        }
+        with(call.response.headers) {
+            // Without this nothing will ever try to resume, which would make the
+            // range handling above unreachable from a browser.
+            append(HttpHeaders.AcceptRanges, RangeUnits.Bytes.unitToken)
+            // A validator is what a download manager checks before resuming. The
+            // take name is a timestamp to the second and the file never changes
+            // after it is finalised, so name plus length is a strong one.
+            append(HttpHeaders.ETag, "\"$name-$length\"")
+            // Deliberately not `no-store`, which the preview route uses: it
+            // would forbid the very resume this route is built for.
+            append(HttpHeaders.CacheControl, "private")
+            // The `download` attribute only helps someone who clicks a link.
+            // Someone who pastes the URL otherwise gets an in-page player.
+            append(
+                HttpHeaders.ContentDisposition,
+                ContentDisposition.Attachment
+                    .withParameter(
+                        ContentDisposition.Parameters.FileName,
+                        "$name.${TakeName.EXTENSION}",
+                    )
+                    .toString(),
+            )
+            if (range is TakeRange.Partial) {
+                append(HttpHeaders.ContentRange, contentRangeHeaderValue(range.range, length, RangeUnits.Bytes))
+            }
+        }
+
+        val status = if (range is TakeRange.Partial) HttpStatusCode.PartialContent else HttpStatusCode.OK
+        downloads.enter()
+        try {
+            call.respondBytesWriter(contentType = ContentType.Video.MP4, status = status, contentLength = sending) {
+                copy(stream, sending)
+            }
+        } finally {
+            // Both, and in a `finally`, because every way this ends -- the tab
+            // closing, the laptop sleeping, Wi-Fi dropping mid-file -- arrives
+            // as a throw out of the write. A leaked descriptor per cancelled
+            // download is a file-descriptor exhaustion bug that only shows up
+            // after a long shoot.
+            withContext(Dispatchers.IO) { runCatching { stream.close() } }
+            downloads.leave()
+        }
+    }
+
+    /**
+     * Copies [count] bytes out of [stream], with the socket as the brake.
+     *
+     * The read is blocking, so it happens on [Dispatchers.IO] rather than on a
+     * Ktor thread; the write suspends, which is the backpressure -- a slow
+     * laptop stalls the loop rather than buffering gigabytes.
+     *
+     * A client that goes away throws here, which is ordinary rather than
+     * exceptional on this route: it is what "cancel" and "close the tab" look
+     * like. Swallowed so the log is not filled with stack traces for users
+     * changing their minds; the preview path deliberately does not do this,
+     * because a preview write failing is rarer and more interesting.
+     */
+    private suspend fun ByteWriteChannel.copy(stream: TakeStream, count: Long) {
+        val buffer = ByteArray(COPY_BUFFER_BYTES)
+        var remaining = count
+        try {
+            while (remaining > 0 && !isClosedForWrite) {
+                val wanted = minOf(remaining, buffer.size.toLong()).toInt()
+                val read = withContext(Dispatchers.IO) { stream.bytes.read(buffer, 0, wanted) }
+                if (read <= 0) break // the file is shorter than it claimed; stop rather than spin
+                writeFully(buffer, 0, read)
+                flush()
+                remaining -= read
+            }
+        } catch (_: IOException) {
+            // The client hung up. Nothing to do and nothing to report.
         }
     }
 
@@ -302,5 +477,22 @@ class ControlServer(
 
         /** How long to wait when no frame is ready yet, e.g. before the camera has bound. */
         const val FRAME_POLL_MS = 100L
+
+        /**
+         * 64 KB, which is a compromise rather than a measurement: large enough
+         * that a multi-gigabyte take is not millions of round trips, small
+         * enough that a cancelled download stops promptly and that two
+         * concurrent transfers do not hold a megabyte between them.
+         */
+        const val COPY_BUFFER_BYTES = 64 * 1024
+
+        /**
+         * What a refused download is told. Like [REFUSAL], these say as little
+         * as they can: 404 does not distinguish "never existed" from "not a
+         * take name", so a probe learns nothing from the difference.
+         */
+        const val NO_SUCH_TAKE = "No such take"
+        const val RECORDING_NOW = "Recording; try again when the take has finished"
+        const val BAD_RANGE = "Range not satisfiable"
     }
 }

@@ -75,6 +75,8 @@ import com.scenaristo.camera.domain.protocol.State as ProtocolState
 import com.scenaristo.camera.server.ControlServer
 import com.scenaristo.camera.server.Lan
 import com.scenaristo.camera.server.PreviewFrames
+import com.scenaristo.camera.server.TakeStream
+import com.scenaristo.camera.server.Takes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -86,6 +88,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
+import java.io.InputStream
+import java.nio.channels.Channels
 import java.time.LocalDateTime
 
 /**
@@ -219,6 +224,19 @@ class CaptureService : LifecycleService() {
     private var previewWatched = false
 
     /**
+     * Whether a take is being downloaded right now (PRD 6.11, ADR-0028).
+     *
+     * A keep-alive term for the service and the locks, and for nothing else. It
+     * is deliberately absent from [whyCameraWanted]: a download reads a file
+     * that was written minutes ago and has no use for a bound camera.
+     *
+     * Volatile for the same reason as [previewWatched]: written on a Ktor
+     * thread, read on ours.
+     */
+    @Volatile
+    private var downloading = false
+
+    /**
      * Whether the phone's own screen is showing the camera (ADR-0025).
      *
      * The activity reports this; the service cannot see it. Note that this is
@@ -328,8 +346,13 @@ class CaptureService : LifecycleService() {
         idleShutdown?.cancel()
         idleShutdown = lifecycleScope.launch {
             delay(IDLE_SHUTDOWN_GRACE_MS)
-            if (session.state.recording.recording || session.state.clients > 0) {
-                Log.i(IDLE_TAG, "staying up: recording or a remote is still attached")
+            if (session.state.recording.recording || session.state.clients > 0 || downloading) {
+                // ADR-0028 adds the third term. A download is neither a
+                // recording nor a `/ws` client -- a browser can be pulling a
+                // 2.5 GB take with its tab closed and nothing else attached --
+                // so without it, swiping the app away kills the transfer five
+                // seconds later and the browser reports a truncated file.
+                Log.i(IDLE_TAG, "staying up: recording, a remote or a download is still going")
                 return@launch
             }
             Log.i(IDLE_TAG, "no activity, no recording, no remotes; stopping")
@@ -374,6 +397,12 @@ class CaptureService : LifecycleService() {
                 // link asked for it.
                 Log.i(PREVIEW_TAG, "preview quality now $it (PRD 6.8: link under pressure)")
             },
+            // PRD 6.11, ADR-0028. `:server` gets a name and an offset and is
+            // told nothing about where takes live; resolving the name to a file
+            // is this side's job, and is what makes the name a lookup key
+            // rather than a path fragment.
+            takes = Takes { name, fromByte -> openTake(name, fromByte) },
+            onDownloadsChanged = ::onDownloadsChanged,
         )
 
         // Before anything can write a new marker, and before the camera binds:
@@ -686,6 +715,24 @@ class CaptureService : LifecycleService() {
      * leaves is what stops the *next* viewer being shown a stale one during the
      * tenth of a second before encoding resumes.
      */
+    /**
+     * A download started or finished (PRD 6.11, ADR-0028).
+     *
+     * The mirror of [onViewersChanged], minus the one line that matters: there
+     * is **no** `reconcileCamera()` here. Reading a file off disk needs no
+     * sensor, and waking the camera for a download would spend power and
+     * thermal budget producing frames nobody is looking at (ADR-0025).
+     *
+     * What a download does earn is the right not to be interrupted:
+     * [scheduleIdleShutdown] must not stop the service under a live transfer
+     * (ADR-0019), and the locks must be held or Doze throttles the radio
+     * partway through a multi-gigabyte read (ADR-0003).
+     */
+    private fun onDownloadsChanged(downloads: Int) {
+        downloading = downloads > 0
+        if (downloading) acquireLocks() else releaseLocksIfIdle()
+    }
+
     private fun onViewersChanged(viewers: Int) {
         previewWatched = viewers > 0
         if (viewers == 0) jpeg.forget()
@@ -1455,6 +1502,36 @@ class CaptureService : LifecycleService() {
     }
 
     /**
+     * Opens a take for the download route (PRD 6.11, ADR-0028).
+     *
+     * `FileChannel.position` rather than `InputStream.skip`, which is the whole
+     * reason this is not a one-liner. `skip` is permitted to skip fewer bytes
+     * than asked and gives no way to insist, and on some streams it is
+     * implemented as read-and-discard -- so a browser resuming at 2 GB would
+     * read two gigabytes off the disk before sending its first byte, on a phone,
+     * over Wi-Fi. Positioning the channel is a seek.
+     *
+     * The length is taken from the open file rather than from the listed
+     * [Take][com.scenaristo.camera.domain.protocol.Take], because the list is a
+     * snapshot and the file is the truth. They agree in practice; when they
+     * disagree the `Content-Length` must be the one the bytes will actually
+     * match.
+     */
+    private fun openTake(name: String, fromByte: Long): TakeStream? {
+        val file = takes.open(name) ?: return null
+        return runCatching {
+            val channel = FileInputStream(file).channel
+            val length = channel.size()
+            if (fromByte > 0) channel.position(fromByte)
+            object : TakeStream {
+                override val totalBytes = length
+                override val bytes: InputStream = Channels.newInputStream(channel)
+                override fun close() = channel.close()
+            }
+        }.onFailure { Log.w(TAKES_TAG, "could not open $name", it) }.getOrNull()
+    }
+
+    /**
      * The name of the take being written, or null when none is.
      *
      * Not `recording.fileName` on its own, which is a different question with a
@@ -1583,11 +1660,20 @@ class CaptureService : LifecycleService() {
     }
 
     /**
-     * ADR-0003: a wake lock and a high-performance Wi-Fi lock while a browser is
-     * connected or a recording is running.
+     * ADR-0003: a wake lock and a high-performance Wi-Fi lock while a recording
+     * is running or a take is being downloaded (ADR-0028).
      *
      * Doze throttles networking, and a remote that stops answering the moment the
      * phone is left alone is the failure PRD 6.8 exists to prevent.
+     *
+     * The wording here used to say "while a browser is connected", which was
+     * never true: the only caller was [startRecording], so a browser attaching
+     * has never acquired these. That gap is corrected only for downloads, which
+     * are the case that cannot survive it -- a multi-gigabyte read with the
+     * screen off is exactly what Doze throttles. Whether a merely *attached*
+     * browser should hold a wake lock is a separate question about idle battery
+     * cost, and ADR-0025 already decided that an idle remote should cost as
+     * little as possible; it is left alone rather than settled in passing.
      */
     private fun acquireLocks() {
         if (wakeLock == null) {
@@ -1603,7 +1689,7 @@ class CaptureService : LifecycleService() {
     }
 
     private fun releaseLocksIfIdle() {
-        if (session.state.recording.recording || session.state.clients > 0) return
+        if (session.state.recording.recording || session.state.clients > 0 || downloading) return
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
         wifiLock?.takeIf { it.isHeld }?.release()
