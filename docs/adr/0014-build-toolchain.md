@@ -194,5 +194,5 @@ with friction on precisely the device workflow the project exists to exercise.
 1. [x] Pin `androidx.camera:*` at 1.6.2 in the catalog with a comment pointing at ADR-0002's revisit (discharges ADR-0002 action item 1).
 2. [x] Commit the wrapper and validate it in CI.
 3. [x] Add a CI guard that fails if the CameraX pin changes or `Camera2Interop` appears outside `ManualControls`.
-4. [ ] Phase 2: wire the web bundle into `:app` via the `androidComponents` Sources API (ADR-0009 action item 3).
+4. [x] Phase 2: wire the web bundle in via the `androidComponents` Sources API (ADR-0009 action item 3). Done, in `:server` rather than `:app` — that is the module whose Java resources Ktor serves the bundle from. pnpm is now on the critical path of every Android build, as this ADR said it would be.
 5. [ ] Re-check the Gradle floor whenever AGP is bumped, including minor versions.

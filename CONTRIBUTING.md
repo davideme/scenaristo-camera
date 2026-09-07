@@ -147,11 +147,19 @@ Run from `android/` unless stated otherwise.
 On a pull request, the `android` and `web` jobs run **only when their own directory changed**
 (ADR-0016); `../tools/changed-scopes.sh origin/main` prints what CI will do for your branch. A push
 to `main` always runs the whole gate. A skipped job means CI saw nothing in that directory, not that
-it verified anything — the commands below are still yours to run.
+it verified anything — the commands below are still yours to run. A change under `web/` runs both
+jobs, because the bundle is packaged into the APK (below).
+
+**The Android build runs pnpm.** `assembleDebug` builds `web/dist` and packages it into the APK as
+the Java resources Ktor serves (ADR-0009), so Node 22 and pnpm 10 are required to build the app at
+all, not only to work on the browser UI. A type error in `web/src` fails the Android build, which
+is the point: the bundle is part of the app. If your Gradle daemon cannot find pnpm — an IDE-started
+daemon often cannot — set `scenaristo.pnpm` to its absolute path in `android/gradle.properties`.
 
 | Goal | Command |
 |---|---|
 | Everything CI runs | `./gradlew build` then `cd ../web && pnpm install --frozen-lockfile && pnpm run check && pnpm run build` |
+| Just the web bundle, no Gradle | `cd ../web && pnpm run build` |
 | Domain tests and protocol fixtures, no device | `./gradlew :domain:jvmTest` |
 | All host tests | `./gradlew test :domain:jvmTest` |
 | Android lint | `./gradlew lint` |

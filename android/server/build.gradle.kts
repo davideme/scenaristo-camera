@@ -41,48 +41,109 @@ kotlin {
 // Wired through AGP 9's androidComponents Sources API rather than the old
 // sourceSets DSL, which AGP 9 removed -- the same API the ROADMAP names for this
 // job.
+//
+// The half that was missing until now is the one that *builds* `web/dist`.
+// Copying it when it happened to exist meant CI, a fresh clone, and anyone who
+// had not run pnpm by hand all produced an APK that served no UI at all, and
+// said so only in a lifecycle log nobody reads. That is the shape of failure
+// this repository has already paid for once (#56): everything green, the
+// feature absent. So pnpm is now on the critical path of the Android build,
+// which is exactly the cost ADR-0014 deferred to Phase 2 and no longer.
+
+/** Where `web/` lives, resolved at configuration time: no Project access at execution (ADR-0014). */
+val webDir: Directory = rootProject.layout.projectDirectory.dir("../web")
+
+/**
+ * Which pnpm to run.
+ *
+ * Overridable through `scenaristo.pnpm` because a Gradle daemon does not always
+ * inherit a shell's PATH -- an IDE-launched one usually does not -- and
+ * "pnpm: command not found" from inside a Gradle task is a worse error message
+ * than a wrong path in `gradle.properties`.
+ */
+val pnpm: String = providers.gradleProperty("scenaristo.pnpm").getOrElse("pnpm")
+
+val installWebDependencies by tasks.registering(Exec::class) {
+    description = "Installs web/ dependencies with pnpm (ADR-0014)."
+    workingDir = webDir.asFile
+    // --frozen-lockfile is pnpm's `npm ci`: it fails rather than silently
+    // rewriting pnpm-lock.yaml when package.json has drifted from it.
+    commandLine(pnpm, "install", "--frozen-lockfile")
+    inputs.file(webDir.file("package.json"))
+    inputs.file(webDir.file("pnpm-lock.yaml"))
+    // The marker pnpm writes, rather than `node_modules` itself: declaring a
+    // directory of tens of thousands of files as an output would make the
+    // up-to-date check cost more than the install it is avoiding.
+    outputs.file(webDir.file("node_modules/.modules.yaml"))
+}
+
+val buildWebBundle by tasks.registering(Exec::class) {
+    description = "Builds the static web bundle into web/dist (ADR-0009)."
+    dependsOn(installWebDependencies)
+    workingDir = webDir.asFile
+    commandLine(pnpm, "run", "build")
+    // `pnpm run build` is `tsc -b && vite build`, so a type error in the remote
+    // control now fails the Android build. That is intended: the bundle is part
+    // of the app, and an app whose UI does not compile is not a working app.
+    inputs.dir(webDir.dir("src")).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(
+        webDir.file("index.html"),
+        webDir.file("package.json"),
+        webDir.file("pnpm-lock.yaml"),
+        webDir.file("vite.config.ts"),
+        webDir.file("tsconfig.json"),
+        webDir.file("tsconfig.app.json"),
+        webDir.file("tsconfig.node.json"),
+    )
+    outputs.dir(webDir.dir("dist"))
+    outputs.cacheIf { true }
+}
+/**
+ * Puts the bundle under a `web/` directory, which is the resource path
+ * `ControlServer`'s `staticResources("/", "web")` reads from.
+ *
+ * The prefix is the whole reason this is a task rather than a source directory
+ * pointed straight at `web/dist`: a resources source directory contributes its
+ * contents at the classpath root, so the bundle's `index.html` would sit beside
+ * `META-INF/`, one common name away from colliding with a dependency.
+ */
 abstract class SyncWebBundle : DefaultTask() {
-    /**
-     * Declared as a file collection rather than an `@InputDirectory`, because
-     * `web/dist` legitimately does not exist: CI's Android job never runs
-     * `pnpm run build`, and neither does a contributor who only touches Kotlin.
-     * An `@InputDirectory` fails validation outright in that case — "Input file
-     * does not exist" — even when marked `@Optional`, since the property is set
-     * and merely points at nothing.
-     */
-    @get:InputFiles
+    @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val bundle: ConfigurableFileCollection
+    abstract val bundle: DirectoryProperty
 
     @get:OutputDirectory
     abstract val destination: DirectoryProperty
 
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
     @TaskAction
     fun sync() {
-        val target = destination.get().asFile.resolve("web")
-        target.deleteRecursively()
-        target.mkdirs()
-        val source = bundle.files.firstOrNull()
-        if (source == null || !source.isDirectory) {
-            // Not a build failure: an APK without the UI is a valid thing to
-            // build. The control socket still works and the UI route 404s, which
-            // is a legible failure rather than a mysterious one.
-            logger.lifecycle("web/dist not built; this build serves no browser UI")
-            return
+        // Sync, not copy: a file dropped from the bundle has to disappear from
+        // the APK too, or the phone keeps serving something the source no longer
+        // contains -- the silent staleness ADR-0009 exists to prevent.
+        fs.sync {
+            from(bundle)
+            into(destination.dir("web"))
         }
-        source.copyRecursively(target, overwrite = true)
     }
-}
-
-val syncWebBundle by tasks.registering(SyncWebBundle::class) {
-    description = "Copies web/dist into :server resources so the phone can serve the UI."
-    bundle.from(rootProject.layout.projectDirectory.dir("../web/dist"))
-    destination.set(layout.buildDirectory.dir("generated/webResources"))
 }
 
 androidComponents {
     onVariants { variant ->
-        variant.sources.resources?.addGeneratedSourceDirectory(syncWebBundle, SyncWebBundle::destination)
+        // One task per variant, each with the output directory AGP assigns it.
+        // Sharing a single task between debug and release registers one
+        // directory in two variants, and AGP merges it twice into each: "more
+        // than one file was found with OS independent path 'web/index.html'",
+        // which it warns will become an error. `buildWebBundle` is still shared,
+        // so pnpm runs once however many variants ask for the bundle.
+        val name = variant.name.replaceFirstChar { it.uppercase() }
+        val sync = tasks.register<SyncWebBundle>("sync${name}WebBundle") {
+            description = "Copies web/dist into :server $name resources so the phone can serve the UI."
+            bundle.set(buildWebBundle.map { webDir.dir("dist") })
+        }
+        variant.sources.resources?.addGeneratedSourceDirectory(sync, SyncWebBundle::destination)
     }
 }
 
