@@ -21,6 +21,8 @@ export type Status = 'connecting' | 'live' | 'stale' | 'closed'
 export interface Snapshot {
   status: Status
   rev: number
+  /** The revision a settings change guards against (ADR-0024). */
+  settingsRev: number
   state: State | null
   /** Offset between the phone's clock and ours, so elapsed time survives a reconnect. */
   clockOffsetMs: number
@@ -44,6 +46,7 @@ export class Connection {
   snapshot: Snapshot = {
     status: 'connecting',
     rev: -1,
+    settingsRev: -1,
     state: null,
     clockOffsetMs: 0,
     lastError: null,
@@ -123,6 +126,7 @@ export class Connection {
         this.update({
           status: 'live',
           rev: message.rev,
+          settingsRev: message.settingsRev ?? 0,
           state: message.state,
           clockOffsetMs: message.state.serverTimeMs - Date.now(),
         })
@@ -141,10 +145,18 @@ export class Connection {
   /**
    * Sends a command and resolves when the phone answers.
    *
-   * `expectRev` is passed for settings and omitted for record start and stop:
-   * ADR-0007's reasoning is that acting on the latest state is always what the
-   * user meant when they hit record, while a settings change from a stale tab
-   * should be refused rather than silently undo someone else's.
+   * A settings change is guarded and record start and stop are not: ADR-0007's
+   * reasoning is that acting on the latest state is always what the user meant
+   * when they hit record, while a settings change from a stale tab should be
+   * refused rather than silently undo someone else's.
+   *
+   * The guard is `expectSettingsRev`, never `expectRev` (ADR-0024). `rev`
+   * advances on everything in the document — measured at 27 a second on the
+   * reference device, against roughly one snapshot a second — so a client's
+   * `rev` is stale before the snapshot carrying it has finished arriving, and
+   * guarding on it refused every settings change ever made. What a settings
+   * command must not race is another settings change, and that is what
+   * `settingsRev` counts.
    */
   send(name: CommandName, args?: SettingsPatch, guard = false): Promise<string | null> {
     const id = randomId()
@@ -152,7 +164,8 @@ export class Connection {
       type: 'cmd',
       id,
       name,
-      expectRev: guard ? this.snapshot.rev : null,
+      expectRev: null,
+      expectSettingsRev: guard ? this.snapshot.settingsRev : null,
       args: args ?? null,
     }
     return new Promise((resolve) => {

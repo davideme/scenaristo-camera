@@ -62,7 +62,26 @@ data class Hello(
  */
 @Serializable
 @SerialName("state")
-data class StateMessage(val rev: Int, val state: State) : ServerMessage
+data class StateMessage(
+    val rev: Int,
+    val state: State,
+    /**
+     * A revision that advances **only** when [CaptureSettings] changes, and the
+     * one a settings command should guard against (ADR-0024).
+     *
+     * [rev] cannot do that job. It advances on everything in the document, and
+     * the exposure loop moves ISO up to six times a second (ADR-0005) -- measured
+     * at **27 revisions a second** on the reference device against roughly one
+     * broadcast a second, so a client's `rev` is stale before the snapshot
+     * carrying it has finished arriving. Every guarded settings change was
+     * therefore refused, always, including one sent the instant a snapshot
+     * landed.
+     *
+     * Defaulted, so an older client still decodes: ADR-0007's rule for added
+     * fields.
+     */
+    val settingsRev: Int = 0,
+) : ServerMessage
 
 /** The command was applied; [rev] is the revision it produced. */
 @Serializable
@@ -110,6 +129,19 @@ data class Command(
     val name: CommandName,
     val expectRev: Int? = null,
     val args: SettingsPatch? = null,
+    /**
+     * The concurrency guard for a settings change (ADR-0024).
+     *
+     * What a settings command must not race is **another settings change**, not
+     * the passage of ISO -- so this is compared against
+     * [StateMessage.settingsRev] rather than [expectRev]. Absent means
+     * unguarded, exactly as [expectRev] absent does.
+     *
+     * A command carrying both is guarded by both, which is a client asking for
+     * something stricter than anything needs; nothing this project ships does
+     * it.
+     */
+    val expectSettingsRev: Int? = null,
     /**
      * Argument of [CommandName.FOCUS_SET], and of nothing else.
      *

@@ -37,6 +37,7 @@ export interface StateMessage {
   type: "state";
   rev: number;
   state: State;
+  settingsRev?: number;
 }
 
 export interface State {
@@ -127,6 +128,7 @@ export interface CmdMessage {
   name: CommandName;
   expectRev?: number | null;
   args?: SettingsPatch | null;
+  expectSettingsRev?: number | null;
   focus?: Focus | null;
 }
 
