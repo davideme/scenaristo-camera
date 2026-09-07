@@ -3,6 +3,7 @@ import { Connection, elapsedSeconds, type Snapshot } from './connection'
 import { ExposureScale, Histogram } from './exposure'
 import { ABSENT, bitrate, codecName, format, minutesLeft, timecode } from './format'
 import { WarningIcon } from './icons'
+import { FramingGuides } from './guides'
 import {
   ExposurePanel,
   LensPanel,
@@ -125,6 +126,10 @@ export function App() {
             src="/preview.mjpg"
             alt="Live preview from the phone"
           />
+          {/* Over the image, not inside it: the preview is an MJPEG <img> the
+              browser paints itself (ADR-0008), and drawing into it would mean a
+              canvas and a copy of every frame for two straight lines. */}
+          <FramingGuides thirds={view.thirds} eyeLine={view.eyeLine} />
         </div>
 
         <Transport
@@ -162,9 +167,8 @@ export function App() {
             <LensPanel state={state} />
             <SoundPanel state={state} />
             <ViewPanel
-              mirror={view.mirror}
-              onMirror={(mirror) => {
-                const next = { ...view, mirror }
+              view={view}
+              onChange={(next) => {
                 setView(next)
                 saveViewPrefs(next)
               }}

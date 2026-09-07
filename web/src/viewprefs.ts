@@ -17,6 +17,23 @@ const KEY = 'scenaristo.view'
 
 export interface ViewPrefs {
   /**
+   * Rule-of-thirds lines over the preview (PRD 6.8, #3).
+   *
+   * The oldest framing aid there is, and the one a talking head is actually
+   * composed on: the subject's eyes go on or near the upper third, not in the
+   * middle of the frame.
+   */
+  thirds: boolean
+  /**
+   * A single line at the upper third, for the eye line alone (PRD 6.8).
+   *
+   * Separate from [thirds] rather than part of it, because they are used at
+   * different moments — thirds while placing the whole shot, the eye line while
+   * the speaker settles into the chair, when the other five lines are just
+   * clutter over their face.
+   */
+  eyeLine: boolean
+  /**
    * Flip the preview horizontally.
    *
    * **Preview only. The recorded file is never mirrored**, and cannot be from
@@ -28,7 +45,7 @@ export interface ViewPrefs {
   mirror: boolean
 }
 
-const DEFAULTS: ViewPrefs = { mirror: false }
+const DEFAULTS: ViewPrefs = { mirror: false, thirds: false, eyeLine: false }
 
 /**
  * Reads the stored preferences, falling back to the defaults.
@@ -42,7 +59,11 @@ export function loadViewPrefs(): ViewPrefs {
     const raw = window.localStorage.getItem(KEY)
     if (!raw) return DEFAULTS
     const parsed = JSON.parse(raw) as Partial<ViewPrefs>
-    return { mirror: parsed.mirror === true }
+    return {
+      mirror: parsed.mirror === true,
+      thirds: parsed.thirds === true,
+      eyeLine: parsed.eyeLine === true,
+    }
   } catch {
     return DEFAULTS
   }
