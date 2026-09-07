@@ -271,6 +271,9 @@ export function LensPanel({
   const glass = optics(state.optics?.apertureFNumber)
   const lenses = state.lenses ?? []
   const active = state.settings.zoomRatio ?? 1
+  // The aperture was probed once, at the base lens. See the note beside the
+  // readout for why that means it can only be shown there.
+  const atBaseFraming = active === 1
 
   // A control with nothing to choose between is not a control. Before the camera
   // has bound, or on a device with no zoom at all, this reports and does not
@@ -327,13 +330,27 @@ export function LensPanel({
       <dl class="stack">
         <div>
           <dt>Aperture</dt>
-          <dd class="mono">{glass ?? ABSENT}</dd>
+          {/*
+            Only at the framing the aperture was actually probed at.
+
+            `LENS_INFO_AVAILABLE_APERTURES` describes the logical camera, and it
+            is `float[1]` on the reference device -- one number, whichever sensor
+            the HAL happens to be using. Once the framing is a zoom ratio (#77),
+            a longer framing is served by different glass with a different and
+            unreported aperture, so drawing f/1.7 at 5x would be drawing a number
+            about the wrong lens. The app has no way to know the right one, so it
+            says nothing, the way it says nothing about a thermal state that
+            costs nothing and a meter that is not running.
+          */}
+          <dd class="mono">{atBaseFraming ? (glass ?? ABSENT) : 'not reported at this framing'}</dd>
         </div>
       </dl>
       {/* UI-18: the T-stop assumes a transmission no phone reports. Saying so is
           what makes drawing it defensible, and it is why the f/-number is never
           shown without it or it without the f/-number. */}
-      {glass ? <p class="lock-note">T assumes 92% transmission · informational</p> : null}
+      {atBaseFraming && glass ? (
+        <p class="lock-note">T assumes 92% transmission · informational</p>
+      ) : null}
     </Panel>
   )
 }
