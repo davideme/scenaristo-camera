@@ -41,6 +41,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0022](0022-two-exposure-responsiveness-modes.md) | Two exposure damping modes: quick while lighting the scene, damped while recording; replaces the manual ISO lock | Proposed | 6.1, 6.3 |
 | [0023](0023-lock-exposure-for-the-take.md) | Opt-in mode that stops the exposure loop entirely for the duration of a take; off by default | Proposed | 6.1, 6.3 |
 | [0024](0024-guard-settings-on-a-settings-revision.md) | A settings command guards on a settings revision, not the document revision, which the exposure loop moves 27 times a second | Proposed | 6.3, 6.8 |
+| [0025](0025-camera-standby-when-nothing-is-watching.md) | Run the camera only while something is watching: gate the preview encoder on an attached viewer, and release the camera when no recording, phone UI or browser needs it; the server stays up | Proposed | 6.8, 6.9, 8-Q4, 9 |
 
 ## Challenges to positions stated in the PRD
 

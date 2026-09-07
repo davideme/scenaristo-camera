@@ -190,6 +190,17 @@ class CaptureService : LifecycleService() {
     /** The framing last pushed at the camera, so the tick only acts on a change. */
     private var appliedZoom: Double = 1.0
 
+    /**
+     * Whether any browser is pulling the preview stream (ADR-0025).
+     *
+     * Mirrored out of the server rather than read from it, because the only
+     * reader is [onTapFrame] on the tap's GL thread and the only writer is a
+     * Ktor thread. A volatile boolean is the whole synchronisation this needs,
+     * and it keeps a `lateinit` off the frame path.
+     */
+    @Volatile
+    private var previewWatched = false
+
     /** ADR-0005's loop, alive only once a camera is bound. */
     @Volatile
     private var exposure: ExposureController? = null
@@ -273,7 +284,11 @@ class CaptureService : LifecycleService() {
         jpeg.quality = 80
         tap = PreviewTapProcessor(onFrame = ::onTapFrame)
         camera = ManualSession(DEFAULT_REQUEST, tap = tap, onCaptureResult = ::onCaptureResult)
-        server = ControlServer(session = session, frames = PreviewFrames { jpeg.latest() })
+        server = ControlServer(
+            session = session,
+            frames = PreviewFrames { jpeg.latest() },
+            onViewersChanged = ::onViewersChanged,
+        )
 
         // Before anything can write a new marker, and before the camera binds:
         // whatever is on disk now is a claim about the *previous* run.
@@ -336,6 +351,18 @@ class CaptureService : LifecycleService() {
     }
 
     /**
+     * The number of browsers watching the preview changed (ADR-0025).
+     *
+     * Called on a Ktor thread. Dropping the last frame when the last viewer
+     * leaves is what stops the *next* viewer being shown a stale one during the
+     * tenth of a second before encoding resumes.
+     */
+    private fun onViewersChanged(viewers: Int) {
+        previewWatched = viewers > 0
+        if (viewers == 0) jpeg.forget()
+    }
+
+    /**
      * One tapped frame, to the meter and then to the browser (ADR-0018).
      *
      * Order matters: [PreviewJpegSource.accept] closes the image, and the tap's
@@ -361,7 +388,13 @@ class CaptureService : LifecycleService() {
         } catch (failure: Throwable) {
             Log.w(EXPOSURE_TAG, "metering skipped a frame", failure)
         }
-        jpeg.accept(image)
+        // ADR-0025: a JPEG encoded for nobody is a full compress per frame, paid
+        // at the tap's rate for as long as the camera is bound. The meter above
+        // still runs -- the phone's own exposure and warnings do not depend on
+        // anyone watching -- but the encoder is skipped, and then this owns
+        // closing the image, because that is normally accept()'s job and the
+        // reader stalls at its buffer count on anything left outstanding.
+        if (previewWatched) jpeg.accept(image) else image.close()
     }
 
     /** On a camera thread: the sensor reporting what it actually used (ADR-0005). */
