@@ -38,6 +38,11 @@ data class State(
     /** What the active lens is, optically (PRD 6.5, 6.8; #101). Defaulted, as above. */
     val optics: Optics = Optics(),
     /**
+     * What the camera in use can and cannot do (PRD 6.10, ADR-0011; #14).
+     * Defaulted, so a snapshot written before it existed still decodes.
+     */
+    val capabilities: Capabilities = Capabilities(),
+    /**
      * The framings a client may choose between (PRD 6.5, 6.8; #77). Empty until
      * the camera has bound and reported its zoom range.
      */
@@ -237,6 +242,45 @@ data class Encoding(
      * the producer is a unit the consumer has to trust.
      */
     val bitrate: Int = 0,
+)
+
+/**
+ * PRD 6.10's capability report, for the camera the app is bound to.
+ *
+ * **Per camera, not per framing.** The framings of [LensChoice] are zoom ratios
+ * on one logical camera (UI-21), so they share its characteristics — a report
+ * per framing would be the same four answers repeated four times, and would
+ * imply a per-lens gate that this device does not have.
+ *
+ * Every field defaults false, which reads as "not probed yet" and is the safe
+ * way round: the interface says a thing is unavailable before it knows, rather
+ * than claiming a capability nobody has checked.
+ */
+@Serializable
+data class Capabilities(
+    /** True once a camera has been probed, so "not yet" is distinguishable from "no". */
+    val probed: Boolean = false,
+    /** PRD 6.10: 4K at 30 fps. False means ADR-0011's 1080p fallback applies. */
+    val uhd30: Boolean = false,
+    /**
+     * `MANUAL_SENSOR` — the shutter and ISO can be held.
+     *
+     * ADR-0011 gates recording on this and does not degrade: without it the
+     * shutter drifts and the picture bands, which is the one thing the product
+     * exists to prevent, so the lens is unusable rather than reduced.
+     */
+    val manualShutter: Boolean = false,
+    /**
+     * `MANUAL_POST_PROCESSING` — white balance can be set as colour gains.
+     *
+     * Note this says what the **lens** offers, not what the app currently does:
+     * every lens takes the approximated-preset path until #24 lands the
+     * Kelvin-to-gains curve, which is what `whiteBalanceApproximatedBy` reports.
+     * Both are true and they answer different questions.
+     */
+    val manualWhiteBalance: Boolean = false,
+    /** A hardware HEVC encoder exists. Whether the profile *chooses* it is [Encoding.codec]. */
+    val hardwareHevc: Boolean = false,
 )
 
 /**

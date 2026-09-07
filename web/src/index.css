@@ -526,6 +526,14 @@ main.recording .preview-frame::after {
   margin: 0;
 }
 
+/* UI-6: an unavailable capability is neutral grey, never red. Red means
+   recording and nothing else, and a capability the phone does not have is a
+   fact rather than an error. */
+.unavailable dt,
+.unavailable dd {
+  color: var(--dimmer);
+}
+
 /* --- Controls (§5: framed, and they carry their own value) ---------------- */
 
 .scenario-name {

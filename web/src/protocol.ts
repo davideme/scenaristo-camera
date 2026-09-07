@@ -53,6 +53,7 @@ export interface State {
   encoding?: Encoding;
   exposure?: ExposureReadout;
   optics?: Optics;
+  capabilities?: Capabilities;
   lenses?: LensChoice[];
   serverTimeMs: number;
 }
@@ -128,6 +129,14 @@ export interface ExposureReadout {
 export interface Optics {
   equivalentFocalLengthMm?: number | null;
   apertureFNumber?: number | null;
+}
+
+export interface Capabilities {
+  probed?: boolean;
+  uhd30?: boolean;
+  manualShutter?: boolean;
+  manualWhiteBalance?: boolean;
+  hardwareHevc?: boolean;
 }
 
 export interface LensChoice {
