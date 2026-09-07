@@ -13,6 +13,10 @@ export const DEFAULT_KELVIN = 5600;
 export const LENS_WIDE_BAND = { min: 23, max: 25 } as const;
 export const LENS_RECOMMENDED_FROM = 48;
 
+export function takePath(name: string): string {
+  return `/takes/${name}.mp4`;
+}
+
 export interface AckMessage {
   type: "ack";
   id: string;
@@ -55,6 +59,7 @@ export interface State {
   optics?: Optics;
   capabilities?: Capabilities;
   lenses?: LensChoice[];
+  takes?: Take[];
   mount?: MountAttitude;
   serverTimeMs: number;
 }
@@ -144,6 +149,13 @@ export interface Capabilities {
 export interface LensChoice {
   zoomRatio: number;
   equivalentFocalLengthMm: number;
+}
+
+export interface Take {
+  name: string;
+  sizeBytes: number;
+  durationMs: number;
+  recordedAtMs: number;
 }
 
 export interface MountAttitude {

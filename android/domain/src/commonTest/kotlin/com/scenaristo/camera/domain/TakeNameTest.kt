@@ -45,4 +45,39 @@ class TakeNameTest {
         assertTrue(!TakeName.PATTERN.matches("Scenaristo_2026-09-06_14:32:05"))
         assertTrue(!TakeName.PATTERN.matches("Scenaristo-2026-09-06-14-32-05"))
     }
+
+    /**
+     * PRD 6.11's download route resolves a take by name, so the pattern stopped
+     * being only a test aid the moment a client on the LAN could choose the
+     * string it is applied to.
+     *
+     * `matches` and not `containsMatchIn`: the pattern is unanchored, so a name
+     * with a real take's name buried in it passes the second and fails the
+     * first. That is the difference between a key lookup and a path traversal,
+     * and it is one method call wide.
+     */
+    @Test
+    fun `PRD 6_11 - the pattern rejects a name with a path in it`() {
+        val traversals = listOf(
+            "../Scenaristo_2026-09-06_14-32-05",
+            "Scenaristo_2026-09-06_14-32-05/../../etc/passwd",
+            "/Scenaristo_2026-09-06_14-32-05",
+            "..%2fScenaristo_2026-09-06_14-32-05",
+            "",
+        )
+        traversals.forEach { assertTrue(!TakeName.PATTERN.matches(it), "accepted $it") }
+    }
+
+    /**
+     * PRD 6.11. The browser builds this from the generated TypeScript and the
+     * server routes on it; this is the assertion that both are talking about the
+     * same URL.
+     */
+    @Test
+    fun `PRD 6_11 - the download path is the name under takes, with the extension`() {
+        assertEquals(
+            "/takes/Scenaristo_2026-09-06_14-32-05.mp4",
+            TakeName.path(TakeName.of(2026, 9, 6, 14, 32, 5)),
+        )
+    }
 }
