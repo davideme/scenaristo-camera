@@ -48,6 +48,42 @@ class ExposureLoop(
         ExposureState(grid = grid, iso = iso.min, lockWhileRecording = lockWhileRecording)
 
     /**
+     * Start again where the previous session left off (ADR-0025).
+     *
+     * A camera released while nobody was watching and rebound on demand gets a
+     * new loop, and [start] would open it at the sensor's floor. In a lit room
+     * that is a visibly dark first second that then brightens -- the loop
+     * re-climbing a hill it had already climbed, in front of whoever just
+     * connected. Carrying the settled ISO over makes the wake look like the
+     * camera never left.
+     *
+     * Only [ExposureState.iso] and the rung survive, and the rung only when the
+     * grid is unchanged, because a rung is an index into that grid's ladder and
+     * the same index means a different shutter on the other one. Everything else
+     * is a conversation with a sensor that no longer exists: an echo the new
+     * camera will never send, a slew-limit timestamp from another session, and
+     * warnings about a frame nobody can see any more. Those start clean, and
+     * `acquired` false means the first metered frame may snap rather than damp,
+     * which is what a wake wants.
+     *
+     * [lockWhileRecording] comes from the caller rather than from [previous]
+     * for the same reason it does in [start]: it is the user's stored answer
+     * (ADR-0023), not something the loop discovered, so the current one wins
+     * over whatever was true when the camera was released.
+     */
+    fun resume(
+        previous: ExposureState,
+        grid: GridFrequency,
+        lockWhileRecording: Boolean = false,
+    ): ExposureState =
+        ExposureState(
+            grid = grid,
+            rung = if (previous.grid == grid) previous.rung else 0,
+            iso = previous.iso.coerceIn(iso.min, iso.max),
+            lockWhileRecording = lockWhileRecording,
+        )
+
+    /**
      * Fold one metered frame in and decide what to do about it.
      *
      * [luma] is the face-weighted mean of the frame as it was rendered, in

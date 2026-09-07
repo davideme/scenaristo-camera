@@ -59,6 +59,13 @@ class ExposureController(
     meteringConfig: MeteringConfig = MeteringConfig(),
     /** The user's stored answer to "hold exposure for the take?" (ADR-0023). */
     lockWhileRecording: Boolean = false,
+    /**
+     * Where a previous camera left off, when this loop is replacing one that was
+     * released while nobody was watching (ADR-0025).
+     *
+     * Null on a cold start, which is the sensor floor per PRD 6.3.
+     */
+    resumeFrom: ExposureState? = null,
 ) {
 
     @Volatile
@@ -68,7 +75,10 @@ class ExposureController(
     private val meter = FaceWeightedMeter(meteringConfig)
     private val lock = Any()
 
-    private val _state = MutableStateFlow(loop.start(grid, lockWhileRecording))
+    private val _state = MutableStateFlow(
+        resumeFrom?.let { loop.resume(it, grid, lockWhileRecording) }
+            ?: loop.start(grid, lockWhileRecording),
+    )
 
     /** What the phone and the browser read: shutter, ISO and the warnings (PRD 6.8). */
     val state: StateFlow<ExposureState> = _state.asStateFlow()

@@ -28,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.scenaristo.camera.service.CaptureService
@@ -89,6 +92,36 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
         DisposableEffect(view) {
             view.keepScreenOn = true
             onDispose { view.keepScreenOn = false }
+        }
+
+        // ADR-0025: the service cannot see whether anyone is looking at the
+        // phone, and it is one of the three things that decide whether the
+        // camera runs at all. Reported from ON_START/ON_STOP rather than from
+        // this effect's own disposal, because disposal is the activity being
+        // *destroyed* -- the signal ADR-0019 already uses for a different
+        // decision -- and backgrounding the app never reaches it.
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner, service) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> service?.setUiVisible(true)
+                    Lifecycle.Event.ON_STOP -> service?.setUiVisible(false)
+                    else -> Unit
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            // The service may connect after ON_START has already gone past, in
+            // which case nothing would ever tell it the screen is on.
+            if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                service?.setUiVisible(true)
+            }
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                // Leaving for good is also leaving: without this the flag would
+                // stay true for as long as the service outlives the activity,
+                // and the camera would never sleep.
+                service?.setUiVisible(false)
+            }
         }
 
         val surfaceRequest by (service?.surfaceRequest?.collectAsState() ?: return@Surface)
