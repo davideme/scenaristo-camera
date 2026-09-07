@@ -12,7 +12,7 @@ import {
 import type { GridFrequency, State } from './protocol'
 import type { ViewPrefs } from './viewprefs'
 import { isRecommended } from './lens'
-import { SCENARIOS, presetFor, scenarioOf } from './whitebalance'
+import { SCENARIOS, approximationNote, presetFor, scenarioOf } from './whitebalance'
 
 /**
  * The control column (UI-9).
@@ -145,6 +145,14 @@ export function LightPanel({
       {/* The current value lives here and nowhere else (§5). When the phone is
           on a temperature no preset names — set from the phone, or a preset
           that moved — say so rather than leaving every button unlit. */}
+      {/* PRD 6.4 requires the app to admit an approximation rather than present
+          it as the real thing, and UI-8's rule is that it names what it is
+          approximated *with*. On the reference device every lens takes this
+          path today, because the Kelvin-to-gains curve is #24 in Phase 3 — so
+          this is not an edge case, it is the current case. */}
+      {approximationNote(state.settings.whiteBalanceApproximatedBy) ? (
+        <p class="lock-note">{approximationNote(state.settings.whiteBalanceApproximatedBy)}</p>
+      ) : null}
       {presetFor(kelvin) == null ? (
         <p class="lock-note">
           Currently {kelvin} K, which is not one of these presets

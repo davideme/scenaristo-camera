@@ -63,6 +63,7 @@ export interface CaptureSettings {
   iso: number;
   shutterLock?: number | null;
   whiteBalanceKelvin: number;
+  whiteBalanceApproximatedBy?: AwbApproximation | null;
   lensId: string;
   saveToGallery?: boolean;
   lockExposureWhileRecording?: boolean;
@@ -71,6 +72,8 @@ export interface CaptureSettings {
 }
 
 export type GridFrequency = "HZ_50" | "HZ_60";
+
+export type AwbApproximation = "INCANDESCENT" | "FLUORESCENT" | "DAYLIGHT" | "CLOUDY";
 
 export interface Focus {
   mode?: FocusMode;

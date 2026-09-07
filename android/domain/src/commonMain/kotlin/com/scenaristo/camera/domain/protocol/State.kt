@@ -1,6 +1,7 @@
 package com.scenaristo.camera.domain.protocol
 
 import com.scenaristo.camera.domain.exposure.GridFrequency
+import com.scenaristo.camera.domain.whitebalance.AwbApproximation
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -64,6 +65,24 @@ data class CaptureSettings(
     /** The shutter rung the user pinned, or null when the ladder is free (PRD 6.3). */
     val shutterLock: Int? = null,
     val whiteBalanceKelvin: Int,
+    /**
+     * The platform mode standing in for [whiteBalanceKelvin], or null when the
+     * lens takes colour gains and the preset is simply applied (PRD 6.4,
+     * ADR-0011).
+     *
+     * PRD 6.4 requires the app to *admit* an approximation rather than present
+     * it as the real thing, and both surfaces have to say so. It matters more
+     * than the wording suggests: on the reference device **every lens takes the
+     * approximated path today**, because the Kelvin-to-gains curve is #24 in
+     * Phase 3 — so the case this exists for is currently the only case there is,
+     * and a remote that stayed silent would be telling the user a temperature
+     * the camera is not holding.
+     *
+     * Defaulted to null, which reads as "exact or not yet probed". A client that
+     * wants to tell those apart reads it alongside `lensId`, which is null-ish
+     * only before the camera binds.
+     */
+    val whiteBalanceApproximatedBy: AwbApproximation? = null,
     /** Camera id of the active lens, as reported by the capability probe (ADR-0011). */
     val lensId: String,
     /**
