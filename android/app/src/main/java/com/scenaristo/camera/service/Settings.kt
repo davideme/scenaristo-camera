@@ -58,6 +58,18 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_GALLERY, false)
         set(value) = prefs.edit().putBoolean(KEY_GALLERY, value).apply()
 
+    /**
+     * Whether exposure is held for the whole take (ADR-0023).
+     *
+     * Off by default: the tracking loop is what every take has had so far, and a
+     * mode whose failure is an unrecoverable file is not one to opt someone into
+     * on their behalf. Stored rather than per-session because the answer is a
+     * property of how someone shoots, not of one take.
+     */
+    var lockExposureWhileRecording: Boolean
+        get() = prefs.getBoolean(KEY_EXPOSURE_LOCK, false)
+        set(value) = prefs.edit().putBoolean(KEY_EXPOSURE_LOCK, value).apply()
+
     var lensId: String
         get() = prefs.getString(KEY_LENS, DEFAULT_LENS) ?: DEFAULT_LENS
         set(value) = prefs.edit().putString(KEY_LENS, value).apply()
@@ -97,6 +109,7 @@ class Settings(context: Context) {
         const val KEY_KELVIN = "white-balance-kelvin"
         const val KEY_LENS = "lens-id"
         const val KEY_GALLERY = "save-to-gallery"
+        const val KEY_EXPOSURE_LOCK = "lock-exposure-while-recording"
 
         /** PRD 6.1's default camera, as the platform's own id for it. */
         const val DEFAULT_LENS = "0"

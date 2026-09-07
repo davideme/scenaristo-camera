@@ -116,6 +116,8 @@ class Session(
             whiteBalanceKelvin = patch.whiteBalanceKelvin ?: state.settings.whiteBalanceKelvin,
             lensId = patch.lensId ?: state.settings.lensId,
             saveToGallery = patch.saveToGallery ?: state.settings.saveToGallery,
+            lockExposureWhileRecording = patch.lockExposureWhileRecording
+                ?: state.settings.lockExposureWhileRecording,
             shutterLock = shutterLock,
         )
         if (updated == state.settings) return remember(command, nowMs, changed = false)

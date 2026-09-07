@@ -169,6 +169,15 @@ data class SettingsPatch(
     /** Save takes to the shared gallery rather than the app's folder (PRD 6.7). */
     val saveToGallery: Boolean? = null,
     /**
+     * Hold exposure where it was at record start for the whole take (ADR-0023).
+     *
+     * A plain boolean rather than one of the tri-state locks below: this is a
+     * standing preference about how takes are recorded, not a value pinned on
+     * the spot, so "leave it alone" is absence and there is no third state to
+     * express.
+     */
+    val lockExposureWhileRecording: Boolean? = null,
+    /**
      * Lock the shutter to this rung, as reciprocal seconds, or [CLEAR_LOCK].
      *
      * Only a rung of the grid's own ladder is accepted — 50 or 100 on a 50 Hz

@@ -314,6 +314,88 @@ class ExposureLoopTest {
         assertEquals(400, state.iso)
     }
 
+    // ADR-0023: the mode exists so that nothing in the filter runs during a take.
+    // The observable half of that promise is this one -- the exposure in the file
+    // is the exposure the take started with, whatever the room does afterwards.
+    @Test
+    fun `ADR-0023 - a locked take holds its exposure however much the light changes`() {
+        val room = Room(needsIso = 400.0, recording = false, lockWhileRecording = true)
+        room.runFor(2_000)
+        val opening = room.state
+
+        room.setRecording(true)
+        room.needsIso = 3_200.0 // three stops darker, mid-take
+        room.runFor(5_000)
+
+        assertEquals(opening.iso, room.state.iso, "ISO moved during a locked take")
+        assertEquals(opening.shutterHz, room.state.shutterHz, "the shutter moved during a locked take")
+    }
+
+    // The accepted cost, recorded as a test rather than left to be discovered:
+    // with nothing running there is nothing to raise a warning either, so a room
+    // that goes dark mid-take says nothing until the take ends (decision
+    // 2026-09-07, Davide).
+    @Test
+    fun `ADR-0023 - a locked take freezes the warnings with everything else`() {
+        val room = Room(needsIso = 400.0, recording = false, lockWhileRecording = true)
+        room.runFor(2_000)
+        val opening = room.state.warnings
+        assertFalse(Warning.TOO_DARK in opening, "the room was already dark before the take")
+
+        room.setRecording(true)
+        room.needsIso = 6_400.0 // far past the noise threshold
+        room.runFor(5_000)
+
+        assertEquals(opening, room.state.warnings, "a locked take raised a warning it cannot act on")
+    }
+
+    // The lock is a property of the take, not of the session: while nobody is
+    // recording it must not stop the loop, or lighting the scene would be
+    // impossible in the very mode that most needs a lit scene.
+    @Test
+    fun `ADR-0023 - the lock does nothing until a take is running`() {
+        val room = Room(needsIso = 100.0, recording = false, lockWhileRecording = true)
+        room.runFor(1_000)
+        room.needsIso = 400.0
+
+        val settled = room.runUntil(4_000) { abs(log2(it.iso / 400.0)) <= 0.25 }
+        assertTrue(settled != null, "the loop never followed the light with no take running")
+    }
+
+    // Ending a locked take hands the loop a room it has not metered for minutes.
+    // Averaging the next frame against that stale error would crawl to the right
+    // answer through a visibly wrong one, so the first frame afterwards snaps.
+    @Test
+    fun `ADR-0023 - exposure catches up promptly once a locked take ends`() {
+        val room = Room(needsIso = 400.0, recording = false, lockWhileRecording = true)
+        room.runFor(2_000)
+
+        room.setRecording(true)
+        room.needsIso = 1_600.0 // two stops darker while locked
+        room.runFor(3_000)
+        room.setRecording(false)
+
+        val caughtUp = room.runUntil(2_000) { abs(log2(it.iso / 1_600.0)) <= 0.25 }
+        assertTrue(caughtUp != null, "the loop never recovered after a locked take")
+        assertTrue(caughtUp <= 500, "recovery took ${caughtUp}ms, long enough to see")
+    }
+
+    // Default off (decision 2026-09-07, Davide). Every take that does not ask for
+    // the lock behaves exactly as it did before ADR-0023.
+    @Test
+    fun `ADR-0023 - an unlocked take still tracks the light`() {
+        val room = Room(needsIso = 400.0, recording = true)
+        room.runFor(2_000)
+        val opening = room.state.iso
+        room.needsIso = 1_600.0
+        room.runFor(5_000)
+
+        assertTrue(
+            room.state.iso > opening,
+            "ISO stayed at $opening in a room two stops darker; the default stopped tracking",
+        )
+    }
+
     /**
      * A room, expressed as the ISO that would put the face on target at the
      * grid's default shutter, plus the loop watching it.
@@ -332,14 +414,21 @@ class ExposureLoopTest {
          * scoped "when recording", so the tests that cite them say so.
          */
         recording: Boolean = true,
+        /** ADR-0023's mode: hold exposure for the take, or track the light. */
+        lockWhileRecording: Boolean = false,
     ) {
         private val loop = ExposureLoop(IsoRange(BASE_ISO, MAX_ISO), config)
         private val ladder = shutterLadder(grid)
         private var inFlightFrames = 0
         private var nowMs = 0L
 
-        var state: ExposureState = loop.start(grid).copy(recording = recording)
+        var state: ExposureState = loop.start(grid, lockWhileRecording).copy(recording = recording)
             private set
+
+        /** A take starts or stops, through the loop rather than around it. */
+        fun setRecording(recording: Boolean) {
+            state = loop.onRecordingChanged(state, recording)
+        }
 
         fun tick() {
             nowMs += FRAME_MS

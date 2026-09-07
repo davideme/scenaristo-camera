@@ -64,6 +64,16 @@ data class CaptureSettings(
      */
     val saveToGallery: Boolean = false,
     /**
+     * Whether exposure is held where it was at record start, instead of tracking
+     * the light through the take (ADR-0023).
+     *
+     * False by default, which is the behaviour every take has had so far: the
+     * loop keeps metering, damped, and follows the room. True stops the metering
+     * loop outright for the duration of the take — the strongest form of PRD
+     * 6.1's locked look, and the one that cannot recover if the light changes.
+     */
+    val lockExposureWhileRecording: Boolean = false,
+    /**
      * Where the camera is focusing. Defaulted so that a snapshot written before
      * focus existed still decodes, which is the compatibility rule ADR-0007 sets
      * for added fields.

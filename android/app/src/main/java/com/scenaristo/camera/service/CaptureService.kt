@@ -177,6 +177,9 @@ class CaptureService : LifecycleService() {
     /** Last gallery choice written to storage (PRD 6.7). */
     private var appliedGallery: Boolean? = null
 
+    /** ADR-0023's mode, as last handed to the exposure loop and to storage. */
+    private var appliedExposureLock: Boolean? = null
+
     /** ADR-0005's loop, alive only once a camera is bound. */
     @Volatile
     private var exposure: ExposureController? = null
@@ -430,8 +433,14 @@ class CaptureService : LifecycleService() {
             grid = session.state.settings.grid,
             cameraControl = bound.cameraControl,
             awbMode = ManualControls.awbModeFor(session.state.settings.whiteBalanceKelvin),
+            lockWhileRecording = session.state.settings.lockExposureWhileRecording,
         )
         exposure = controller
+        // A fresh controller starts life believing no take is running. That is
+        // true on the ordinary path and false if the camera is ever rebound
+        // mid-take, and the cost of being wrong is a locked take that quietly
+        // meters -- so it is told, rather than left to the next transition.
+        controller.onRecordingChanged(session.state.recording.recording)
         controller.start()
         Log.i(EXPOSURE_TAG, "exposure loop running, ISO ${isoRange.min}..${isoRange.max}")
         lifecycleScope.launch { publishExposure(controller) }
@@ -501,10 +510,16 @@ class CaptureService : LifecycleService() {
             // command handler, because ADR-0007 keeps that handler pure and
             // platform-free -- the camera work happens here, one step behind,
             // exactly as it does for recording.
-            // ADR-0022: the loop is quick while the user lights the scene and
-            // damped once a take is running. Driven from the state document so
-            // a take started from the browser switches it too.
-            exposure?.onRecordingChanged(session.state.recording.recording)
+            // ADR-0023: hold exposure for the take, or track the light through
+            // it. Watched here like every other setting, and it can only ever
+            // change between takes because `Session` refuses settings while
+            // recording -- which is what makes the mode stable for a whole file.
+            val exposureLock = session.state.settings.lockExposureWhileRecording
+            if (exposureLock != appliedExposureLock) {
+                appliedExposureLock = exposureLock
+                settings.lockExposureWhileRecording = exposureLock
+                exposure?.onExposureLockChanged(exposureLock)
+            }
             val shutterLock = session.state.settings.shutterLock
             if (shutterLock != appliedShutterLock) {
                 appliedShutterLock = shutterLock
@@ -596,12 +611,45 @@ class CaptureService : LifecycleService() {
         }
     }
 
+    /**
+     * Hold exposure for the take, or track the light through it (ADR-0023).
+     *
+     * Through the command path for the same reason white balance is: the phone
+     * is one more client of ADR-0007's single writer, so the browser sees the
+     * change, and `Session`'s recording guard makes it impossible to flip the
+     * mode in the middle of a file without any code here saying so.
+     */
+    fun setExposureLock(lock: Boolean) {
+        lifecycleScope.launch {
+            server.applyLocal(
+                Command(
+                    id = "phone-exposure-lock-" + System.currentTimeMillis(),
+                    name = CommandName.SETTINGS_SET,
+                    args = SettingsPatch(lockExposureWhileRecording = lock),
+                ),
+            )
+            _state.value = session.state
+        }
+    }
+
     private suspend fun followRecordingState() {
         var wasRecording = false
         while (true) {
             val shouldRecord = session.state.recording.recording
-            if (shouldRecord && !wasRecording) startRecording()
-            if (!shouldRecord && wasRecording) stopRecording()
+            if (shouldRecord && !wasRecording) {
+                // Before the recorder rather than after it, and here rather than
+                // on the one-second tick that used to carry it (ADR-0022): a
+                // mode that promises exposure does not move during the take has
+                // to be in force for the file's *first* frame, and a second of
+                // setup-speed ISO at the head of a locked take would be exactly
+                // the thing the user asked not to have.
+                exposure?.onRecordingChanged(true)
+                startRecording()
+            }
+            if (!shouldRecord && wasRecording) {
+                stopRecording()
+                exposure?.onRecordingChanged(false)
+            }
             wasRecording = shouldRecord
             delay(200)
         }
@@ -989,6 +1037,7 @@ class CaptureService : LifecycleService() {
             whiteBalanceKelvin = settings.whiteBalanceKelvin,
             lensId = settings.lensId,
             saveToGallery = settings.saveToGallery,
+            lockExposureWhileRecording = settings.lockExposureWhileRecording,
         ),
         recording = RecordingState(recording = false),
         device = DeviceStatus(0, false, ThermalState.NOMINAL, 0),

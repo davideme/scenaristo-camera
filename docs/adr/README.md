@@ -39,6 +39,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0020](0020-record-into-mediastore.md) | Takes go to the app's own folder by default; the shared gallery (`Movies/Scenaristo Camera/`) is a setting | Proposed | 6.7, 3 |
 | [0021](0021-remove-too-bright-and-bump-the-protocol.md) | Remove the unused `TOO_BRIGHT` warning; `PROTOCOL_VERSION` becomes 2 | Proposed | 6.3, 6.8 |
 | [0022](0022-two-exposure-responsiveness-modes.md) | Two exposure damping modes: quick while lighting the scene, damped while recording; replaces the manual ISO lock | Proposed | 6.1, 6.3 |
+| [0023](0023-lock-exposure-for-the-take.md) | Opt-in mode that stops the exposure loop entirely for the duration of a take; off by default | Proposed | 6.1, 6.3 |
 
 ## Challenges to positions stated in the PRD
 
@@ -48,6 +49,7 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 |---|---|---|
 | 6.9 "The app must stay in the foreground to record (both OSes suspend the camera in the background)" | False on Android. A `camera\|microphone` foreground service keeps recording and the web server alive with the screen locked, which also removes the screen from the thermal budget. | 0003 |
 | 6.3 "Do not silently raise shutter speed" on overexposure | At 1/50 s and base ISO, a main camera at f/1.8 is overexposed above ~400–800 lux, i.e. most daylit desks. 1/100 (50 Hz) and 1/120 (60 Hz) are also band-free; use them as one visible ladder rung before warning. | 0005 |
+| 6.3 acceptance criteria ("ISO settles within 2 seconds and does not oscillate by more than one stop", and the two light warnings) | Written for a loop that meters throughout a take. ADR-0023 adds an opt-in mode in which nothing meters at all while recording: ISO and shutter hold their record-start values and no warning is raised or cleared for the take's duration. Scope the existing criteria to the default mode and add a sentence for the locked one. | 0023 |
 | 6.3 "read the exposure offset from the device" | Android provides no metering feedback with AE off. Meter in-app from the analysis stream on both platforms. | 0005 |
 | 6.8 "Multiple browsers may connect; last write wins" | Without a revision, stale clients clobber fresh changes and a retried record message toggles recording off. Use commands with ids and revisioned snapshots. | 0007 |
 | 6.8 Controls "Shutter (1/50, 1/60, override) … ISO (auto / manual value)" | Shutter and ISO are outputs of the in-app exposure loop, not inputs, so `SettingsPatch` carries grid frequency, white balance and lens only. The browser reports shutter and ISO, including the flicker-safe step, and cannot set them. A manual ISO lock, which 6.3 still offers, would need its own field. | 0005, 0007 |

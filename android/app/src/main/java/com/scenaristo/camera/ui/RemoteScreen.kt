@@ -112,6 +112,9 @@ fun RemoteScreen(modifier: Modifier = Modifier) {
             onToggleRecording = service::toggleRecording,
             onConnect = { showConnect = true },
             onLight = { showLight = true },
+            onToggleExposureLock = {
+                service.setExposureLock(!state.settings.lockExposureWhileRecording)
+            },
             lensMm = lensMm,
             guidanceDismissed = guidanceDismissed,
             onDismissGuidance = { guidanceDismissed = true },

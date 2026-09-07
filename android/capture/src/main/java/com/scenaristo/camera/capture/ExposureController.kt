@@ -56,6 +56,8 @@ class ExposureController(
     awbMode: Int,
     private val config: ExposureConfig = ExposureConfig(),
     meteringConfig: MeteringConfig = MeteringConfig(),
+    /** The user's stored answer to "hold exposure for the take?" (ADR-0023). */
+    lockWhileRecording: Boolean = false,
 ) {
 
     @Volatile
@@ -65,7 +67,7 @@ class ExposureController(
     private val meter = FaceWeightedMeter(meteringConfig)
     private val lock = Any()
 
-    private val _state = MutableStateFlow(loop.start(grid))
+    private val _state = MutableStateFlow(loop.start(grid, lockWhileRecording))
 
     /** What the phone and the browser read: shutter, ISO and the warnings (PRD 6.8). */
     val state: StateFlow<ExposureState> = _state.asStateFlow()
@@ -92,8 +94,20 @@ class ExposureController(
      * Called on the GL thread, so this is on the path of every preview frame:
      * the meter samples every fourth pixel of a 960x540 frame, which is about
      * 32 000 reads, and the loop itself does arithmetic on eight numbers.
+     *
+     * Unless the take is locked (ADR-0023), in which case it does none of it.
+     * That early return **is** the feature: the 32 000 reads and their logarithms
+     * are the cost, and they are spent on the same thread that owes the
+     * viewfinder a frame every 33 ms while the 4K encoder runs beside it.
      */
     fun onFrame(image: Image, nowMs: Long) {
+        // Read outside the lock deliberately. This runs 30 times a second and
+        // the answer is a single volatile read; taking the lock to discover
+        // there is nothing to do would contend with the camera thread's capture
+        // results for no reason. A lost race costs one metered frame, which the
+        // loop's own guard then discards.
+        if (_state.value.locked) return
+
         val next = synchronized(lock) {
             val before = _state.value
             val after = loop.onFrame(before, meter.meter(frameOf(image), faces), nowMs)
@@ -150,6 +164,18 @@ class ExposureController(
     fun onRecordingChanged(recording: Boolean) {
         synchronized(lock) {
             _state.value = loop.onRecordingChanged(_state.value, recording)
+        }
+    }
+
+    /**
+     * The user chose whether exposure tracks the light during a take (ADR-0023).
+     *
+     * Nothing is pushed: like the damping mode, this changes what the loop is
+     * allowed to do on the next frame rather than where the exposure sits.
+     */
+    fun onExposureLockChanged(lockWhileRecording: Boolean) {
+        synchronized(lock) {
+            _state.value = loop.onExposureLockChanged(_state.value, lockWhileRecording)
         }
     }
 
