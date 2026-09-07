@@ -323,6 +323,8 @@ Focus's validation belongs here rather than in UI-16, because it is protocol and
 Per [ADR-0017](adr/0017-phase-0-verification-matrix.md) the reference matrix is one Pixel 10 and one MacBook. Nothing in this spec may be described as verified on Android or on the web generally.
 
 - [ ] Every UI-n acceptance criterion above is checked on the Pixel 10 for the phone surface, and in Safari and Chrome on the MacBook for the remote.
+  - Chrome: the remote control of UI-9, UI-10, UI-17 to UI-22 was built and driven against the phone in a Chromium browser (2026-09-06/07).
+  - **Safari: verified by Davide, 2026-09-07** — "working fully tested". The one that mattered is MJPEG in an `<img>`: [ADR-0008](adr/0008-preview-transport.md)'s whole argument is that the browser renders `multipart/x-mixed-replace` natively, and a Safari that stalled on the first frame would have taken the transport decision with it.
 - [ ] UI-3's cutout and gesture-inset criteria are checked in **both** landscape orientations.
 - [ ] UI-1's 2 m legibility claim is checked at 2 m, not at a desk.
 - [ ] The `.dc.html` mockups are the reference for spacing and colour where this document is silent, not a substitute for it: where they disagree, this document wins and the mockups are updated.
