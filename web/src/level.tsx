@@ -20,11 +20,21 @@ export function LevelOverlay({
   mount,
   mirrored,
   recording,
+  previewProducing,
 }: {
   mount: MountAttitude | null | undefined
   mirrored: boolean
   recording: boolean
+  previewProducing: boolean
 }) {
+  // Nothing to draw over, and something more important to read: with the
+  // phone's screen off there are no frames to tap (#116) and the preview
+  // already carries its own explanation in the middle of the same rectangle.
+  // Two notices fighting for one centre is worse than the one that tells
+  // somebody what to do, and a horizon over a black frame is not a shot anyone
+  // can level anyway.
+  if (!previewProducing) return null
+
   const measuring = mount?.measuring === true
 
   if (!measuring) {
@@ -46,8 +56,6 @@ export function LevelOverlay({
   const roll = mount?.rollDegrees ?? 0
   const pitch = mount?.pitchDegrees ?? 0
   const steady = mount?.steady !== false
-  const level = Math.abs(roll) < LEVEL_WITHIN_DEGREES
-
   /*
    * The horizon slopes up towards whichever side of the frame has risen, and
    * CSS rotates clockwise while the roll is measured counter-clockwise -- hence
@@ -61,39 +69,54 @@ export function LevelOverlay({
 
   return (
     <div class="level" aria-hidden="true">
-      <div class="level-reference" />
-      <div
-        class={steady ? 'level-horizon' : 'level-horizon unsteady'}
-        style={{ transform: `rotate(${drawn.toFixed(2)}deg)` }}
-      />
-      <p class="level-readout">
+      <div class="level-mark">
+        {/* Where level is. Short, centred and fixed -- the thing the horizon is
+            read against, and the reason the indicator does not need to say
+            which way to turn. */}
+        <div class="level-reference" />
+        <div
+          class={steady ? 'level-horizon' : 'level-horizon unsteady'}
+          style={{ transform: `rotate(${drawn.toFixed(2)}deg)` }}
+        />
         {/*
-          One class in every state, never recoloured. UI-5 is explicit that a
-          warning is a chip and nothing else, and that no readout is recoloured
-          to raise one -- so "off level" is the same grey as "Level", and the
-          line is what carries the difference.
+          The number sits on the mark rather than in a caption somewhere else,
+          because the two are one reading: the mark says which way and the
+          number says how far, and a person levelling a tripod should not have
+          to look in two places to get one answer.
+
+          Never recoloured, in any state. UI-5 is explicit that a warning is a
+          chip and nothing else and that no readout is recoloured to raise one,
+          so 1.4 degrees is the same grey as 0. The reference camera this is
+          modelled on turns its indicator yellow; that is the one thing here
+          deliberately not copied.
         */}
-        <span class="level-word">
-          {!steady ? 'Unsteady — check the mount' : level ? 'Level' : `${format(roll)}° off level`}
+        <span class="level-degrees">{format(roll)}°</span>
+      </div>
+      {/*
+        One secondary line, and steadiness takes it when there is something to
+        say -- a mount that is moving is worth more than where the lens is
+        aimed. Pitch is reported and never judged: a camera aimed a few degrees
+        up at a seated speaker is a decision as often as an accident, and PRD
+        6.11 frames only roll as wrong. Up and down also survive the mirror,
+        which is why this one names a direction and the roll does not.
+      */}
+      {!steady ? (
+        <span class="level-note">Unsteady — check the mount</span>
+      ) : Math.abs(pitch) >= PITCH_WORTH_SHOWING_DEGREES ? (
+        <span class="level-note">
+          aimed {format(pitch)}° {pitch > 0 ? 'up' : 'down'}
         </span>
-        {/*
-          Reported, never judged: a camera aimed a few degrees up at a seated
-          speaker is a decision as often as it is an accident, and PRD 6.11
-          frames only roll as wrong. Up and down also survive the mirror, which
-          is why this one gets to name a direction and the roll does not.
-        */}
-        {Math.abs(pitch) >= PITCH_WORTH_SHOWING_DEGREES ? (
-          <span class="level-pitch">
-            aimed {format(pitch)}° {pitch > 0 ? 'up' : 'down'}
-          </span>
-        ) : null}
-      </p>
+      ) : null}
     </div>
   )
 }
 
 /**
- * One decimal place, unsigned.
+ * One decimal place, unsigned, and rounded to nothing inside the level band.
+ *
+ * Under a third of a degree it reads `0.0` rather than a real measurement: a
+ * readout that never quite reaches zero is one somebody keeps adjusting
+ * against, so there has to be a point at which it stops asking.
  *
  * Deliberately no "left" or "right" anywhere in this component. A tilt is a
  * left-or-right fact, and left and right are exactly what the mirror switch
@@ -105,16 +128,15 @@ export function LevelOverlay({
  * a matter of turning it until the line lies flat.
  */
 function format(degrees: number): string {
-  return Math.abs(degrees).toFixed(1)
+  const magnitude = Math.abs(degrees)
+  return (magnitude < LEVEL_WITHIN_DEGREES ? 0 : magnitude).toFixed(1)
 }
 
 /**
- * Below a third of a degree it says "Level" rather than a number.
+ * Close enough to level to call it level.
  *
  * Three times the 0.1-degree step the phone publishes, and about a fifth of what
- * is visible on a straight edge across a 4K frame. A readout that never quite
- * reads level is a readout someone keeps adjusting against, so there has to be a
- * point at which it stops asking.
+ * shows on a straight edge across a 4K frame.
  */
 const LEVEL_WITHIN_DEGREES = 0.3
 

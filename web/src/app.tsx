@@ -169,7 +169,12 @@ export function App() {
               canvas and a copy of every frame for two straight lines. */}
           <FramingGuides thirds={view.thirds} eyeLine={view.eyeLine} />
           {view.level ? (
-            <LevelOverlay mount={state?.mount} mirrored={view.mirror} recording={recording} />
+            <LevelOverlay
+              mount={state?.mount}
+              mirrored={view.mirror}
+              recording={recording}
+              previewProducing={state?.device.previewProducing !== false}
+            />
           ) : null}
           {/*
             #116: the phone's screen is off, so CameraX's `Preview` has no
