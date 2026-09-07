@@ -153,6 +153,7 @@ Discovery per PRD §6.8: QR code plus the `http://<ip>:<port>` address.
 - [ ] The open-LAN consequence is stated in plain words on this sheet: "Anyone on this network can monitor and control the camera. Turn the server off when you are done." (v1 security position, PRD §6.8.)
 - [ ] It is drawn as an **orange box with an icon, deliberately at the loud end** (decision 2026-09-04, Davide: people should notice). This is the one sanctioned use of orange outside `State.warnings`, and it obeys UI-5's shape rule — orange is always a bordered block with an icon, never a tint on a value. When the pairing check of PRD §6.11 lands, this box is what it replaces.
 - [ ] "Recording keeps running if the laptop drops off Wi-Fi" is stated where the user first connects, not only in documentation.
+- [ ] With no local network the sheet says the remote is off and how to turn it on ("Join this phone to Wi-Fi, or turn on its hotspot"), and names mobile data as not being one. The server is not listening in that state ([ADR-0026](adr/0026-serve-only-on-a-local-network.md)), so the orange box, the "recording keeps running" promise and the off-switch sentence — all three of which describe a running server — are not shown.
 
 ---
 **UI-8 — Lens and capability report**

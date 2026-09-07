@@ -39,6 +39,10 @@ import com.scenaristo.camera.theme.Tokens
  *
  * The QR code PRD 6.8 also asks for is **not here yet** — it needs an encoder,
  * and the address is typable in the meantime.
+ *
+ * With no local network there is no [url], and under ADR-0026 that also means
+ * there is no server: the sheet then says so and says what to do about it,
+ * rather than showing an address-shaped blank.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,16 +60,21 @@ fun ConnectSheet(url: String?, remotes: Int, onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                "Open this on your laptop",
+                if (url == null) "No local network" else "Open this on your laptop",
                 color = Tokens.Text,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
             )
 
             // UI-7: monospace, at least 17 px, and copyable.
+            //
+            // ADR-0026: with no local network there is no address because there
+            // is no server -- the port is shut, not merely unreachable. The
+            // sheet says which, and what to do about it, because "no network" on
+            // a phone showing four bars of mobile data reads as a bug.
             Text(
-                text = url ?: "No network",
-                color = Tokens.Text,
+                text = url ?: "Remote control is off",
+                color = if (url == null) Tokens.Dim else Tokens.Text,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 20.sp,
                 modifier = Modifier
@@ -73,7 +82,17 @@ fun ConnectSheet(url: String?, remotes: Int, onDismiss: () -> Unit) {
                     .clickable { url?.let { copy(context, it) } }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             )
-            Text("Tap the address to copy it.", color = Tokens.Dimmer, fontSize = 11.sp)
+            Text(
+                text = if (url == null) {
+                    "Join this phone to Wi-Fi, or turn on its hotspot, and the " +
+                        "address appears here. Mobile data alone is not a local " +
+                        "network, and the camera will not answer on it."
+                } else {
+                    "Tap the address to copy it."
+                },
+                color = Tokens.Dimmer,
+                fontSize = 11.sp,
+            )
 
             // UI-12 fixes this wording: remotes, never viewers and never clients.
             Text(
@@ -86,40 +105,47 @@ fun ConnectSheet(url: String?, remotes: Int, onDismiss: () -> Unit) {
                 fontSize = 13.sp,
             )
 
-            Row(
-                modifier = Modifier
-                    .background(Tokens.Ground, RoundedCornerShape(8.dp))
-                    .border(1.dp, Tokens.Orange, RoundedCornerShape(8.dp))
-                    .padding(14.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Text("⚠", color = Tokens.Orange, fontSize = 14.sp)
-                Spacer(Modifier.width(10.dp))
+            // The consequence, the promise and the off switch all describe a
+            // running server, so they are shown only when there is one
+            // (ADR-0026). Stating that anyone on this network can control the
+            // camera, on a phone that is on no network and answering nobody,
+            // would be the sheet's one false sentence.
+            if (url != null) {
+                Row(
+                    modifier = Modifier
+                        .background(Tokens.Ground, RoundedCornerShape(8.dp))
+                        .border(1.dp, Tokens.Orange, RoundedCornerShape(8.dp))
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text("⚠", color = Tokens.Orange, fontSize = 14.sp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Anyone on this network can monitor and control the camera. " +
+                            "Turn the server off when you are done.",
+                        color = Tokens.Text,
+                        fontSize = 12.sp,
+                    )
+                }
+
                 Text(
-                    "Anyone on this network can monitor and control the camera. " +
-                        "Turn the server off when you are done.",
-                    color = Tokens.Text,
+                    "Recording keeps running if the laptop drops off Wi-Fi.",
+                    color = Tokens.Dim,
+                    fontSize = 12.sp,
+                )
+
+                // ADR-0019: the sentence above promises an off switch, so it says
+                // where it is. The switch itself is in the notification, because
+                // that is the one place reachable once the user has left the app --
+                // which is also when they are most likely to want it.
+                Text(
+                    "The server stops on its own when you leave the app, unless a " +
+                        "recording or a remote is still using it. Stop it now from " +
+                        "the Scenaristo Camera notification.",
+                    color = Tokens.Dim,
                     fontSize = 12.sp,
                 )
             }
-
-            Text(
-                "Recording keeps running if the laptop drops off Wi-Fi.",
-                color = Tokens.Dim,
-                fontSize = 12.sp,
-            )
-
-            // ADR-0019: the sentence above promises an off switch, so it says
-            // where it is. The switch itself is in the notification, because
-            // that is the one place reachable once the user has left the app --
-            // which is also when they are most likely to want it.
-            Text(
-                "The server stops on its own when you leave the app, unless a " +
-                    "recording or a remote is still using it. Stop it now from " +
-                    "the Scenaristo Camera notification.",
-                color = Tokens.Dim,
-                fontSize = 12.sp,
-            )
         }
     }
 }

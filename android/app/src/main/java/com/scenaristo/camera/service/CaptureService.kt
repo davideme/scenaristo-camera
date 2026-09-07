@@ -68,7 +68,7 @@ import com.scenaristo.camera.domain.protocol.Session
 import com.scenaristo.camera.domain.protocol.ThermalState
 import com.scenaristo.camera.domain.protocol.State as ProtocolState
 import com.scenaristo.camera.server.ControlServer
-import com.scenaristo.camera.server.LocalAddress
+import com.scenaristo.camera.server.Lan
 import com.scenaristo.camera.server.PreviewFrames
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -162,6 +162,9 @@ class CaptureService : LifecycleService() {
     private lateinit var settings: Settings
     private lateinit var session: Session
     private lateinit var server: ControlServer
+
+    /** Whether there is a local network to serve on, asked on the tick (ADR-0026). */
+    private lateinit var lan: Lan
 
     private var recording: Recording? = null
 
@@ -353,8 +356,10 @@ class CaptureService : LifecycleService() {
         // already there. If nothing turns out to want it, the standby timer
         // takes it away a few seconds later.
         lifecycleScope.launch { cameraLock.withLock { bindCamera() } }
-        server.start()
-        _url.value = LocalAddress.url()
+        lan = Lan(this)
+        // ADR-0026: not `server.start()`. The port opens here only if there is a
+        // local network to open it on, and closes again the moment there is not.
+        reconcileServer()
 
         // The state document is only useful if it is true, so the phone's own
         // readings go in on a tick rather than being left as placeholders.
@@ -480,6 +485,44 @@ class CaptureService : LifecycleService() {
             Log.i(STANDBY_TAG, "nothing is watching; releasing in ${STANDBY_GRACE_MS}ms")
             scheduleStandby()
         }
+    }
+
+    /**
+     * Opens or closes the port, following the phone onto and off a local network
+     * (ADR-0026).
+     *
+     * The remote is a laptop in the same room, so the server has no business
+     * listening when there is no room to be in. ADR-0006's per-request rule
+     * cannot decide this on its own: it admits a peer for the *shape* of its
+     * address, and a carrier that assigns RFC 1918 addresses to its subscribers
+     * -- several do -- gives every one of them a shape the guard admits. The
+     * port not being open is the only check that does not depend on the peer.
+     *
+     * Called on the tick rather than from a `NetworkCallback`, because no
+     * callback fires for the phone's own hotspot coming up: it is not a platform
+     * `Network` (ADR-0006 found the same thing about naming it). A second of
+     * latency on a Wi-Fi drop is the price, and one mechanism that is right about
+     * every transition beats two that each cover part of it.
+     *
+     * Stopping drops every attached remote. That is not a loss to avoid -- when
+     * the network they arrived over has gone, so have they -- and their counts
+     * falling to zero is what lets ADR-0025 put the camera into standby and
+     * ADR-0019 stop the service.
+     */
+    private fun reconcileServer() {
+        val url = lan.url()
+        if (url != null && !server.listening) {
+            Log.i(LAN_TAG, "local network at $url; serving · ${lan.describe()}")
+            server.start()
+        } else if (url == null && server.listening) {
+            Log.i(LAN_TAG, "no local network; the remote is off until there is one · ${lan.describe()}")
+            server.stop()
+        }
+        // Set after the start/stop rather than before, so the address on the
+        // phone's screen and in the notification is never one nothing is
+        // listening on. It is also how the URL follows a change of network,
+        // which ADR-0006 asked for and nothing did.
+        _url.value = url
     }
 
     /**
@@ -979,6 +1022,9 @@ class CaptureService : LifecycleService() {
             // the control socket. The preview and the phone's own UI report
             // themselves the moment they change; this covers everything else.
             reconcileCamera()
+            // ADR-0026: and the tick is also what notices the phone joining or
+            // leaving a local network, for the reason reconcileServer gives.
+            reconcileServer()
             updateNotification(describe())
             delay(1_000)
         }
@@ -1401,7 +1447,10 @@ class CaptureService : LifecycleService() {
             ?.let { (System.currentTimeMillis() - it) / 1000 }
             ?.let { "%d:%02d".format(it / 60, it % 60) }
         val clients = if (state.clients > 0) " · ${state.clients} watching" else ""
-        val address = _url.value?.let { " · $it" } ?: ""
+        // ADR-0026: with no local network there is no address, and no server
+        // either. The notification is the only surface left once the user has
+        // walked away from the phone, so it says which of the two it is.
+        val address = _url.value?.let { " · $it" } ?: " · no local network"
         return when {
             elapsed != null -> "Recording $elapsed$clients"
             // ADR-0025: "Asleep" rather than "Ready" because the difference is
@@ -1617,6 +1666,9 @@ class CaptureService : LifecycleService() {
         private const val ZOOM_TAG = "Framing"
 
         private const val PREVIEW_TAG = "PreviewQuality"
+
+        /** ADR-0026: joining and leaving a local network, which opens and closes the port. */
+        private const val LAN_TAG = "Lan"
 
         /** #20's sweep, startable over adb so the phone need not be unlocked. */
         const val ACTION_LENS_SWEEP = "com.scenaristo.camera.LENS_SWEEP"
