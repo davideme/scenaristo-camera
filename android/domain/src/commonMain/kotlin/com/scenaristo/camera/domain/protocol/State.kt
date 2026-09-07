@@ -362,6 +362,25 @@ data class DeviceStatus(
      * because "14.2 GB" does not tell a creator whether they can finish the take.
      */
     val storageMinutesRemaining: Int,
+    /**
+     * Whether preview frames are actually being produced (PRD 6.8; #116).
+     *
+     * False in one situation that looks like a fault and is not: **the phone's
+     * screen is off.** The preview stream hangs off CameraX's `Preview` use
+     * case, whose surface belongs to the phone's viewfinder — when the activity
+     * stops there is no surface, so no frames, so nothing for the ADR-0018 tap
+     * to tap. Recording is entirely unaffected.
+     *
+     * Without this the browser cannot tell that case apart from a dark room: the
+     * page still loads, the state document still updates, the timer still runs,
+     * and only the picture is missing. Decision by Davide, 2026-09-07 — the
+     * behaviour is accepted, and the interface owes the user an explanation
+     * rather than a black rectangle.
+     *
+     * Defaulted false, which is the safe way round: it says "no preview" before
+     * it knows rather than promising one that never arrives.
+     */
+    val previewProducing: Boolean = false,
 )
 
 /**

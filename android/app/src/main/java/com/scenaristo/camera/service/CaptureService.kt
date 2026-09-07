@@ -216,6 +216,16 @@ class CaptureService : LifecycleService() {
     @Volatile
     private var uiVisible = false
 
+    /**
+     * Frames delivered by the preview tap, for #116's "is there a preview at
+     * all" question. Written on the GL thread, read on the status tick.
+     */
+    @Volatile
+    private var tapFrames: Long = 0
+
+    /** [tapFrames] as of the previous status tick, so the tick can see movement. */
+    private var lastTapFrames: Long = 0
+
     /** Whether the camera is bound right now (ADR-0025). */
     private var cameraBound = false
 
@@ -592,6 +602,12 @@ class CaptureService : LifecycleService() {
      * this was an `OutOfMemoryError`.
      */
     private fun onTapFrame(image: android.media.Image) {
+        // #116: counted here rather than at the encoder, because the encoder is
+        // gated on whether anyone is watching (ADR-0025) and this question is
+        // about whether the *camera* is producing at all. The two differ in
+        // exactly the case this exists for: screen off, browser attached,
+        // encoder willing, no frames arriving.
+        tapFrames++
         try {
             exposure?.onFrame(image, System.currentTimeMillis())
         } catch (failure: Throwable) {
@@ -882,6 +898,7 @@ class CaptureService : LifecycleService() {
         while (true) {
             val free = File(getExternalFilesDir(null)?.path ?: filesDir.path).let { StatFs(it.path) }
                 .let { it.availableBlocksLong * it.blockSizeLong }
+            val framesNow = tapFrames
             session.update(System.currentTimeMillis()) { state ->
                 state.copy(
                     device = DeviceStatus(
@@ -889,9 +906,14 @@ class CaptureService : LifecycleService() {
                         charging = battery.isCharging,
                         thermal = thermalOf(power.currentThermalStatus),
                         storageMinutesRemaining = (free / BYTES_PER_MINUTE).toInt(),
+                        // #116: frames moved since the last tick, which is a
+                        // second -- far longer than the ~33 ms between them, so
+                        // a true reading means the camera really is producing.
+                        previewProducing = framesNow != lastTapFrames,
                     ),
                 )
             }
+            lastTapFrames = framesNow
             // #97: the histogram changes on every metered frame, where the rest
             // of the exposure state usually does not. Sampled on this tick
             // rather than published from the tap, so a 64-element array does not
