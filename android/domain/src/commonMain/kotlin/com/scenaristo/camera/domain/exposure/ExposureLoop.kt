@@ -23,6 +23,11 @@ import kotlin.math.roundToInt
  * step that runs over the tapped preview frames (ADR-0005, sourced as ADR-0018
  * now requires), and all that reaches here is its single output number.
  *
+ * Two modes sit on top of that. ADR-0022 gives it a speed limit that depends on
+ * whether a take is running, and ADR-0023 lets the user ask for no movement at
+ * all during one — [ExposureState.locked], where [onFrame] returns without
+ * metering and the caller is expected not to have metered either.
+ *
  * What it deliberately does not do is slow the shutter in the dark or raise it
  * past the one flicker-safe rung in the light. Those are the two failures the
  * product exists to prevent (PRD 6.1, 6.3), so they are structurally impossible
@@ -39,8 +44,8 @@ class ExposureLoop(
      * PRD 6.3's "lowest possible" as a starting position rather than a target to
      * approach from above, so the first frames of a take are never the noisy ones.
      */
-    fun start(grid: GridFrequency): ExposureState =
-        ExposureState(grid = grid, iso = iso.min)
+    fun start(grid: GridFrequency, lockWhileRecording: Boolean = false): ExposureState =
+        ExposureState(grid = grid, iso = iso.min, lockWhileRecording = lockWhileRecording)
 
     /**
      * Fold one metered frame in and decide what to do about it.
@@ -55,6 +60,11 @@ class ExposureLoop(
      * (ADR-0005 point 2).
      */
     fun onFrame(state: ExposureState, luma: Double, nowMs: Long): ExposureState {
+        // ADR-0023: a locked take meters nothing. The caller is expected not to
+        // have metered either -- that is where the cost actually is -- but the
+        // guard lives here too so the loop is correct on its own terms and a
+        // replayed trace cannot move an exposure the product promised was still.
+        if (state.locked) return state
         if (state.awaitingEcho) return state
 
         val sample = errorEvOf(luma)
@@ -128,9 +138,44 @@ class ExposureLoop(
      * Fast while lighting, damped while recording, and the split is the point:
      * a creator moving a lamp needs to see the effect now, and a creator
      * recording needs the exposure not to visibly move (PRD 6.1's locked look).
+     *
+     * When [ExposureState.lockWhileRecording] is set this is also the moment the
+     * loop stops entirely and, on the way out, the moment it starts again
+     * (ADR-0023).
      */
     fun onRecordingChanged(state: ExposureState, recording: Boolean): ExposureState =
-        if (recording == state.recording) state else state.copy(recording = recording)
+        if (recording == state.recording) state else resumed(state, state.copy(recording = recording))
+
+    /**
+     * The user chose whether exposure tracks the light during a take or is held
+     * where it was at record start (ADR-0023).
+     *
+     * Nothing is pushed and nothing moves: the mode says what the loop may do on
+     * the *next* frame. `Session` refuses a settings change while recording, so
+     * in practice this only ever arrives between takes -- but the resume rule is
+     * applied anyway rather than assuming it, because a loop that is only correct
+     * because of a guard somewhere else is a loop that breaks when that guard moves.
+     */
+    fun onExposureLockChanged(state: ExposureState, lockWhileRecording: Boolean): ExposureState =
+        if (lockWhileRecording == state.lockWhileRecording) {
+            state
+        } else {
+            resumed(state, state.copy(lockWhileRecording = lockWhileRecording))
+        }
+
+    /**
+     * Coming out of a locked take, forget the damped error.
+     *
+     * It was measured before the take started and a whole take has passed since;
+     * the room may have been relit, the subject may have moved, and averaging the
+     * next frame against a minutes-old error would crawl to the right answer
+     * through a visibly wrong one. Clearing [ExposureState.acquired] gives the
+     * first frame afterwards the same exemption a cold start gets, for the same
+     * reason: there is nothing on screen worth protecting from a snap, and PRD
+     * 6.3's no-oscillation promise is scoped to recording.
+     */
+    private fun resumed(before: ExposureState, after: ExposureState): ExposureState =
+        if (before.locked && !after.locked) after.copy(acquired = false) else after
 
     /**
      * The user locked or released the shutter (PRD 6.3).
@@ -461,7 +506,23 @@ data class ExposureState(
      * in a test with the mode switching part-way through.
      */
     val recording: Boolean = false,
+    /**
+     * Whether the user asked for exposure to be held for the take (ADR-0023).
+     *
+     * A stored preference rather than a live one: it is read at record start and
+     * cannot change during a take, because `Session` refuses settings changes
+     * while recording.
+     */
+    val lockWhileRecording: Boolean = false,
 ) {
+
+    /**
+     * True when the filter must do nothing at all (ADR-0023).
+     *
+     * Both halves are needed: the preference alone is a stored intention, and
+     * recording alone is ADR-0022's damped mode, which still meters.
+     */
+    val locked: Boolean get() = recording && lockWhileRecording
     /**
      * The shutter in use, as reciprocal seconds. Never longer than the grid's
      * default rung, which is what keeps 30 fps constant in the dark (PRD 6.1).

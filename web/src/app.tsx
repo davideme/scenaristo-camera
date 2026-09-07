@@ -43,6 +43,13 @@ export function App() {
     setRefused(await (connection?.send('settings.set', { grid }, true) ?? Promise.resolve(null)))
   }
 
+  async function setExposureLock(lockExposureWhileRecording: boolean) {
+    setRefused(
+      await (connection?.send('settings.set', { lockExposureWhileRecording }, true) ??
+        Promise.resolve(null)),
+    )
+  }
+
   return (
     <main>
       <header>
@@ -88,6 +95,26 @@ export function App() {
             ))}
           </fieldset>
 
+          <fieldset disabled={recording}>
+            {/* ADR-0023. Worded as what happens to the take rather than as what
+                the metering loop does: "locked" is a promise about the file, and
+                nobody framing themselves from a laptop should have to know there
+                is a control loop to turn off. */}
+            <legend>Exposure during the take</legend>
+            <button
+              class={state.settings.lockExposureWhileRecording ? '' : 'selected'}
+              onClick={() => setExposureLock(false)}
+            >
+              Track the light
+            </button>
+            <button
+              class={state.settings.lockExposureWhileRecording ? 'selected' : ''}
+              onClick={() => setExposureLock(true)}
+            >
+              Lock at record start
+            </button>
+          </fieldset>
+
           <dl class="readout">
             <dt>Shutter</dt>
             <dd>1/{state.settings.shutterHz} s</dd>
@@ -95,6 +122,14 @@ export function App() {
             <dd>{state.settings.iso}</dd>
             <dt>White balance</dt>
             <dd>{state.settings.whiteBalanceKelvin} K</dd>
+            <dt>Exposure</dt>
+            <dd>
+              {state.settings.lockExposureWhileRecording
+                ? recording
+                  ? 'locked for this take'
+                  : 'locks at record start'
+                : 'tracking'}
+            </dd>
             <dt>Battery</dt>
             <dd>
               {state.device.batteryPercent}%{state.device.charging ? ' charging' : ''}

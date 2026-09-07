@@ -48,6 +48,7 @@ export interface CaptureSettings {
   whiteBalanceKelvin: number;
   lensId: string;
   saveToGallery?: boolean;
+  lockExposureWhileRecording?: boolean;
   focus?: Focus;
 }
 
@@ -102,6 +103,7 @@ export interface SettingsPatch {
   whiteBalanceKelvin?: number | null;
   lensId?: string | null;
   saveToGallery?: boolean | null;
+  lockExposureWhileRecording?: boolean | null;
   shutterLock?: number | null;
 }
 

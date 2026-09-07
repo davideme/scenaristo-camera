@@ -64,6 +64,7 @@ fun CameraScreen(
     onToggleRecording: () -> Unit,
     onConnect: () -> Unit,
     onLight: () -> Unit,
+    onToggleExposureLock: () -> Unit,
     lensMm: Int?,
     guidanceDismissed: Boolean,
     onDismissGuidance: () -> Unit,
@@ -113,9 +114,11 @@ fun CameraScreen(
                 recording = recording,
                 audio = state.audio,
                 kelvin = state.settings.whiteBalanceKelvin,
+                exposureLocked = state.settings.lockExposureWhileRecording,
                 onToggleRecording = onToggleRecording,
                 onConnect = onConnect,
                 onLight = onLight,
+                onToggleExposureLock = onToggleExposureLock,
             )
         }
     }
@@ -306,9 +309,11 @@ private fun BottomStrip(
     recording: Boolean,
     audio: AudioState,
     kelvin: Int,
+    exposureLocked: Boolean,
     onToggleRecording: () -> Unit,
     onConnect: () -> Unit,
     onLight: () -> Unit,
+    onToggleExposureLock: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 28.dp),
@@ -324,6 +329,17 @@ private fun BottomStrip(
             value = "$kelvin K",
             enabled = !recording,
             onClick = onLight,
+        )
+        Spacer(Modifier.width(20.dp))
+        // UI-1: the control carries its own value, so nothing in the status strip
+        // repeats it. ADR-0023's two words are about the take rather than about
+        // the loop -- "Track" and "Lock" are what happens to the file, and the
+        // metering loop is not something a creator should have to know exists.
+        Control(
+            label = "Exposure",
+            value = if (exposureLocked) "Lock" else "Track",
+            enabled = !recording,
+            onClick = onToggleExposureLock,
         )
         Spacer(Modifier.width(20.dp))
         // UI-6: every setting is locked for the take, and a locked control says
