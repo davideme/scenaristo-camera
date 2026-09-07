@@ -84,4 +84,19 @@ With WebCodecs excluded and MSE and WebRTC both requiring encoder and muxer work
 
 ## Action Items
 1. [ ] Phase 0: render the stream in Safari on an iPhone and an iPad, and in Chrome, Firefox, and Edge on a laptop; record results here.
-2. [ ] Phase 0: measure glass-to-glass latency with a clapper and the phone temperature delta with preview on versus off during a 10-minute 4K30 recording.
+2. [x] Phase 0: measure glass-to-glass latency (#26). **Median 170 ms on the reference device**, well inside the 500 ms this ADR targets. Method and caveats below. The thermal half of this item — the temperature delta with preview on versus off during a 10-minute 4K30 recording — is still open.
+
+   Measured 2026-09-07, Pixel 10 to a MacBook over home Wi-Fi, with the phone pointed at a millisecond wall clock (`time.ms`, self-reported calibration ±24 ms) displayed on the same laptop that read the stream. Each reading is the instant a frame finished arriving minus the clock value visible inside it.
+
+   | | ms |
+   |---|---|
+   | min | 161 |
+   | median | **170** |
+   | max | 195 |
+
+   n = 4. Two things this number is not, and both make it optimistic rather than pessimistic to quote as-is:
+
+   - **It stops at the socket, not at the screen.** It covers sensor, ISP, the ADR-0018 tap, JPEG encode and Wi-Fi, but not the browser's own decode and paint — the last hop of a true glass-to-glass figure. Add roughly one display frame for that.
+   - **The millisecond digits blur across the exposure.** At the 1/50 s shutter PRD 6.2 fixes, the clock advances ~20 ms while the shutter is open. The older edge was read, which overstates the latency slightly.
+
+   Taken on a build including the deadline pacing of #109, which cut the frame interval from 84 ms to 66 ms; the figure would be higher before it. Worth re-measuring if the transport changes again.

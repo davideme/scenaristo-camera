@@ -196,7 +196,7 @@ The phone runs an HTTP + WebSocket server on the local network. Any modern brows
 - Plain HTTP in both versions (self-signed TLS on LAN causes browser warnings and helps nobody). Consequence: the page is not a secure context, so browser APIs that require one (WebCodecs among them) are unavailable to the web UI. The interface must never be reachable off-LAN: the server rejects any request whose remote address is not a private LAN address and any request whose `Host` header is not an IP literal, which defends against DNS rebinding from a website on the same LAN; cellular interfaces receive no inbound connections. (ADR-0006)
 
 **Preview**
-- Downscaled preview, default 960 × 540 at up to 15 fps, delivered as an MJPEG HTTP stream that the browser renders natively (ADR-0008). Quality and frame rate degrade automatically under bandwidth pressure. Target glass-to-glass latency < 500 ms on a healthy Wi-Fi network.
+- Downscaled preview, default 960 × 540 at up to 15 fps, delivered as an MJPEG HTTP stream that the browser renders natively (ADR-0008). Quality and frame rate degrade automatically under bandwidth pressure. Target glass-to-glass latency < 500 ms on a healthy Wi-Fi network. **Measured at a median of 170 ms** on the reference device (2026-09-07, #26); the method and what that number excludes are in ADR-0008 action item 2.
 - Preview is separate from the recording pipeline: recording is always full resolution and frame rate regardless of preview quality or whether a browser is connected.
 - Preview shows framing overlays (rule-of-thirds, eye-line guide) toggleable from the web UI.
 - P2: WebRTC transport for lower latency and better compression.
