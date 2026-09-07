@@ -71,7 +71,7 @@ import com.scenaristo.camera.domain.protocol.Session
 import com.scenaristo.camera.domain.protocol.State as ProtocolState
 import com.scenaristo.camera.domain.protocol.ThermalState
 import com.scenaristo.camera.server.ControlServer
-import com.scenaristo.camera.server.LocalAddress
+import com.scenaristo.camera.server.Lan
 import com.scenaristo.camera.server.PreviewFrames
 import com.scenaristo.camera.capture.SessionSupportProbe
 import com.scenaristo.camera.capture.markdown
@@ -240,8 +240,13 @@ private fun EchoRunner(shutter: Shutter, onShutterChange: (Shutter) -> Unit) {
         )
     }
     DisposableEffect(Unit) {
-        server.start()
-        serverUrl = LocalAddress.url()
+        // ADR-0026: no local network, no port. The spike screen follows the same
+        // rule as the service rather than being an exception to it -- an
+        // instrument that opens a socket the product would not is an instrument
+        // measuring something else. It is decided once here, because a spike run
+        // does not change network mid-measurement.
+        serverUrl = Lan(context).url()
+        if (serverUrl != null) server.start()
         onDispose { server.stop() }
     }
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
@@ -396,7 +401,7 @@ private fun EchoRunner(shutter: Shutter, onShutterChange: (Shutter) -> Unit) {
             fontFamily = FontFamily.Monospace,
         )
         Text(
-            "remote: ${serverUrl ?: "no network"}  ·  ${jpeg.encoded} jpeg",
+            "remote: ${serverUrl ?: "off, no local network"}  ·  ${jpeg.encoded} jpeg",
             style = MaterialTheme.typography.bodyMedium,
             fontFamily = FontFamily.Monospace,
         )

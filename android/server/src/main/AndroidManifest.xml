@@ -1,3 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- ADR-0026: the server listens only while the phone is on a local network,
+         and only ConnectivityManager can say whether an interface is a local one
+         or a carrier handing out RFC 1918 addresses. Read-only, and asked of the
+         phone's own interfaces; it is not a location permission. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>

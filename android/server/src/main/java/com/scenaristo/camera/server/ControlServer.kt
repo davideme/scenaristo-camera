@@ -52,6 +52,11 @@ fun interface PreviewFrames {
  * would mean restarting the server, and dropping every WebSocket, on each
  * Wi-Fi-to-hotspot transition (ADR-0006). The admission rule itself lives in
  * `:domain` so iOS applies the identical one in Phase 4.
+ *
+ * Whether the port opens at all is not this class's decision: ADR-0026 has the
+ * caller hold it closed unless the phone is on a local network, which is the one
+ * thing the per-request rule cannot check — an address is admitted for its shape,
+ * and a carrier's RFC 1918 subscriber address has the same shape as a laptop's.
  */
 class ControlServer(
     private val session: Session,
@@ -108,7 +113,15 @@ class ControlServer(
      */
     private class Client(val outbox: Channel<String> = Channel(Channel.UNLIMITED))
 
+    /**
+     * Opens the port, if it is not open already.
+     *
+     * Idempotent because ADR-0026 has the caller start and stop this as the
+     * phone joins and leaves a local network, and "is it running" is a question
+     * only this class can answer without racing itself.
+     */
     fun start() {
+        if (engine != null) return
         engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
             install(WebSockets) {
                 // RFC 6455 pings, which browsers answer with no JavaScript. On
@@ -135,10 +148,21 @@ class ControlServer(
         }.also { it.start(wait = false) }
     }
 
+    /**
+     * Closes the port and drops every client, if it is open.
+     *
+     * The stream and socket handlers' `finally` blocks run as the engine winds
+     * down, so the viewer and client counts fall to zero on their own -- which
+     * matters, because those counts are what ADR-0025 keeps the camera awake for
+     * and what ADR-0019 keeps the service alive for.
+     */
     fun stop() {
         engine?.stop(gracePeriodMillis = 200, timeoutMillis = 1_000)
         engine = null
     }
+
+    /** Whether the port is open (ADR-0026). */
+    val listening: Boolean get() = engine != null
 
     /**
      * Both checks from ADR-0006, applied to every request rather than at bind
