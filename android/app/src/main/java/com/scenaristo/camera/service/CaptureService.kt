@@ -55,6 +55,7 @@ import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.exposure.shutterLadder
 import com.scenaristo.camera.domain.lens.framingsFor
 import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
+import com.scenaristo.camera.domain.whitebalance.settingFor
 import com.scenaristo.camera.domain.protocol.CaptureSettings
 import com.scenaristo.camera.domain.protocol.Command
 import com.scenaristo.camera.domain.protocol.CommandName
@@ -664,6 +665,25 @@ class CaptureService : LifecycleService() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    /**
+     * Publishes which platform mode is standing in for the chosen preset, or
+     * null when the lens applies it exactly (PRD 6.4, ADR-0011).
+     *
+     * Keyed on what the app **does**, not on what the lens *could* do, and the
+     * difference is the whole point of the criterion. The reference device
+     * reports `MANUAL_POST_PROCESSING`, so asking the lens returns "exact" --
+     * while `ManualControls.awbModeFor` is in fact substituting a platform AWB
+     * mode, because the gains path needs the device-calibrated Kelvin curve of
+     * #24. Reporting "exact" there would be precisely the dishonesty PRD 6.4
+     * asks the app to avoid, in the one case it was written for.
+     */
+    private fun publishWhiteBalanceApproximation(kelvin: Int) {
+        val setting = settingFor(kelvin, hasManualGains = APPLIES_COLOUR_GAINS)
+        session.update(System.currentTimeMillis()) {
+            it.copy(settings = it.settings.copy(whiteBalanceApproximatedBy = setting.approximatedBy))
+        }
+    }
+
     private suspend fun bindCamera() {
         camera.preview.setSurfaceProvider { _surfaceRequest.value = it }
         val provider = ProcessCameraProvider.awaitInstance(this)
@@ -675,6 +695,7 @@ class CaptureService : LifecycleService() {
             )
             cameraBound = true
             val lens = camera.capabilities(bound.cameraInfo)
+            publishWhiteBalanceApproximation(session.state.settings.whiteBalanceKelvin)
             backCameraId = lens.cameraId
             camera.logicalCameraId = lens.cameraId
             _lensMm.value = ManualControls.equivalentFocalLength(bound.cameraInfo)
@@ -919,6 +940,7 @@ class CaptureService : LifecycleService() {
                 // PRD 6.2 and #2: an override that does not survive a relaunch is
                 // not an override, it is a suggestion the app forgets.
                 settings.whiteBalanceKelvin = kelvin
+                publishWhiteBalanceApproximation(kelvin)
             }
             val grid = session.state.settings.grid
             if (grid != appliedGrid) {
@@ -1530,6 +1552,23 @@ class CaptureService : LifecycleService() {
          * to fire slightly before it to be a warning rather than a post-mortem.
          */
         private const val CLIPPING_LEVEL = 0.99
+        /**
+         * Whether the app applies `COLOR_CORRECTION_GAINS` rather than a locked
+         * platform AWB mode (PRD 6.4, ADR-0011).
+         *
+         * **False, and not a lens capability.** ADR-0011 says a lens with
+         * `MANUAL_POST_PROCESSING` should get gains computed from Kelvin, and
+         * `ManualControls.awbModeFor` says in as many words that it does not do
+         * that yet: the device-calibrated curve is #24, deferred to Phase 3 with
+         * the grey card it needs. Until then *every* lens takes the preset path,
+         * whatever its characteristics advertise.
+         *
+         * Flip this to the lens's `hasManualPostProcessing` when #24 lands and
+         * the gains path exists -- and not before, or the remote will claim an
+         * exactness the sensor is not being given.
+         */
+        private const val APPLIES_COLOUR_GAINS = false
+
         private const val SWEEP_TAG = "LensSweep"
 
         private const val ZOOM_TAG = "Framing"

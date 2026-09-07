@@ -1,6 +1,7 @@
 package com.scenaristo.camera.domain.whitebalance
 
 import kotlin.math.abs
+import kotlinx.serialization.Serializable
 
 /**
  * PRD 6.4's white balance, as two short lists instead of a colour picker.
@@ -55,6 +56,7 @@ const val TINT: Int = 0
  * mode actually produces on the reference device is #24's grey-card measurement,
  * which is Phase 3.
  */
+@Serializable
 enum class AwbApproximation(val nominalKelvin: Int) {
     INCANDESCENT(3000),
     FLUORESCENT(4000),
