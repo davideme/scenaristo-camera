@@ -264,6 +264,18 @@ Requested by Davide on 2026-09-06: *"add T-Stops in the web interface"*. Issue #
 Measured on the reference device: the Pixel 10's main lens reports **24 mm equivalent at f/1.70**, which gives **T1.77**.
 
 ---
+**UI-20 — Framing guides**
+
+PRD §6.8: *"Preview shows framing overlays (rule-of-thirds, eye-line guide) toggleable from the web UI."* Issue #3.
+
+- [ ] Rule of thirds and the eye line are **two switches, not one**, in the same View panel as UI-19's mirror. They are used at different moments — thirds while placing the shot, the eye line while the speaker settles into the chair, when the other five lines are clutter over their face.
+- [ ] The eye line sits at the **upper** third, which is where a talking head's eyes belong, and is dashed so it stays tellable apart from the thirds line it lies exactly on top of.
+- [ ] Lines are thin, dimmed, and never bright enough to compete with the subject (goal 3).
+- [ ] Client-local, like UI-19 and for §8's stated reason.
+- [ ] Drawn as an overlay, not into the preview: the preview is an MJPEG `<img>` the browser paints itself (ADR-0008), and drawing into it would mean a canvas and a copy of every frame for two straight lines.
+- [ ] The overlay is not mirrored with the preview, and does not need to be — every line is symmetric about the centre, so a flip maps the set onto itself.
+
+---
 **UI-19 — Mirror the preview, per browser**
 
 Requested by Davide on 2026-09-06.

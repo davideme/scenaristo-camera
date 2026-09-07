@@ -10,6 +10,7 @@ import {
   WaveIcon,
 } from './icons'
 import type { GridFrequency, State } from './protocol'
+import type { ViewPrefs } from './viewprefs'
 import { SCENARIOS, presetFor, scenarioOf } from './whitebalance'
 
 /**
@@ -292,24 +293,35 @@ export function LensPanel({ state }: { state: State }) {
  * happened, and a second remote is unaffected.
  */
 export function ViewPanel({
-  mirror,
-  onMirror,
+  view,
+  onChange,
 }: {
-  mirror: boolean
-  onMirror: (mirror: boolean) => void
+  view: ViewPrefs
+  onChange: (view: ViewPrefs) => void
 }) {
+  const toggle = (key: keyof ViewPrefs, label: string) => (
+    <button
+      type="button"
+      class={view[key] ? 'choice selected' : 'choice'}
+      aria-pressed={view[key]}
+      onClick={() => onChange({ ...view, [key]: !view[key] })}
+    >
+      <span class="choice-name">{label}</span>
+      <span class="choice-value mono">{view[key] ? 'on' : 'off'}</span>
+    </button>
+  )
+
   return (
     <Panel title="View" icon={<MirrorIcon />}>
       <div class="choices">
-        <button
-          type="button"
-          class={mirror ? 'choice selected' : 'choice'}
-          aria-pressed={mirror}
-          onClick={() => onMirror(!mirror)}
-        >
-          <span class="choice-name">Mirror preview</span>
-          <span class="choice-value mono">{mirror ? 'on' : 'off'}</span>
-        </button>
+        {toggle('mirror', 'Mirror preview')}
+        {/* PRD 6.8: "Preview shows framing overlays (rule-of-thirds, eye-line
+            guide) toggleable from the web UI." Two switches and not one,
+            because they are used at different moments -- thirds while placing
+            the shot, the eye line while the speaker settles, when the other
+            five lines are clutter over their face. */}
+        {toggle('thirds', 'Rule of thirds')}
+        {toggle('eyeLine', 'Eye line')}
       </div>
       {/* Said plainly, and next to the switch. A mirror control that turned out
           to have flipped the take would be discovered in an edit, which is far
