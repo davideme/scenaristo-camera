@@ -1483,6 +1483,38 @@ class CaptureService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val result = super.onStartCommand(intent, flags, startId)
+
+        // Every start that is not the off switch re-enters the foreground,
+        // including a start that lands on a service instance which is still
+        // alive.
+        //
+        // `onCreate` is not enough, and the gap is the one a bound service
+        // opens. ACTION_STOP calls `stopForeground` and then `stopSelf`, but
+        // the activity is *bound*, so `stopSelf` does not destroy anything --
+        // the instance survives, no longer foreground. The next
+        // `startForegroundService` therefore skips `onCreate`, where the only
+        // other `startForeground` lives, and Android's contract is broken: the
+        // platform waits for a call that no code path makes, then kills the
+        // process with
+        // "Context.startForegroundService() did not then call
+        // Service.startForeground()".
+        //
+        // It is not a hang and it leaves no crash of ours in the log. What the
+        // user sees is the app disappearing, and -- because the process took
+        // the server with it -- a browser preview that goes black for no stated
+        // reason. Recorded from the reference device on 2026-09-07: an ANR
+        // three minutes after the off switch was used and the camera started
+        // again.
+        //
+        // `startForeground` is idempotent: on an already-foreground service it
+        // updates the notification and nothing else, which is why this can run
+        // unconditionally rather than tracking whether it is needed. Tracking
+        // it would be a second piece of state that can disagree with the
+        // platform, and the platform's answer is the only one that counts.
+        if (intent?.action != ACTION_STOP) {
+            startForeground(NOTIFICATION_ID, notification(describe()), foregroundTypes())
+        }
+
         if (intent?.action == ACTION_LENS_SWEEP) lifecycleScope.launch { runLensSweep() }
         // The user's own off switch (ADR-0019). UI-7's security copy promises
         // one -- "turn the server off when you are done" -- and an automatic
