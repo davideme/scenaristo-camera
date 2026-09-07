@@ -48,6 +48,11 @@ data class State(
      */
     val lenses: List<LensChoice> = emptyList(),
     /**
+     * How the phone is sitting on its mount (PRD 6.11). Defaulted, as above, and
+     * not measuring until the camera is bound and a take is not running.
+     */
+    val mount: MountAttitude = MountAttitude(),
+    /**
      * The phone's clock when this snapshot was built. Elapsed recording time is
      * derived from this rather than sent directly, so it stays right across a
      * reconnect and does not drift with the browser's clock (ADR-0007).
@@ -458,6 +463,57 @@ data class AudioState(
      * the first is how someone concludes their microphone is dead.
      */
     val metering: Boolean = false,
+)
+
+/**
+ * How the phone is sitting on its mount (PRD 6.11).
+ *
+ * The measurement behind the remote's level overlay. PRD 6.1 switches both
+ * stabilisers off because "phone is on a tripod", which makes a level, steady
+ * mount an assumption the product never checks; this is the check.
+ *
+ * Reported only. Nothing here is settable, and nothing here raises a warning
+ * chip: a tilt is a standing fact about the setup rather than something that
+ * just became true, which is the distinction UI-5 draws.
+ *
+ * The numbers are computed in [com.scenaristo.camera.domain.mount.MountFilter],
+ * quantised and deadbanded before they arrive here so a phone sitting still does
+ * not advance `rev` once a second (ADR-0024).
+ */
+@Serializable
+data class MountAttitude(
+    /**
+     * The horizon's tilt within the picture, degrees. Positive when the world's
+     * up leans towards the left of frame — that is, when the right of frame has
+     * dropped.
+     */
+    val rollDegrees: Double = 0.0,
+    /**
+     * Where the camera is aimed relative to horizontal, degrees, positive up.
+     *
+     * Reported and never judged: a camera aimed slightly up at a seated speaker
+     * is as often deliberate as not, and PRD 6.11 frames only roll as wrong.
+     */
+    val pitchDegrees: Double = 0.0,
+    /**
+     * False while the mount is moving. Meaningful only while [measuring].
+     *
+     * Its own field rather than a threshold on [rollDegrees], because a phone
+     * held perfectly still at 3° off level and a phone shaking at 0° are
+     * different problems with different fixes.
+     */
+    val steady: Boolean = true,
+    /**
+     * False when nothing is being measured rather than when the phone is level.
+     *
+     * The same distinction [AudioState.metering] and [ExposureReadout.metering]
+     * make, and it carries more weight here than in either: this measurement is
+     * deliberately switched off for the duration of a take (PRD 6.11, ADR-0023),
+     * so "not measuring" is the *normal* state while recording rather than a
+     * fault. It is also what a device with no accelerometer reports, and what is
+     * reported while the camera is released (ADR-0025).
+     */
+    val measuring: Boolean = false,
 )
 
 /**

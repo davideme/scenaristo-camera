@@ -246,6 +246,7 @@ The phone UI is intentionally minimal: preview, record button, the QR/URL panel,
 - "Auto once" white balance snap to nearest preset.
 - Face-size "too close" detector.
 - Stabilisation toggle.
+- **Mount level and steadiness** (added 2026-09-07, [ADR-0027](adr/0027-mount-level-from-the-accelerometer.md), UI-23). The phone reads its own accelerometer while a shot is being set up and the browser draws a horizon line over the preview, so a tripod can be levelled from the laptop instead of by eye. It is the affordance 6.1's stabilisation row assumes but does not provide: EIS and OIS are both off *because* the phone is on a tripod, which quietly makes a level, still mount the operator's problem. The reference Pixel 10 was measured 0.6° off level and aimed 5.2° up on its own mount, neither of which the app could previously say. Deliberately narrow, and each limit is a decision rather than an omission: **it stops for the duration of a take** and says so, because ADR-0023 keeps a recording quiet and a bumped tripod is not worth reopening that for; it raises **no warning chip**, since a tilt is a standing fact about the setup rather than something that just became true (UI-22's distinction); and it is a **browser surface only** — someone levelling a tripod is looking at the tripod, not at the phone's own screen. Pitch is reported beside it and never called wrong.
 - Manual audio gain; external mic level calibration; level meter at ≥ 10 Hz.
 - Crash-resilient recording files on Android (fragmented MP4), see 6.7.
 - Flicker detection to confirm grid frequency.

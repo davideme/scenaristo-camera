@@ -132,6 +132,13 @@ class ProtocolFixtureTest {
             LensAdvice.RECOMMENDED_FOR_TALKING_HEAD,
             adviceFor(state.lenses.first { it.zoomRatio == 5.0 }.equivalentFocalLengthMm),
         )
+        // PRD 6.11's mount level, and the reason it reads as nothing here: this
+        // fixture is a snapshot of a take in progress, and the accelerometer is
+        // deliberately not running during one (ADR-0023). `measuring = false`
+        // with a take running is the promise, in the golden file, where a change
+        // to it has to be argued for rather than merged.
+        assertFalse(state.mount.measuring)
+        assertEquals(0.0, state.mount.rollDegrees, absoluteTolerance = 1e-9)
         // PRD 6.7's naming, which UI-9's transport row shows next to the timecode.
         assertEquals("Scenaristo_2026-09-06_14-32-05", state.recording.fileName)
         assertTrue(

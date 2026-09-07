@@ -405,6 +405,10 @@ export function ViewPanel({
             five lines are clutter over their face. */}
         {toggle('thirds', 'Rule of thirds')}
         {toggle('eyeLine', 'Eye line')}
+        {/* PRD 6.11: a level aid for the mount PRD 6.1 assumes is there. It
+            reads the phone's own accelerometer, which only runs while a take is
+            not -- so the overlay says so rather than freezing (ADR-0023). */}
+        {toggle('level', 'Level')}
       </div>
       {/* Said plainly, and next to the switch. A mirror control that turned out
           to have flipped the take would be discovered in an edit, which is far

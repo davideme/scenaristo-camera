@@ -43,6 +43,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0024](0024-guard-settings-on-a-settings-revision.md) | A settings command guards on a settings revision, not the document revision, which the exposure loop moves 27 times a second | Proposed | 6.3, 6.8 |
 | [0025](0025-camera-standby-when-nothing-is-watching.md) | Run the camera only while something is watching: gate the preview encoder on an attached viewer, and release the camera when no recording, phone UI or browser needs it; the server stays up | Proposed | 6.8, 6.9, 8-Q4, 9 |
 | [0026](0026-serve-only-on-a-local-network.md) | Open the port only while the phone is on a local network, decided by transport rather than by address shape; supplements ADR-0006 | Proposed | 6.8 |
+| [0027](0027-mount-level-from-the-accelerometer.md) | Read the accelerometer to report mount level and steadiness, and only while a take is not running | Proposed | 6.1, 6.8, 6.11 |
 
 ## Challenges to positions stated in the PRD
 

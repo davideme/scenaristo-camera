@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import android.view.Display
+import android.view.Surface
 import android.os.StatFs
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.SurfaceRequest
@@ -48,8 +49,10 @@ import com.scenaristo.camera.capture.ExposureController
 import com.scenaristo.camera.capture.LensSweepRunner
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
+import com.scenaristo.camera.capture.MountSensor
 import com.scenaristo.camera.capture.PreviewJpegSource
 import com.scenaristo.camera.capture.PreviewTapProcessor
+import com.scenaristo.camera.domain.mount.ScreenRotation
 import com.scenaristo.camera.domain.exposure.ExposureState
 import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.exposure.shutterLadder
@@ -232,6 +235,16 @@ class CaptureService : LifecycleService() {
 
     /** Whether the camera is bound right now (ADR-0025). */
     private var cameraBound = false
+
+    /**
+     * The accelerometer behind PRD 6.11's level overlay (ADR-0027).
+     *
+     * Lazy because it asks for a system service, and the service's `Context` is
+     * not usable until `onCreate`. Owned here rather than by [camera] because it
+     * is not part of the capture session: it runs while the camera is bound and
+     * a take is *not*, which is the opposite of everything in `ManualSession`.
+     */
+    private val mount by lazy { MountSensor(this) }
 
     /** Pending ADR-0025 standby, cancelled the moment demand returns. */
     private var standby: Job? = null
@@ -422,6 +435,10 @@ class CaptureService : LifecycleService() {
         if (display.rotation == appliedRotation) return
         appliedRotation = display.rotation
         camera.setTargetRotation(display.rotation)
+        // The level overlay is drawn in the frame the camera is now producing,
+        // so a rotation changes what "level" means as surely as it changes the
+        // recording's orientation.
+        reconcileMount()
     }
 
     /**
@@ -468,6 +485,46 @@ class CaptureService : LifecycleService() {
         Log.i(STANDBY_TAG, "phone screen ${if (visible) "showing" else "hidden"}")
         uiVisible = visible
         reconcileCamera()
+    }
+
+    /**
+     * Match the accelerometer to what it is allowed to be doing (PRD 6.11, ADR-0027).
+     *
+     * Two conditions, and both are somebody else's decision rather than this
+     * feature's. The camera has to be bound, because ADR-0025 says nothing runs
+     * while nothing is watching. And a take must not be running, because
+     * ADR-0023 says nothing runs during one -- so levelling is a setup aid that
+     * switches itself off at the moment the file starts, and the remote is told
+     * it stopped rather than left with a frozen angle.
+     *
+     * Cheap and idempotent, like [reconcileCamera], so every edge that might
+     * have changed the answer can just call it: the camera binding or being
+     * released, a take starting or stopping, the display rotating.
+     */
+    private fun reconcileMount() {
+        val rotation = appliedRotation
+        if (cameraBound && rotation != null && !session.state.recording.recording) {
+            mount.register(screenRotationOf(rotation))
+        } else {
+            mount.unregister()
+        }
+    }
+
+    /**
+     * Android's screen rotation as `:domain` needs it.
+     *
+     * `Surface.ROTATION_90` and [ScreenRotation.DEGREES_90] mean the same thing
+     * -- the interface turned a quarter turn counter-clockwise from the phone's
+     * natural orientation -- and that equivalence is not assumed: it was checked
+     * against the reference Pixel 10 on 2026-09-07, which reported `ROTATION_90`
+     * while its own +x axis pointed at the ceiling, exactly as
+     * `DEGREES_90` predicts.
+     */
+    private fun screenRotationOf(rotation: Int): ScreenRotation = when (rotation) {
+        Surface.ROTATION_90 -> ScreenRotation.DEGREES_90
+        Surface.ROTATION_180 -> ScreenRotation.DEGREES_180
+        Surface.ROTATION_270 -> ScreenRotation.DEGREES_270
+        else -> ScreenRotation.DEGREES_0
     }
 
     /**
@@ -600,6 +657,7 @@ class CaptureService : LifecycleService() {
             ProcessCameraProvider.awaitInstance(this).unbind(camera.sessionConfig)
         }.onFailure { Log.w(STANDBY_TAG, "unbind failed", it) }
         cameraBound = false
+        reconcileMount()
         _surfaceRequest.value = null
         jpeg.forget()
         // Rotation is re-applied on the next bind rather than assumed to have
@@ -765,6 +823,7 @@ class CaptureService : LifecycleService() {
                 camera.sessionConfig,
             )
             cameraBound = true
+            reconcileMount()
             val lens = camera.capabilities(bound.cameraInfo)
             publishWhiteBalanceApproximation(session.state.settings.whiteBalanceKelvin)
             backCameraId = lens.cameraId
@@ -979,6 +1038,15 @@ class CaptureService : LifecycleService() {
                     it.copy(exposure = it.exposure.copy(histogram = histogram.bins))
                 }
             }
+            // PRD 6.11: how the phone is sitting on its mount. Sampled here for
+            // the same reason as the histogram -- the sensor produces 50 values
+            // a second and the wire wants one -- except that the deadband is in
+            // `MountFilter` rather than here, so a phone sitting still costs no
+            // revision at all (ADR-0024).
+            val attitude = mount.attitude.value
+            if (attitude != session.state.mount) {
+                session.update(System.currentTimeMillis()) { it.copy(mount = attitude) }
+            }
             // PRD 6.6 asks the app to show which input is active, and a user
             // checking their microphone before a take is the whole point -- so
             // the input is published on the tick, not only once a recording is
@@ -1148,6 +1216,11 @@ class CaptureService : LifecycleService() {
                 // setup-speed ISO at the head of a locked take would be exactly
                 // the thing the user asked not to have.
                 exposure?.onRecordingChanged(true)
+                // PRD 6.11's levelling stops here, on the same edge and for the
+                // same reason: ADR-0023's promise is about the file's first
+                // frame, and a sensor still running into it would be the thing
+                // that ADR said would not be running.
+                reconcileMount()
                 // ADR-0025: a take may be asked for while the camera is asleep --
                 // a browser that attached and pressed Record faster than the
                 // reconcile tick noticed it. Binding and starting hold the lock
@@ -1162,6 +1235,7 @@ class CaptureService : LifecycleService() {
             if (!shouldRecord && wasRecording) {
                 stopRecording()
                 exposure?.onRecordingChanged(false)
+                reconcileMount()
             }
             wasRecording = shouldRecord
             delay(200)
@@ -1461,6 +1535,7 @@ class CaptureService : LifecycleService() {
         server.stop()
         tap.release()
         jpeg.release()
+        mount.release()
         wakeLock?.takeIf { it.isHeld }?.release()
         wifiLock?.takeIf { it.isHeld }?.release()
         super.onDestroy()

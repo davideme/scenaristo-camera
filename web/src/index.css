@@ -341,6 +341,104 @@ h1 {
   color: var(--dimmer);
 }
 
+/* PRD 6.11 / UI-23: the horizon overlay.
+
+   A short mark at the centre of the frame with the angle beside it, rather than
+   a line across the picture: the reading is wanted for the ten seconds a tripod
+   is being placed, and an aid that draws over the subject for the rest of the
+   session is one people switch off and forget to switch back on (goal 3).
+
+   Drawn in pixel space rather than in the guides' SVG, because that SVG is
+   stretched to the stage (preserveAspectRatio="none") and would turn a tilt of
+   0.6 degrees into whatever angle the stage's shape made of it. Every line in
+   the guides is axis-aligned, so the stretch has never mattered there; here it
+   is the whole measurement. */
+.level {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.level-mark {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Wide enough to read an angle off, short enough to sit inside a face without
+     crossing it. */
+  width: 88px;
+  height: 20px;
+}
+
+.level-reference,
+.level-horizon {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 0;
+  border-top: 1px solid rgba(242, 240, 237, 0.3);
+}
+
+.level-horizon {
+  border-top-color: rgba(242, 240, 237, 0.9);
+  transform-origin: 50% 50%;
+  /* Long enough not to read as a jump, short enough to feel attached to the
+     phone. The reading it follows is published once a second. */
+  transition: transform 220ms ease-out;
+}
+
+/* Broken rather than recoloured, for the same reason the eye line is dashed:
+   two lines of the same weight have to be tellable apart without colour. */
+.level-horizon.unsteady {
+  border-top-style: dashed;
+  transition: none;
+}
+
+/* On the mark, to the right of it, vertically centred -- one reading in one
+   place. The shadow is the only way a 12px number stays readable over a face,
+   a window and a white wall in the same session. */
+.level-degrees {
+  position: absolute;
+  left: calc(100% + 8px);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: rgba(242, 240, 237, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+
+.level-note,
+.level-paused {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+
+/* The take is running, so the accelerometer is not (ADR-0023). Same register as
+   the empty-preview note: what is happening, and what is not wrong. */
+.level-paused {
+  position: absolute;
+  inset: 0;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.level-paused-note {
+  font-size: 11px;
+  color: var(--dimmer);
+}
+
 /* UI-6: a red inset border frames the whole preview while recording, and red
    appears nowhere else in the interface. */
 main.recording .preview-frame::after {
