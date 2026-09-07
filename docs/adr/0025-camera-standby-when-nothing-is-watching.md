@@ -180,9 +180,13 @@ the verification below is aimed.
   repeatedly, so anything that leaked or went stale across the lens sweep's single rebind now does
   so per wake. Bind failure becomes a routine path needing retry rather than a one-off that could
   be left in a notification string.
-- Harder: a wake costs a camera rebind — dominated by `CameraDevice.open`, budgeted at roughly
-  0.4–1 s and unmeasured on the reference device. If it proves long enough to need explaining, the
-  additive `camera` state field this ADR deliberately omits becomes worth adding.
+- Harder: a wake costs a camera rebind. **Measured at 1.73 s** from opening `/preview.mjpg` to the
+  first complete JPEG frame, on a Pixel 10 whose screen was off and keyguard up (2026-09-07). That
+  is slower than the 0.4–1 s budgeted, and it includes TCP connect and the first encode as well as
+  `CameraDevice.open`. It is short enough that the existing null-frame poll covers it without a
+  browser seeing an error, and long enough to revisit if a producer reports the preview feeling
+  slow to appear — at which point the additive `camera` state field this ADR omits becomes worth
+  adding, so the remote can say "waking" rather than showing an empty frame.
 - The background rebind depends on the process capability granted when a `camera`-type foreground
   service is started while visible, and held for as long as that service instance runs. A
   `START_STICKY` restart while backgrounded would lose it. Standby makes such a kill less likely
@@ -195,18 +199,54 @@ the verification below is aimed.
 
 1. [x] Gate the preview encoder on an attached viewer, and drop the stale frame when the last one
    leaves.
-2. [ ] **Verify on the Pixel 10 that the camera rebinds while the app is backgrounded and the
-   screen is locked.** This is load-bearing: if it fails, the camera half of this ADR is not
-   possible as written and only action item 1 survives.
-3. [ ] Implement the bind/unbind state machine with a grace period, sharing a mutex with recording
+2. [x] **Verify on the Pixel 10 that the camera rebinds while the app is backgrounded and the
+   screen is locked.** Done 2026-09-07 — see Verification below. This was the load-bearing one.
+3. [x] Implement the bind/unbind state machine with a grace period, sharing a mutex with recording
    start so a take can never race a release.
 4. [ ] Confirm white balance, shutter lock, grid and rotation survive a standby cycle. They are
    held in change-detector caches that a rebind does not reset, so the default is that they are
-   silently lost.
+   silently lost. Partially exercised: a `shutterLock` of 100 and 3200 K were applied and observed
+   taking effect (`shutterHz` 50 → 100, ISO recompensating 1578 → 3155), but the phone was not
+   observed completing a sleep/wake cycle with them set.
 5. [ ] Exercise `record → standby → wake → record` several times on the reference device; a
    `Recorder` rebound after finalising is the least certain part of the platform behaviour here.
-6. [ ] Measure wake-to-first-frame latency and 30-minute backgrounded idle battery drain, before
-   and after, and record both numbers in this ADR in place of the estimate above.
+6. [ ] Measure 30-minute backgrounded idle battery drain, before and after. The latency half is
+   done and recorded in Consequences.
 7. [ ] Confirm the phone still answers on the LAN after a long standby; if a dozing phone cannot
    accept the connection, a wake lock is needed in standby and ADR-0003's lock rule — which the
    code currently does not implement as written — needs revisiting with it.
+
+## Verification
+
+Pixel 10, Android 17 (`CP2A.260805.005`), back camera, 2026-09-07. Evidence about **one handset**
+(ADR-0017); a pass here is not an Android-wide claim.
+
+The problem, first, since it is what this ADR exists for: with the app backgrounded and the screen
+off, no recording and no browser, `dumpsys media.camera` showed `Camera ID: 0` still open and held
+by `com.scenaristo.camera`. That is the behaviour being removed.
+
+With the change, one full cycle observed end to end while `mAwake=false` and
+`isKeyguardShowing=true` throughout:
+
+| Time | Event |
+|---|---|
+| 12:08:06 | `nothing watching; releasing the camera` — `Active Camera Clients` drops to none |
+| 12:08:49 | `/preview.mjpg` opened from the MacBook → `camera wanted: a browser is pulling the preview` → `binding the camera` |
+| 12:08:51 | first complete JPEG frame, 1.73 s after the request |
+| 12:09:01 | stream closed → `nothing is watching; releasing in 15000ms` |
+
+So the camera is released when nothing is watching, and a browser arriving at a server that never
+stopped brings it back **without the phone being unlocked or woken** — which is the flow PRD 6.8
+describes and the thing ADR-0019's Option C could not have delivered.
+
+The preview streamed 143 frames in 12.3 s (11.6 fps against the 15 fps cap). That shortfall is a
+separate, already-known defect in the stream's pacing and not a consequence of this change.
+
+Two supporting observations: the process holds the foreground-service camera capability in exactly
+that state (`curProcState=4`, `curCapability=-CMNFUATI`), which is what makes the background reopen
+legal; and the WebSocket client count is reaped correctly on abrupt disconnect, so a dropped
+browser cannot pin the camera forever.
+
+Items 4, 5 and 7 remain open. The reference phone is shared with other work, and a second session
+holding the app in the foreground makes `uiVisible` legitimately true — which is indistinguishable
+from a stuck flag without coordinating the device, so those runs are better done on a quiet phone.
