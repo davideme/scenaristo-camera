@@ -76,6 +76,22 @@ class PreviewJpegSource(
     /** The newest JPEG, or null before the first frame. Safe from any thread. */
     fun latest(): ByteArray? = newest.get()
 
+    /**
+     * Drops the last frame, so nothing stale is served as if it were live
+     * (ADR-0025).
+     *
+     * Called when the last browser stops watching and encoding stops with it.
+     * Without this the next browser to attach is handed whatever was encoded
+     * when the previous one left -- possibly hours old -- and shows it as the
+     * current shot for as long as it takes the next real frame to arrive. A
+     * viewer waiting a tenth of a second for the first frame is honest; one
+     * looking at a stale room and believing it is live is not.
+     *
+     * Deliberately not [release]: the bitmaps are the expensive part and they
+     * are reused the moment encoding resumes.
+     */
+    fun forget() = newest.set(null)
+
     private fun ensurePadded(width: Int, height: Int): Bitmap {
         val current = padded
         if (current != null && current.width == width && current.height == height) return current

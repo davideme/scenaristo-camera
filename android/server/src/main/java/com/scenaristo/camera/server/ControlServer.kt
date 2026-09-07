@@ -58,8 +58,25 @@ class ControlServer(
     private val frames: PreviewFrames,
     private val port: Int = ConnectionUrl.DEFAULT_PORT,
     private val now: () -> Long = System::currentTimeMillis,
+    /**
+     * Told how many browsers are pulling the preview, whenever that changes
+     * (ADR-0025). The service uses it to stop encoding for nobody.
+     *
+     * Runs on a Ktor thread, so it must not block.
+     */
+    onViewersChanged: (Int) -> Unit = {},
 ) {
     private val clients = CopyOnWriteArraySet<Client>()
+
+    /**
+     * Browsers pulling `/preview.mjpg`, which is not the same set as [clients]
+     * (ADR-0025).
+     *
+     * Private because the count leaves through [onViewersChanged] and nothing
+     * needs to poll it: every consumer so far cares about the *edges* -- the
+     * first viewer arriving, the last one leaving -- rather than the number.
+     */
+    private val viewers = ViewerCount(onViewersChanged)
     private val lock = Mutex()
     private var engine: EmbeddedServer<*, *>? = null
 
@@ -120,8 +137,26 @@ class ControlServer(
         return false
     }
 
+    /**
+     * One browser's preview stream, counted for its whole life (ADR-0025).
+     *
+     * The count is taken before the body starts and dropped in a `finally`,
+     * because every way this ends -- the tab closing, the laptop sleeping, Wi-Fi
+     * dropping mid-frame -- arrives as either a closed channel or a throw out of
+     * the frame write, and only a `finally` catches both. A viewer that is counted
+     * forever is a preview encoder that never stops.
+     */
     private suspend fun streamPreview(call: ApplicationCall) {
         call.response.headers.append(HttpHeaders.CacheControl, "no-store")
+        viewers.enter()
+        try {
+            streamFrames(call)
+        } finally {
+            viewers.leave()
+        }
+    }
+
+    private suspend fun streamFrames(call: ApplicationCall) {
         call.respondBytesWriter(contentType = io.ktor.http.ContentType.parse(Mjpeg.CONTENT_TYPE)) {
             // The channel closes when the browser navigates away or the tab is
             // shut, which is the only signal that a viewer has gone.
