@@ -35,6 +35,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.MediaMetadataRetriever
 import androidx.camera.video.AudioStats
 import com.scenaristo.camera.domain.protocol.AudioInput
 import com.scenaristo.camera.domain.protocol.AudioState
@@ -74,6 +75,7 @@ import com.scenaristo.camera.domain.protocol.State as ProtocolState
 import com.scenaristo.camera.server.ControlServer
 import com.scenaristo.camera.server.Lan
 import com.scenaristo.camera.server.PreviewFrames
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,6 +84,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDateTime
 
@@ -169,6 +172,9 @@ class CaptureService : LifecycleService() {
 
     /** Whether there is a local network to serve on, asked on the tick (ADR-0026). */
     private lateinit var lan: Lan
+
+    /** The takes the remote control can list and download (PRD 6.11). */
+    private lateinit var takes: TakeFolder
 
     private var recording: Recording? = null
 
@@ -373,6 +379,12 @@ class CaptureService : LifecycleService() {
         // Before anything can write a new marker, and before the camera binds:
         // whatever is on disk now is a claim about the *previous* run.
         _interrupted.value = takeInterruptedTakeIfAny()
+        takes = TakeFolder(takesDir(), ::durationOf)
+        // PRD 6.11: what is in the folder now, before any browser can ask. Off
+        // the main thread because it stats every file and reads metadata from
+        // ten of them, and a service that starts slowly is a preview that starts
+        // slowly.
+        lifecycleScope.launch { publishTakes() }
         followDisplayRotation()
         // Bound here rather than waiting for demand: this service was started by
         // a visible activity, which is the moment ADR-0003 requires, and a first
@@ -1352,6 +1364,12 @@ class CaptureService : LifecycleService() {
                             ),
                         )
                     }
+                    // PRD 6.11: the take that just closed is the one the user is
+                    // most likely to want, so the list is re-read now rather
+                    // than at the next start. After the state update above, so
+                    // `recording` is already false and the new take is not
+                    // mistaken for one in progress.
+                    lifecycleScope.launch { publishTakes() }
                 }
             }
         acquireLocks()
@@ -1368,10 +1386,17 @@ class CaptureService : LifecycleService() {
      * not fill someone's photo roll with multi-gigabyte files, at the cost of
      * takes that do not outlive the app unless the user moves them.
      */
-    private fun appFolderOutput(name: String): FileOutputOptions {
-        val dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: filesDir
-        return FileOutputOptions.Builder(File(dir, "$name.mp4")).build()
-    }
+    private fun appFolderOutput(name: String): FileOutputOptions =
+        FileOutputOptions.Builder(File(takesDir(), "$name.mp4")).build()
+
+    /**
+     * Where [appFolderOutput] writes and [TakeFolder] reads (PRD 6.11).
+     *
+     * One expression rather than two copies of it: a reader looking in a
+     * different directory from the writer is a browser showing an empty list on
+     * a phone full of takes, and nothing in either place would look wrong.
+     */
+    private fun takesDir(): File = getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: filesDir
 
     /**
      * The opt-in: the shared gallery (ADR-0020, PRD 6.7 and section 3).
@@ -1407,6 +1432,63 @@ class CaptureService : LifecycleService() {
      * survives having no chance to tidy up. Its contents are the take's path, so
      * the message can say *where* rather than only *that*.
      */
+    /**
+     * Re-reads the folder and publishes what is there (PRD 6.11).
+     *
+     * Called at service start and once a take is finalised -- not on the 1 Hz
+     * status tick. The listing itself is cheap, but it opens a metadata reader
+     * per take, and doing that every second to answer a question whose answer
+     * changes a few times an hour is work for nothing. It is deliberately not
+     * called *during* a take either: [TakeFolder.list] excludes the file being
+     * written, but not scanning while the recorder holds the disk is the
+     * cheaper way to be right.
+     */
+    private suspend fun publishTakes() {
+        val listed = withContext(Dispatchers.IO) {
+            runCatching { takes.list(inProgress = inProgressTake()) }
+                .onFailure { Log.w(TAKES_TAG, "could not list takes", it) }
+                .getOrDefault(emptyList())
+        }
+        if (listed == session.state.takes) return
+        session.update(System.currentTimeMillis()) { it.copy(takes = listed) }
+        server.broadcastSnapshot()
+    }
+
+    /**
+     * The name of the take being written, or null when none is.
+     *
+     * Not `recording.fileName` on its own, which is a different question with a
+     * different answer: that field **outlives the take deliberately**, because
+     * "did that save, and as what" is what a creator asks in the second after
+     * they stop. Reading it without the flag excludes the take that just
+     * finished -- the one they are most likely to want -- and does it silently,
+     * because the list is otherwise correct and the missing row looks like a
+     * take that simply has not appeared yet. Observed on the Pixel 10 before
+     * this guard existed.
+     */
+    private fun inProgressTake(): String? =
+        session.state.recording.let { if (it.recording) it.fileName else null }
+
+    /**
+     * How long a take runs, read from the file itself (PRD 6.11).
+     *
+     * The one field a directory listing cannot supply. `MediaMetadataRetriever`
+     * parses the container's metadata without decoding a frame, so the cost is a
+     * seek and a small read per take rather than anything the encoder would
+     * notice.
+     *
+     * Null on anything unreadable -- a take truncated by a crash may have no
+     * duration in its header at all (#17), and that is a take the user most
+     * wants to get off the phone, so it must not be dropped from the list for
+     * want of a number.
+     */
+    private fun durationOf(file: File): Long? = runCatching {
+        MediaMetadataRetriever().use { reader ->
+            reader.setDataSource(file.path)
+            reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+        }
+    }.getOrNull()
+
     private fun markerFile() = File(filesDir, "recording-in-progress")
 
     /**
@@ -1724,6 +1806,7 @@ class CaptureService : LifecycleService() {
         private const val EXPOSURE_TAG = "ExposureLoop"
         private const val IDLE_TAG = "IdleShutdown"
         private const val SETTINGS_TAG = "Settings"
+        private const val TAKES_TAG = "Takes"
 
         /** ADR-0020. Relative to the external volume's root, as MediaStore wants it. */
         private const val TAKES_DIRECTORY = "Movies/Scenaristo Camera"
