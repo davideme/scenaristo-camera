@@ -105,6 +105,11 @@ const APPROXIMATIONS: Record<string, { name: string; kelvin: number }> = {
 export function approximationNote(mode: string | null | undefined): string | null {
   if (!mode) return null
   const m = APPROXIMATIONS[mode]
-  if (!m) return `Approximated by the ${mode.toLowerCase()} mode — this lens cannot set exact gains`
-  return `Approximated by ${m.name} (about ${m.kelvin} K) — this lens cannot set exact gains`
+  // "The app does not set", never "this lens cannot". The two are different
+  // claims and the capability panel makes the difference visible: on the
+  // reference device the lens reports manual white balance *yes* while the app
+  // is still applying presets, because the Kelvin-to-gains curve is #24. Saying
+  // "this lens cannot" put a flat contradiction on one screen.
+  if (!m) return `Approximated by the ${mode.toLowerCase()} mode — the app does not set exact gains yet`
+  return `Approximated by ${m.name} (about ${m.kelvin} K) — the app does not set exact gains yet`
 }
