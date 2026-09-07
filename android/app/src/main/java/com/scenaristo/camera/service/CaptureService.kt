@@ -412,11 +412,26 @@ class CaptureService : LifecycleService() {
      *
      * `appliedZoom` is set before the call and not after, so a ratio the camera
      * refuses is not retried once a second forever.
+     *
+     * The result is a future, and a refusal arrives through it rather than as a
+     * thrown exception -- so a `runCatching` around the call alone would report
+     * success for every zoom the camera declined. The listener is what turns
+     * that into something a log can show, and it reads the camera's *own*
+     * `zoomState` back rather than echoing the value just sent: that is the
+     * difference between "we asked" and "the camera did it", which is the whole
+     * distinction a state document cannot make on its own.
      */
     private fun applyZoom(camera: androidx.camera.core.Camera, ratio: Double) {
         appliedZoom = ratio
-        runCatching { camera.cameraControl.setZoomRatio(ratio.toFloat()) }
+        val future = runCatching { camera.cameraControl.setZoomRatio(ratio.toFloat()) }
             .onFailure { Log.w(ZOOM_TAG, "zoom to ${ratio}x refused: ${it.message}") }
+            .getOrNull() ?: return
+        future.addListener({
+            val reported = camera.cameraInfo.zoomState.value?.zoomRatio
+            runCatching { future.get() }
+                .onSuccess { Log.i(ZOOM_TAG, "zoom ${ratio}x applied; camera reports ${reported}x") }
+                .onFailure { Log.w(ZOOM_TAG, "zoom ${ratio}x refused: ${it.message}; camera at ${reported}x") }
+        }, ContextCompat.getMainExecutor(this))
     }
 
     private suspend fun bindCamera() {
