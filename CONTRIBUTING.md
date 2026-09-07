@@ -157,6 +157,7 @@ it verified anything — the commands below are still yours to run.
 | Android lint | `./gradlew lint` |
 | Debug APK | `./gradlew :app:assembleDebug` |
 | Install and launch on a device | `./gradlew :app:assembleDebug` then `android run --apks app/build/outputs/apk/debug/app-debug.apk --activity com.scenaristo.camera.MainActivity` |
+| Regenerate `web/src/protocol.ts` | `./gradlew :domain:generateProtocolTypes` |
 | Repo invariants | `../tools/check-adr-invariants.sh` |
 | `:domain` is platform-free | `../tools/check-domain-platform-free.sh` |
 | ADR index is consistent | `../tools/check-adr-index.sh` |
@@ -165,6 +166,13 @@ it verified anything — the commands below are still yours to run.
 The build prints `WARNING: The 'commonTest' source directory exists, but android host tests are
 not enabled`. That is expected: `:domain` tests run on its `jvm` target, deliberately, so they
 need no Android machinery (ADR-0015). Do not "fix" it.
+
+**Changing a `@Serializable` class in `:domain` means regenerating the TypeScript in the same
+commit.** `web/src/protocol.ts` is generated from those classes and is never hand-edited
+(ADR-0009); `./gradlew :domain:generateProtocolTypes` rewrites it, and `:domain:jvmTest` fails when
+what is committed is not what the classes would produce today. That test exists because the file
+had silently fallen two features behind before anything checked (#84), and stale generated types do
+not show up as a type error — they show up as a browser control that quietly does nothing.
 
 ## 5. Architecture decisions
 
