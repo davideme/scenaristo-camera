@@ -264,6 +264,21 @@ Requested by Davide on 2026-09-06: *"add T-Stops in the web interface"*. Issue #
 Measured on the reference device: the Pixel 10's main lens reports **24 mm equivalent at f/1.70**, which gives **T1.77**.
 
 ---
+**UI-19 — Mirror the preview, per browser**
+
+Requested by Davide on 2026-09-06.
+
+- [ ] The remote control can flip its preview horizontally, from a **View** panel in the control column.
+- [ ] The switch carries the sentence "Preview only — the recording is never mirrored", next to the switch and not in a help page.
+- [ ] The setting is **client-local**: stored in this browser, never sent, and a second remote is unaffected.
+- [ ] It survives a reload, and a browser that cannot store it still honours it for the session.
+- [ ] The flip is on the preview image, not on its frame — UI-6's recording border lives on the frame, and mirroring that would put its rounding on the wrong corners.
+
+**Why it is not protocol.** §8 already reasons this out for the framing guides: *"two remotes watching one phone may reasonably want different overlays, in which case the toggle is not protocol at all."* Mirroring is the same shape of thing and more so — a speaker framing themselves wants the flip, and at the same moment a producer reading the whiteboard behind them does not. Whether the preview should be flipped depends on who is looking at it.
+
+**Why the copy matters.** A mirror control that turned out to have flipped the take would be discovered in an edit, which is far too late. Verified on the reference device rather than argued: with mirroring on in the browser, a recorded file's first frame matches the *unmirrored* view, and the container carries no display matrix or rotation side data. The transform is a CSS property on an `<img>`, three processes away from the encoder, so it could not reach the file — but the interface states the boundary rather than leaving the user to work that out.
+
+---
 ### Nice-to-have
 
 - **UI-13** Countdown before record (3-2-1), on both surfaces (PRD §6.11).
@@ -308,6 +323,8 @@ Focus's validation belongs here rather than in UI-16, because it is protocol and
 Per [ADR-0017](adr/0017-phase-0-verification-matrix.md) the reference matrix is one Pixel 10 and one MacBook. Nothing in this spec may be described as verified on Android or on the web generally.
 
 - [ ] Every UI-n acceptance criterion above is checked on the Pixel 10 for the phone surface, and in Safari and Chrome on the MacBook for the remote.
+  - Chrome: the remote control of UI-9, UI-10, UI-17 to UI-22 was built and driven against the phone in a Chromium browser (2026-09-06/07).
+  - **Safari: verified by Davide, 2026-09-07** — "working fully tested". The one that mattered is MJPEG in an `<img>`: [ADR-0008](adr/0008-preview-transport.md)'s whole argument is that the browser renders `multipart/x-mixed-replace` natively, and a Safari that stalled on the first frame would have taken the transport decision with it.
 - [ ] UI-3's cutout and gesture-inset criteria are checked in **both** landscape orientations.
 - [ ] UI-1's 2 m legibility claim is checked at 2 m, not at a desk.
 - [ ] The `.dc.html` mockups are the reference for spacing and colour where this document is silent, not a substitute for it: where they disagree, this document wins and the mockups are updated.
