@@ -55,6 +55,44 @@ class SessionTest {
     // ADR-0007: "A repeated id within 10 s returns the original ack without
     // re-applying." The failure this prevents: a browser resends after a dropped
     // connection and starts a second recording over the first.
+    /**
+     * UI-9's transport row names the file. PRD 6.7 derives that name from the
+     * instant recording starts, so it cannot exist before the take -- and the
+     * question it answers ("did that save, and as what?") is asked in the second
+     * *after* the take, so it must not vanish on stop.
+     */
+    @Test
+    fun `PRD 6_7 - the take name survives the stop`() {
+        val session = Session(idle())
+        session.apply(Command(id = "a", name = CommandName.RECORD_START), 1_000)
+        session.update(1_100) {
+            it.copy(recording = it.recording.copy(fileName = "Scenaristo_2026-09-06_14-32-05"))
+        }
+
+        session.apply(Command(id = "b", name = CommandName.RECORD_STOP), 2_000)
+
+        assertFalse(session.state.recording.recording)
+        assertNull(session.state.recording.startedAtMs)
+        assertEquals("Scenaristo_2026-09-06_14-32-05", session.state.recording.fileName)
+    }
+
+    /**
+     * The previous take's name against a running timer would read as this
+     * take's. The real one arrives from the capture layer a moment later.
+     */
+    @Test
+    fun `starting a take clears the previous take's name`() {
+        val session = Session(idle())
+        session.update(1_000) {
+            it.copy(recording = it.recording.copy(fileName = "Scenaristo_2026-09-06_14-32-05"))
+        }
+
+        session.apply(Command(id = "a", name = CommandName.RECORD_START), 2_000)
+
+        assertTrue(session.state.recording.recording)
+        assertNull(session.state.recording.fileName)
+    }
+
     @Test
     fun `ADR-0007 - a repeated command id replays the original answer`() {
         val session = Session(idle())

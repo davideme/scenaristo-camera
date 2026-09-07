@@ -2,6 +2,8 @@ package com.scenaristo.camera.capture
 
 import android.media.CamcorderProfile
 import android.media.MediaCodecList
+import com.scenaristo.camera.domain.protocol.Encoding
+import com.scenaristo.camera.domain.protocol.VideoCodec
 
 /**
  * What codec the device profile picks for UHD, and what the device could have
@@ -30,6 +32,9 @@ object CodecReport {
         /** Every hardware encoder the device advertises for HEVC. */
         val hevcEncoders: List<Encoder>,
         val h264Encoders: List<Encoder>,
+        /** The profile's own dimensions, or zero when there is no profile. */
+        val profileWidth: Int = 0,
+        val profileHeight: Int = 0,
     ) {
         /**
          * The finding this issue exists for: the device can do HEVC in hardware,
@@ -38,6 +43,47 @@ object CodecReport {
         val hevcAvailableButUnused: Boolean
             get() = hevcEncoders.any { it.hardwareAccelerated } &&
                 profileCodec?.contains("hevc", ignoreCase = true) != true
+
+        /**
+         * The codec, named rather than as a media-type string.
+         *
+         * The browser is shared with iOS and the two platforms spell the same
+         * codec differently (ADR-0013). Anything that is neither HEVC nor AVC
+         * becomes [VideoCodec.UNKNOWN] rather than being passed through: a codec
+         * the app does not recognise is one PRD 6.7 does not promise, and naming
+         * it in the interface would imply otherwise.
+         */
+        fun codec(): VideoCodec = when {
+            profileCodec == null -> VideoCodec.UNKNOWN
+            profileCodec.contains("hevc", ignoreCase = true) -> VideoCodec.HEVC
+            profileCodec.contains("avc", ignoreCase = true) -> VideoCodec.H264
+            else -> VideoCodec.UNKNOWN
+        }
+
+        /**
+         * The report as the protocol carries it, for PRD 6.7's "codec in use is
+         * displayed on phone and web before recording".
+         *
+         * **[frameRate] and [bitrate] are the caller's, and deliberately not the
+         * profile's.** A `CamcorderProfile` describes the fastest mode it
+         * supports, which is not the mode this app records in: on the reference
+         * device the UHD profile declares 60 fps at 72 Mbit/s, while the session
+         * pins `Range(30, 30)` (PRD 6.1) and #21 measured the resulting file at
+         * 33.4 Mbit/s. Passing the profile's numbers through would put two
+         * confident, wrong figures on the remote control's transport row, right
+         * beside a minutes-remaining readout computed from the real one.
+         *
+         * The dimensions do come from the profile, because the session requires
+         * `UHD_RECORDING` and fails the bind rather than falling back, so the
+         * two cannot disagree.
+         */
+        fun encoding(frameRate: Int, bitrate: Int): Encoding = Encoding(
+            codec = codec(),
+            widthPx = profileWidth,
+            heightPx = profileHeight,
+            frameRate = frameRate,
+            bitrate = bitrate,
+        )
     }
 
     /**
@@ -62,6 +108,8 @@ object CodecReport {
             profileResolution = video?.let { "${it.width}x${it.height}" },
             hevcEncoders = encoders.filter { it.mimeType.equals("video/hevc", ignoreCase = true) },
             h264Encoders = encoders.filter { it.mimeType.equals("video/avc", ignoreCase = true) },
+            profileWidth = video?.width ?: 0,
+            profileHeight = video?.height ?: 0,
         )
     }
 

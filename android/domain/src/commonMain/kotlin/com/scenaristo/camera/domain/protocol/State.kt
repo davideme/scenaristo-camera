@@ -28,6 +28,11 @@ data class State(
      */
     val audio: AudioState = AudioState(),
     /**
+     * What a take is written as (PRD 6.7), for the remote control's transport
+     * row (UI-9). Defaulted for the same compatibility reason as [audio].
+     */
+    val encoding: Encoding = Encoding(),
+    /**
      * The phone's clock when this snapshot was built. Elapsed recording time is
      * derived from this rather than sent directly, so it stays right across a
      * reconnect and does not drift with the browser's clock (ADR-0007).
@@ -123,7 +128,70 @@ data class RecordingState(
      * instead would be wrong the moment a snapshot is late.
      */
     val startedAtMs: Long? = null,
+    /**
+     * The take being written, or the last one finished, without its extension
+     * (PRD 6.7 `Scenaristo_YYYY-MM-DD_HH-MM-SS`).
+     *
+     * It survives the stop deliberately. "Did that save, and as what?" is the
+     * question a creator asks in the second after they stop, and a transport row
+     * that blanks the moment the answer matters is answering the wrong one. Null
+     * only before the first take of a session.
+     *
+     * The name cannot be shown *before* a take, because PRD 6.7 derives it from
+     * the moment recording starts. That is the timestamp's whole value: two
+     * takes a minute apart sort correctly in a directory listing, which a
+     * counter would not guarantee across a reinstall.
+     */
+    val fileName: String? = null,
 )
+
+/**
+ * What a take is written as (PRD 6.7), so the remote control can say so *before*
+ * recording rather than after -- which is what the PRD asks for, and the reason
+ * this is state rather than something reported at the end.
+ *
+ * Every field is read from the same `CamcorderProfile` the recorder itself
+ * follows, so this is a report and not a request: CameraX 1.6.2 has no SDR codec
+ * selector, and PRD 6.7 only promises to *show* which codec will be used until
+ * the 1.7 revisit (ADR-0002, #27). A resolution below UHD here is ADR-0011's
+ * fallback having fired, which PRD 6.10 requires be visible before recording.
+ *
+ * All fields default to a zeroed report, which reads as "not probed yet" -- the
+ * state before the camera has bound, and the compatibility default ADR-0007
+ * requires for an added field.
+ */
+@Serializable
+data class Encoding(
+    val codec: VideoCodec = VideoCodec.UNKNOWN,
+    val widthPx: Int = 0,
+    val heightPx: Int = 0,
+    val frameRate: Int = 0,
+    /**
+     * Bits per second, as the profile declares it. Bits rather than the megabits
+     * UI-9 displays, because the profile reports bits and a unit converted at
+     * the producer is a unit the consumer has to trust.
+     */
+    val bitrate: Int = 0,
+)
+
+/**
+ * The video codec of the recorded file (PRD 6.7).
+ *
+ * Named rather than carrying the platform's media-type string, because the two
+ * platforms spell the same codec differently -- Android says `video/hevc`, iOS
+ * says `hvc1` -- and a browser that has to know both is a browser that has to be
+ * updated when either changes (ADR-0013).
+ */
+@Serializable
+enum class VideoCodec {
+    HEVC,
+
+    /** PRD 6.7's fallback: H.264 High profile, when the device profile picks it. */
+    H264,
+
+    /** Nothing has probed the profile yet, or it declared something else entirely. */
+    UNKNOWN,
+}
 
 /** PRD 6.8's status line. */
 @Serializable

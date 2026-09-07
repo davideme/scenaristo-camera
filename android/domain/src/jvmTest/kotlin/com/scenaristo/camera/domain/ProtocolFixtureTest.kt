@@ -16,7 +16,9 @@ import com.scenaristo.camera.domain.protocol.ProtocolJson
 import com.scenaristo.camera.domain.protocol.ServerMessage
 import com.scenaristo.camera.domain.protocol.StateMessage
 import com.scenaristo.camera.domain.protocol.ThermalState
+import com.scenaristo.camera.domain.protocol.VideoCodec
 import com.scenaristo.camera.domain.protocol.Warning
+import com.scenaristo.camera.domain.recording.TakeName
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -87,6 +89,19 @@ class ProtocolFixtureTest {
         assertFalse(state.audio.clipping)
         assertEquals(listOf(Warning.TOO_DARK), state.warnings)
         assertEquals(2, state.clients)
+        // PRD 6.7: the codec in use is displayed on phone and web *before*
+        // recording, so it is state rather than something reported at the end.
+        assertEquals(VideoCodec.HEVC, state.encoding.codec)
+        assertEquals(3840, state.encoding.widthPx)
+        assertEquals(2160, state.encoding.heightPx)
+        assertEquals(30, state.encoding.frameRate)
+        assertEquals(45_000_000, state.encoding.bitrate)
+        // PRD 6.7's naming, which UI-9's transport row shows next to the timecode.
+        assertEquals("Scenaristo_2026-09-06_14-32-05", state.recording.fileName)
+        assertTrue(
+            TakeName.PATTERN.matches(state.recording.fileName!!),
+            "the fixture's own name must be the shape :domain produces",
+        )
     }
 
     @Test
