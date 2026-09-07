@@ -55,6 +55,7 @@ import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.exposure.shutterLadder
 import com.scenaristo.camera.domain.lens.framingsFor
 import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
+import com.scenaristo.camera.domain.protocol.Capabilities
 import com.scenaristo.camera.domain.whitebalance.settingFor
 import com.scenaristo.camera.domain.protocol.CaptureSettings
 import com.scenaristo.camera.domain.protocol.Command
@@ -756,6 +757,17 @@ class CaptureService : LifecycleService() {
                     encoding = codecReport.encoding(
                         frameRate = RECORDING_FRAME_RATE,
                         bitrate = RECORDING_BITRATE,
+                    ),
+                    // PRD 6.10 / ADR-0011: probed on every bind, which is also
+                    // every lens switch and every wake from standby -- the
+                    // characteristics belong to the camera, and a cached answer
+                    // would outlive the camera it described.
+                    capabilities = Capabilities(
+                        probed = true,
+                        uhd30 = lens.supportsUhd30,
+                        manualShutter = lens.hasManualSensor,
+                        manualWhiteBalance = lens.hasManualPostProcessing,
+                        hardwareHevc = codecReport.hevcEncoders.any { e -> e.hardwareAccelerated },
                     ),
                 )
             }

@@ -416,6 +416,76 @@ export function ViewPanel({
 }
 
 /**
+ * PRD 6.10's capability report (UI-8, #14).
+ *
+ * **Reported, never a control**, and per *camera* rather than per framing: the
+ * framings of the Lens panel are zoom ratios on one logical camera (UI-21), so
+ * they share its characteristics. Four lines repeated four times would imply a
+ * per-lens gate this device does not have.
+ *
+ * UI-6: an unavailable capability is drawn in **neutral grey, not red**. Red
+ * means recording and nothing else, and a capability the phone simply does not
+ * have is a fact rather than an error — the user did nothing wrong and there is
+ * nothing to fix.
+ */
+export function CapabilityPanel({ state }: { state: State }) {
+  const caps = state.capabilities
+  if (!caps?.probed) {
+    return (
+      <section class="panel reported-panel">
+        <h2>This camera</h2>
+        <p class="lock-note">Not probed yet — waiting for the camera</p>
+      </section>
+    )
+  }
+
+  const rows: Array<[string, boolean, string | null]> = [
+    ['4K · 30', caps.uhd30 === true, caps.uhd30 ? null : 'Records at 1080p instead'],
+    // ADR-0011 gates recording on MANUAL_SENSOR and does not degrade: without
+    // it the shutter drifts and the picture bands, which is the one thing the
+    // product exists to prevent.
+    ['Manual shutter', caps.manualShutter === true, caps.manualShutter ? null : 'Cannot record on this lens'],
+    [
+      'Manual white balance',
+      caps.manualWhiteBalance === true,
+      caps.manualWhiteBalance ? null : 'Presets are approximated',
+    ],
+    ['Hardware HEVC', caps.hardwareHevc === true, null],
+  ]
+
+  return (
+    <section class="panel reported-panel">
+      <h2>This camera</h2>
+      <dl class="stack">
+        {rows.map(([label, ok]) => (
+          <div key={label} class={ok ? undefined : 'unavailable'}>
+            <dt>{label}</dt>
+            <dd class="mono">{ok ? 'yes' : 'no'}</dd>
+          </div>
+        ))}
+      </dl>
+      {/* PRD 6.10: a missing capability names the consequence, not just the
+          absence. "Cannot record on this lens" is what the user needs; "no
+          MANUAL_SENSOR" is what the log needs. */}
+      {rows
+        .filter(([, ok, note]) => !ok && note)
+        .map(([label, , note]) => (
+          <p key={label} class="lock-note">
+            {label}: {note}
+          </p>
+        ))}
+      {/* The gap PRD 6.4 leaves open, and the one that is live on this device:
+          the lens may offer gains while the app is still applying presets. */}
+      {caps.hardwareHevc && state.encoding?.codec === 'H264' ? (
+        <p class="lock-note">
+          Hardware HEVC exists, but this device&rsquo;s profile records H.264
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
+/**
  * PRD 6.6's meter (UI-4's bottom-left, mirrored here).
  *
  * `metering` is the field that matters: a bar at zero says the room is quiet,

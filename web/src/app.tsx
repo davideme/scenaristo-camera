@@ -11,6 +11,7 @@ import {
   needsDistanceGuidance,
 } from './lens'
 import {
+  CapabilityPanel,
   ExposurePanel,
   LensPanel,
   LightPanel,
@@ -206,6 +207,7 @@ export function App() {
               onSet={(zoomRatio) => void patch({ zoomRatio })}
             />
             <SoundPanel state={state} />
+            <CapabilityPanel state={state} />
             <ViewPanel
               view={view}
               onChange={(next) => {
