@@ -18,6 +18,7 @@ import com.scenaristo.camera.domain.protocol.PROTOCOL_VERSION
 import com.scenaristo.camera.domain.protocol.Platform
 import com.scenaristo.camera.domain.protocol.ProtocolJson
 import com.scenaristo.camera.domain.protocol.ServerMessage
+import com.scenaristo.camera.domain.protocol.KeySide
 import com.scenaristo.camera.domain.protocol.StateMessage
 import com.scenaristo.camera.domain.protocol.ThermalState
 import com.scenaristo.camera.domain.protocol.VideoCodec
@@ -27,6 +28,7 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -139,6 +141,15 @@ class ProtocolFixtureTest {
         // to it has to be argued for rather than merged.
         assertFalse(state.mount.measuring)
         assertEquals(0.0, state.mount.rollDegrees, absoluteTolerance = 1e-9)
+        // PRD 6.11's lighting read, false here for the same reason (ADR-0028):
+        // it exists so somebody can move a lamp, and a take in progress is
+        // exactly when nobody is going to. `enoughLight` survives because it is
+        // read off ISO rather than off a face, and stays true of the room.
+        assertFalse(state.lighting.measuring)
+        assertEquals(0, state.lighting.keyRatioTenths)
+        assertEquals(KeySide.NONE, state.lighting.keySide)
+        assertNull(state.lighting.backgroundStopsTenths)
+        assertTrue(state.lighting.enoughLight)
         // PRD 6.7's naming, which UI-9's transport row shows next to the timecode.
         assertEquals("Scenaristo_2026-09-06_14-32-05", state.recording.fileName)
         assertTrue(

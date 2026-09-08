@@ -16,8 +16,11 @@ import com.scenaristo.camera.domain.exposure.LumaFrame
 import com.scenaristo.camera.domain.exposure.LumaSampler
 import com.scenaristo.camera.domain.exposure.LumaScale
 import com.scenaristo.camera.domain.exposure.MeteringConfig
+import com.scenaristo.camera.domain.exposure.SensorFace
 import com.scenaristo.camera.domain.exposure.SensorRect
 import com.scenaristo.camera.domain.exposure.TapGeometry
+import com.scenaristo.camera.domain.lighting.PortraitLighting
+import com.scenaristo.camera.domain.lighting.PortraitLightingFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -134,6 +137,25 @@ class ExposureController(
     @Volatile
     private var facesInCrop: List<FrameRect> = emptyList()
 
+    @Volatile
+    private var sensorFaces: List<SensorFace> = emptyList()
+
+    @Volatile
+    private var sensorCropRegion: SensorRect? = null
+
+    private val lightingFilter = PortraitLightingFilter()
+
+    private val _lighting = MutableStateFlow(PortraitLighting.Reading())
+
+    /**
+     * How the room is lighting the subject (PRD 6.11).
+     *
+     * A separate flow from [state] for [histogram]'s reason: it changes on frames
+     * where the exposure loop's state does not, and the service samples it on its
+     * own one-second tick rather than waking every collector.
+     */
+    val lighting: StateFlow<PortraitLighting.Reading> = _lighting.asStateFlow()
+
     /**
      * Meter one tapped frame and act on it. **Does not close [image]** — the tap
      * hands the same frame to the JPEG encoder, which closes it.
@@ -164,7 +186,25 @@ class ExposureController(
             return
         }
 
-        val measured = meter.measure(frameOf(image), FaceMapping.facesInFrame(facesInCrop, tapGeometry()))
+        val geometry = tapGeometry()
+        val subject = FaceMapping.subjectInFrame(sensorFaces, sensorCropRegion, activeArray, geometry)
+        val measured = meter.measure(
+            frameOf(image),
+            FaceMapping.facesInFrame(facesInCrop, geometry),
+            subject,
+        )
+        // Not during a take (ADR-0023, and ADR-0027's precedent for the mount):
+        // the reading exists so somebody can move a lamp, and nobody re-lights
+        // mid-take. Publishing it anyway would be a number that cannot be acted
+        // on, changing under a recording that is meant to be quiet.
+        val current = _state.value
+        _lighting.value = lightingFilter.accept(
+            if (current.recording) {
+                PortraitLighting.Reading.unmeasured(current.iso)
+            } else {
+                PortraitLighting.read(measured, current.iso)
+            },
+        )
         _histogram.value = measured.histogram
         val next = synchronized(lock) {
             val before = _state.value
@@ -182,11 +222,14 @@ class ExposureController(
      * was asked for (ADR-0005).
      */
     fun onCaptureResult(result: CaptureResult) {
-        facesInCrop = FaceMapping.facesInCrop(
-            faces = ManualControls.faces(result),
-            cropRegion = ManualControls.cropRegion(result),
-            activeArray = activeArray,
-        )
+        val found = ManualControls.faces(result)
+        val region = ManualControls.cropRegion(result)
+        facesInCrop = FaceMapping.facesInCrop(found, region, activeArray)
+        // Kept raw as well: the lighting read divides a face on its eye line
+        // (PRD 6.11), and that point has to travel through the same turn and crop
+        // as the rectangle rather than be recomputed from the mapped box.
+        sensorFaces = found
+        sensorCropRegion = region
         val reported = ManualControls.reported(result) ?: return
         synchronized(lock) {
             _state.value = loop.onSensorEcho(

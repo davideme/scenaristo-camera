@@ -56,6 +56,7 @@ export interface State {
   capabilities?: Capabilities;
   lenses?: LensChoice[];
   mount?: MountAttitude;
+  lighting?: PortraitLightingState;
   serverTimeMs: number;
 }
 
@@ -152,6 +153,16 @@ export interface MountAttitude {
   steady?: boolean;
   measuring?: boolean;
 }
+
+export interface PortraitLightingState {
+  measuring?: boolean;
+  keyRatioTenths?: number;
+  keySide?: KeySide;
+  backgroundStopsTenths?: number | null;
+  enoughLight?: boolean;
+}
+
+export type KeySide = "LEFT" | "RIGHT" | "NONE";
 
 export interface CmdMessage {
   type: "cmd";

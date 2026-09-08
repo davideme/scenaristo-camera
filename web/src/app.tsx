@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import { Connection, elapsedSeconds, type Snapshot } from './connection'
-import { ExposureScale, Histogram } from './exposure'
+import { ExposureScale, Histogram, LightingRead } from './exposure'
 import { ABSENT, bitrate, codecName, format, minutesLeft, timecode } from './format'
 import { LensIcon, WarningIcon } from './icons'
 import { FramingGuides } from './guides'
@@ -216,6 +216,10 @@ export function App() {
             <section class="panel reported-panel">
               <ExposureScale readout={state.exposure ?? {}} />
               <Histogram readout={state.exposure ?? {}} />
+              <LightingRead
+                lighting={state.lighting ?? {}}
+                recording={state.recording?.recording ?? false}
+              />
             </section>
             <LightPanel
               state={state}

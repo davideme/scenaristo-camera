@@ -141,6 +141,12 @@
       "steady": true,
       "measuring": false
     },
-    "serverTimeMs": 1788500123456
+    "serverTimeMs": 1788500123456,
+    "lighting": {
+      "measuring": false,
+      "keyRatioTenths": 0,
+      "keySide": "NONE",
+      "enoughLight": true
+    }
   }
 }

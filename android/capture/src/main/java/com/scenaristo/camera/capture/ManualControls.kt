@@ -1,6 +1,7 @@
 package com.scenaristo.camera.capture
 
 import android.content.Context
+import android.graphics.Point
 import android.graphics.Rect
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraManager
@@ -19,6 +20,8 @@ import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.ExtendableBuilder
 import com.scenaristo.camera.domain.exposure.IsoRange
+import com.scenaristo.camera.domain.exposure.SensorFace
+import com.scenaristo.camera.domain.exposure.SensorPoint
 import com.scenaristo.camera.domain.exposure.SensorRect
 import com.scenaristo.camera.domain.lens.equivalentFocalLengthMm
 import com.scenaristo.camera.domain.whitebalance.AwbApproximation
@@ -256,13 +259,18 @@ object ManualControls {
      * question: face detection is a 3A statistic, and this app switches 3A off.
      * Measured on the Pixel 10, 2026-09-08: it does, and it echoes `FULL` back.
      *
-     * Only the bounds cross over. `FULL` also carries eye and mouth positions,
-     * measured present on that device, and the lit-to-shadow split will want the
-     * eye axis -- but a weighting window does not, and a field nothing reads is a
-     * field nobody maintains.
+     * Bounds and both eye positions cross over; the mouth does not, because
+     * nothing reads it. The eyes are what `SensorFace.splitBetween` divides a
+     * face on, and they are nullable because `SIMPLE` is a legal answer.
      */
-    fun faces(result: CaptureResult): List<SensorRect> =
-        result.get(CaptureResult.STATISTICS_FACES)?.map { it.bounds.toSensorRect() }.orEmpty()
+    fun faces(result: CaptureResult): List<SensorFace> =
+        result.get(CaptureResult.STATISTICS_FACES)?.map {
+            SensorFace(
+                bounds = it.bounds.toSensorRect(),
+                leftEye = it.leftEyePosition?.toSensorPoint(),
+                rightEye = it.rightEyePosition?.toSensorPoint(),
+            )
+        }.orEmpty()
 
     /**
      * The sensor region the stream is actually reading, which zoom moves.
@@ -282,6 +290,8 @@ object ManualControls {
             ?.toSensorRect()
 
     private fun Rect.toSensorRect() = SensorRect(left = left, top = top, right = right, bottom = bottom)
+
+    private fun Point.toSensorPoint() = SensorPoint(x = x, y = y)
 
     /**
      * The platform white balance mode that stands in for a Kelvin preset
