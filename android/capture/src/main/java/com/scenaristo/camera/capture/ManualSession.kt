@@ -5,6 +5,7 @@ import androidx.camera.core.CameraInfo
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.core.SessionConfig
+import androidx.camera.core.featuregroup.GroupableFeature
 import androidx.camera.video.GroupableFeatures
 import androidx.camera.video.Recorder
 import androidx.camera.video.VideoCapture
@@ -67,7 +68,30 @@ class ManualSession(
      * the only place that arrives. Runs on a camera thread.
      */
     private val onCaptureResult: (android.hardware.camera2.TotalCaptureResult) -> Unit = {},
+    /**
+     * The recording tier this session asks for (PRD 6.1, ADR-0029).
+     *
+     * UHD is the product's default and what every session bound before a studio
+     * look existed. FHD is what a look costs on a device that will not give an
+     * analysis stream beside UHD -- `AnalysisRecordingProbe` asks, rather than
+     * this assuming.
+     */
+    private val recordingFeature: GroupableFeature = GroupableFeatures.UHD_RECORDING,
+    /**
+     * What reads the analysis stream, when there is one (ADR-0029).
+     *
+     * Set together with [includeAnalysis] or not at all: an analysis stream with
+     * nobody reading it is a use case bound for nothing, and a reader with no
+     * stream never runs.
+     */
+    private val analyzer: ImageAnalysis.Analyzer? = null,
 ) {
+
+    /**
+     * One thread, so the two models run in order rather than contending. Not the
+     * GL thread: that one owes the viewfinder a frame every 33 ms.
+     */
+    private val analysisExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     val preview: Preview = Preview.Builder()
         .also { ManualControls.applyTo(it, request, ::record, physicalCameraId) }
@@ -84,8 +108,12 @@ class ManualSession(
 
     val imageAnalysis: ImageAnalysis = ImageAnalysis.Builder()
         // Newest frame wins: metering and preview both want current, not complete.
+        // For a studio look this is also what makes the models' rate a
+        // consequence rather than a constraint -- what they cannot keep up with
+        // is dropped, which is the shape ADR-0029 relies on.
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
         .build()
+        .apply { analyzer?.let { setAnalyzer(analysisExecutor, it) } }
 
     /**
      * UHD at exactly 30 fps, required rather than preferred.
@@ -100,7 +128,7 @@ class ManualSession(
     val sessionConfig: SessionConfig = SessionConfig.Builder(
         listOfNotNull(preview, videoCapture, imageAnalysis.takeIf { includeAnalysis }),
     )
-        .setRequiredFeatureGroup(GroupableFeatures.UHD_RECORDING)
+        .setRequiredFeatureGroup(recordingFeature)
         .setFrameRateRange(Range(30, 30))
         .apply { tap?.let { addEffect(PreviewTapEffect(it)) } }
         .build()

@@ -47,7 +47,9 @@ import com.scenaristo.camera.R
 import com.scenaristo.camera.capture.CodecReport
 import com.scenaristo.camera.capture.ExposureController
 import com.scenaristo.camera.capture.LensSweepRunner
+import androidx.camera.video.GroupableFeatures
 import com.scenaristo.camera.capture.AnalysisRecordingProbe
+import com.scenaristo.camera.capture.LookSource
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.MountSensor
@@ -359,7 +361,7 @@ class CaptureService : LifecycleService() {
         Log.i(SETTINGS_TAG, "grid ${session.state.settings.grid} from ${settings.grid().source}")
         jpeg.quality = 80
         tap = PreviewTapProcessor(onFrame = ::onTapFrame)
-        camera = ManualSession(DEFAULT_REQUEST, tap = tap, onCaptureResult = ::onCaptureResult)
+        camera = buildSession()
         server = ControlServer(
             session = session,
             frames = PreviewFrames { jpeg.latest() },
@@ -753,6 +755,85 @@ class CaptureService : LifecycleService() {
         enoughLight = enoughLight,
     )
 
+    /**
+     * The session shape the current settings ask for (ADR-0029).
+     *
+     * A studio look needs a frame to run a model on, and on some devices that
+     * costs resolution -- `AnalysisRecordingProbe` reports which, and this is the
+     * only place that answer turns into a bind. With no look chosen the session is
+     * exactly what it has always been: UHD, no analysis stream, nothing bound for
+     * nothing.
+     *
+     * The look is refused during a take (PRD 6.1), so this is never called with a
+     * recording in progress and the rebind it implies cannot interrupt one.
+     */
+    private fun buildSession(): ManualSession {
+        val height = session.state.capabilities.analysisRecordingHeight
+        val wantsLook = wantsAnalysis()
+        boundAnalysis = wantsLook
+        boundRecordingHeight = if (wantsLook) height else null
+        return ManualSession(
+            DEFAULT_REQUEST,
+            includeAnalysis = wantsLook,
+            tap = tap,
+            onCaptureResult = ::onCaptureResult,
+            recordingFeature = if (wantsLook && height != null && height < UHD_HEIGHT) {
+                GroupableFeatures.FHD_RECORDING
+            } else {
+                GroupableFeatures.UHD_RECORDING
+            },
+            analyzer = if (wantsLook) lookSource else null,
+        ).also {
+            Log.i(
+                LOOK_TAG,
+                "session look=${session.state.settings.studioLook} " +
+                    "analysisHeight=$height analysis=$wantsLook",
+            )
+        }
+    }
+
+    /**
+     * Rebuild the session because the chosen look changed (ADR-0029).
+     *
+     * Released and rebound rather than reconfigured: CameraX use cases are fixed
+     * at build time, and the analysis stream and the recording tier are both
+     * decided there. Skipped entirely when the camera is not bound -- standby
+     * (ADR-0025) will build the right session when demand returns, and binding
+     * one here to change it would be waking the camera to answer a question
+     * nobody asked.
+     */
+    private suspend fun rebindForLook() {
+        cameraLock.withLock {
+            if (!cameraBound) {
+                camera = buildSession()
+                return@withLock
+            }
+            releaseCamera()
+            camera = buildSession()
+            bindCamera()
+        }
+    }
+
+    /**
+     * Whether the session should carry an analysis stream: a look is chosen *and*
+     * the device said it can (ADR-0029).
+     *
+     * Both halves matter. A look with no capability is a look this device cannot
+     * do, and binding an analysis stream for it would fail rather than degrade.
+     */
+    private fun wantsAnalysis(): Boolean =
+        session.state.settings.studioLook != StudioLook.OFF &&
+            session.state.capabilities.analysisRecordingHeight != null
+
+    /** The shape currently bound, so a mismatch is what triggers a rebind. */
+    private var boundAnalysis: Boolean = false
+
+    /** What the bound session actually records at, or null for the default. */
+    private var boundRecordingHeight: Int? = null
+
+    /** ADR-0029: where a look's face contour and person mask come from. */
+    private val lookSource = LookSource()
+
     private fun onCaptureResult(result: android.hardware.camera2.TotalCaptureResult) {
         exposure?.onCaptureResult(result)
     }
@@ -900,10 +981,24 @@ class CaptureService : LifecycleService() {
             // the state document, so the same report goes into both.
             session.update(System.currentTimeMillis()) {
                 it.copy(
+                    // ...at the size *this session* records, which a studio
+                    // look can lower (ADR-0029). The report describes what the
+                    // device's profile offers; before a look existed the two
+                    // were always the same and the difference did not show.
                     encoding = codecReport.encoding(
                         frameRate = RECORDING_FRAME_RATE,
                         bitrate = RECORDING_BITRATE,
-                    ),
+                    ).let { encoding ->
+                        val height = boundRecordingHeight
+                        if (height == null || height == encoding.heightPx) {
+                            encoding
+                        } else {
+                            encoding.copy(
+                                widthPx = height * encoding.widthPx / encoding.heightPx,
+                                heightPx = height,
+                            )
+                        }
+                    },
                     // PRD 6.10 / ADR-0011: probed on every bind, which is also
                     // every lens switch and every wake from standby -- the
                     // characteristics belong to the camera, and a cached answer
@@ -1171,6 +1266,17 @@ class CaptureService : LifecycleService() {
             if (look != appliedStudioLook) {
                 appliedStudioLook = look
                 settings.studioLook = look
+            }
+            // A look changes the session's *shape*, not a capture key: it adds an
+            // analysis stream and may cost resolution (ADR-0029), so it takes a
+            // rebind rather than a request. Driven off a shape comparison rather
+            // than off the setting changing, because the shape can also become
+            // wrong without the setting moving -- a look restored from settings is
+            // wanted before the capability probe has said whether it is possible,
+            // and the answer arrives on a later bind. Never during a take: PRD 6.1
+            // refuses the setting then, so this cannot interrupt a recording.
+            if (wantsAnalysis() != boundAnalysis && !session.state.recording.recording) {
+                lifecycleScope.launch { rebindForLook() }
             }
             server.broadcastSnapshot()
             _state.value = session.state
@@ -1777,6 +1883,10 @@ class CaptureService : LifecycleService() {
     companion object {
         private const val CHANNEL_ID = "capture"
         private const val EXPOSURE_TAG = "ExposureLoop"
+        private const val LOOK_TAG = "StudioLook"
+
+        /** PRD 6.1's default recording height, and the line a look may drop below. */
+        private const val UHD_HEIGHT = 2160
         private const val IDLE_TAG = "IdleShutdown"
         private const val SETTINGS_TAG = "Settings"
 

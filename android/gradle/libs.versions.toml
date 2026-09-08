@@ -2,6 +2,11 @@
 # Build-tool versions and their rationale: docs/adr/0014-build-toolchain.md.
 
 [versions]
+# ML Kit, bundled (ADR-0029). Measured 2026-09-08: no Play-services download, and
+# the native runtime is shared -- a build with all three models was 1.2 KB larger
+# than a build with one.
+mlkitFaceMesh = "16.0.0-beta3"
+mlkitSelfieSegmentation = "16.0.0-beta6"
 agp = "9.4.0"                 # AGP 9: built-in Kotlin, new DSL only (ADR-0014)
 kotlin = "2.4.10"             # Kotlin 2.4 requires AGP >= 9.1.0; the two are coupled
 
@@ -30,6 +35,8 @@ androidxTestExt = "1.3.0"
 androidxTestRunner = "1.7.0"
 
 [libraries]
+mlkit-face-mesh = { module = "com.google.mlkit:face-mesh-detection", version.ref = "mlkitFaceMesh" }
+mlkit-selfie-segmentation = { module = "com.google.mlkit:segmentation-selfie", version.ref = "mlkitSelfieSegmentation" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }

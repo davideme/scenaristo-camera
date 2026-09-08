@@ -37,5 +37,10 @@ dependencies {
     implementation(libs.androidx.camera.video)
     implementation(libs.kotlinx.coroutines.android)
 
+    // ADR-0029: the face contour and the person mask a studio look shapes
+    // against. Bundled, so no first-run download.
+    implementation(libs.mlkit.face.mesh)
+    implementation(libs.mlkit.selfie.segmentation)
+
     testImplementation(libs.junit)
 }
