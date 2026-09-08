@@ -328,6 +328,33 @@ PRD §6.11, ADR-0027. PRD §6.1 switches both stabilisers off because *"phone is
 - [ ] Pitch — where the lens is aimed relative to horizontal — is reported beside it and **never framed as wrong**. Aiming slightly up at a seated speaker is a decision as often as an accident. Up and down also survive the mirror, which is why this one names a direction.
 - [ ] **It says when it is not measuring, and does not freeze.** The accelerometer is unregistered for the duration of a take (ADR-0023), so the overlay reads *"Levelling pauses while recording — the take is unaffected"*: the same register as the empty-preview note, saying what is happening and what is not wrong. With the camera released (ADR-0025) it draws nothing at all, because there is nothing to say.
 
+
+**UI-25 — The lighting read says what it sees, and never what to do**
+
+PRD §6.11, [ADR-0029](adr/0029-portrait-lighting-read.md). Two numbers about the room, in the browser
+only, in the **Reported** grammar of UI-9: dimmed, unframed, untouchable.
+
+- [ ] `Key 2.1:1` and `Background −1.3 stops`, both from `State.lighting`, both drawn beside the
+      exposure aids of UI-17 rather than in the control column. They are readings, and a reading that
+      sits among controls invites someone to try to change it.
+- [ ] **No verdict, no colour, no chip.** Not "flat", not "too flat", not orange. UI-5 reserves the
+      chip for something that just became true; this is a standing fact about the room, which is
+      UI-22's distinction — and 1:1 is a legitimate deliberate choice, so a product that called it
+      wrong would be wrong more often than the user.
+- [ ] **The one exception is a sign, not a word.** A negative background separation means the subject
+      is in front of the brightest thing in the room. It reads `Background +2.1 stops brighter than
+      the face`, in the same dimmed style, because the plain number is already the whole message.
+- [ ] **It says when it is not measuring, and does not freeze.** `measuring` false draws `No face —
+      not measuring` rather than the last numbers. During a take it reads `Lighting is not measured
+      while recording — the take is unaffected`, which is UI-23's sentence for the same reason
+      (ADR-0023).
+- [ ] **Tenths arrive as integers** (`keyRatioTenths`, `backgroundStopsTenths`) and are divided on the
+      browser. The phone quantises and deadbands before the wire so a still subject costs no revision
+      (ADR-0024); the browser must not re-round them into a value that flickers between two drawings.
+- [ ] **`keySide` is a side of the frame, not of the person**, and UI-19 lets a viewer mirror the
+      preview. Any copy that names a side has to resolve that on the surface that knows which way the
+      image is drawn — which is why v1's copy names none.
+
 ---
 **UI-20 — Framing guides**
 

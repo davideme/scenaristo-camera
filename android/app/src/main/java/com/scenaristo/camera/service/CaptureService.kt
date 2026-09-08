@@ -56,6 +56,9 @@ import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.domain.mount.ScreenRotation
 import com.scenaristo.camera.domain.exposure.ExposureState
 import com.scenaristo.camera.domain.exposure.GridFrequency
+import com.scenaristo.camera.domain.lighting.PortraitLighting
+import com.scenaristo.camera.domain.protocol.KeySide
+import com.scenaristo.camera.domain.protocol.PortraitLightingState
 import com.scenaristo.camera.domain.exposure.shutterLadder
 import com.scenaristo.camera.domain.lens.framingsFor
 import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
@@ -784,6 +787,27 @@ class CaptureService : LifecycleService() {
     }
 
     /** On a camera thread: the sensor reporting what it actually used (ADR-0005). */
+    /**
+     * The domain reading as the wire type (ADR-0029).
+     *
+     * A hand-written adapter rather than making the domain type `@Serializable`:
+     * the reading is a value the metering loop produces many times a second and
+     * the wire type is a document field with compatibility rules (ADR-0007), and
+     * tying them together would make every future field on one a decision about
+     * the other.
+     */
+    private fun PortraitLighting.Reading.toWire() = PortraitLightingState(
+        measuring = measuring,
+        keyRatioTenths = keyRatioTenths,
+        keySide = when (keySide) {
+            PortraitLighting.KeySide.LEFT -> KeySide.LEFT
+            PortraitLighting.KeySide.RIGHT -> KeySide.RIGHT
+            PortraitLighting.KeySide.NONE -> KeySide.NONE
+        },
+        backgroundStopsTenths = backgroundStopsTenths,
+        enoughLight = enoughLight,
+    )
+
     private fun onCaptureResult(result: android.hardware.camera2.TotalCaptureResult) {
         exposure?.onCaptureResult(result)
     }
@@ -1110,6 +1134,14 @@ class CaptureService : LifecycleService() {
             val attitude = mount.attitude.value
             if (attitude != session.state.mount) {
                 session.update(System.currentTimeMillis()) { it.copy(mount = attitude) }
+            }
+            // Same shape, same reason (PRD 6.11, ADR-0029): the lighting read
+            // changes on frames the exposure state does not, and its deadband is
+            // in PortraitLightingFilter rather than here, so a still subject
+            // under a still lamp costs no revision.
+            val lighting = exposure?.lighting?.value?.toWire() ?: PortraitLightingState()
+            if (lighting != session.state.lighting) {
+                session.update(System.currentTimeMillis()) { it.copy(lighting = lighting) }
             }
             // PRD 6.6 asks the app to show which input is active, and a user
             // checking their microphone before a take is the whole point -- so

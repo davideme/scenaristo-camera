@@ -16,7 +16,7 @@ A behaviour not covered by a fixture is a behaviour that can drift.
 | Fixture | Covers |
 |---|---|
 | `hello.json` | The first server message on `/ws`: protocol version, app name, platform discriminator. |
-| `state.json` | The snapshot every browser mirrors, mid-recording: the flicker-safe shutter step in use, a locked focus point, a warning, and the client count. |
+| `state.json` | The snapshot every browser mirrors, mid-recording: the flicker-safe shutter step in use, a locked focus point, a warning, the client count, and the two mid-take silences — the mount not levelling and the light not being read (ADR-0023, ADR-0027, ADR-0029). |
 | `cmd-record-start.json` | A record command: no `expectRev`, no args. |
 | `cmd-settings-set.json` | A settings patch with the staleness guard set, and a null field meaning "leave it alone". |
 | `cmd-focus-set.json` | Tap to focus: a normalised point in the frame, and no `expectRev` — focus acts on the latest state, like record. |

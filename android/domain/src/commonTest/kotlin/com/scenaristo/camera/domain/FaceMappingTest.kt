@@ -2,6 +2,7 @@ package com.scenaristo.camera.domain
 
 import com.scenaristo.camera.domain.exposure.FaceMapping
 import com.scenaristo.camera.domain.exposure.FrameRect
+import com.scenaristo.camera.domain.exposure.SensorFace
 import com.scenaristo.camera.domain.exposure.SensorRect
 import com.scenaristo.camera.domain.exposure.TapGeometry
 import kotlin.math.roundToInt
@@ -274,8 +275,8 @@ class FaceMappingTest {
         val face = SensorRect(1800, 1350, 2200, 1650)
         val zoomed = SensorRect(1000, 750, 3000, 2250)
 
-        val atOneX = FaceMapping.facesInCrop(listOf(face), cropRegion = array, activeArray = array)
-        val atTwoX = FaceMapping.facesInCrop(listOf(face), cropRegion = zoomed, activeArray = array)
+        val atOneX = FaceMapping.facesInCrop(listOf(SensorFace(face)), cropRegion = array, activeArray = array)
+        val atTwoX = FaceMapping.facesInCrop(listOf(SensorFace(face)), cropRegion = zoomed, activeArray = array)
 
         assertEquals(0.45, atOneX.single().left, 1e-9, "the 1x divisor changed")
         assertEquals(
@@ -290,7 +291,7 @@ class FaceMappingTest {
     fun `a result with no crop region falls back to the active array`() {
         val face = SensorRect(1800, 1350, 2200, 1650)
 
-        val mapped = FaceMapping.facesInCrop(listOf(face), cropRegion = null, activeArray = array)
+        val mapped = FaceMapping.facesInCrop(listOf(SensorFace(face)), cropRegion = null, activeArray = array)
 
         assertEquals(0.45, mapped.single().left, 1e-9, "the active-array fallback did not run")
     }
@@ -298,7 +299,7 @@ class FaceMappingTest {
     @Test
     fun `PRD 6_3 - knowing neither region falls back to the centre window`() {
         val mapped = FaceMapping.facesInCrop(
-            listOf(SensorRect(1800, 1350, 2200, 1650)),
+            listOf(SensorFace(SensorRect(1800, 1350, 2200, 1650))),
             cropRegion = null,
             activeArray = null,
         )
@@ -324,8 +325,8 @@ class FaceMappingTest {
     @Test
     fun `both faces survive the two steps when the sensor reports two`() {
         val faces = listOf(
-            SensorRect(600, 1350, 1000, 1650),
-            SensorRect(2800, 1350, 3200, 1650),
+            SensorFace(SensorRect(600, 1350, 1000, 1650)),
+            SensorFace(SensorRect(2800, 1350, 3200, 1650)),
         )
 
         val framed = FaceMapping.facesInFrame(
@@ -340,9 +341,9 @@ class FaceMappingTest {
     @Test
     fun `a face cropped out of the recording is dropped while the other is kept`() {
         val faces = listOf(
-            SensorRect(1800, 1350, 2200, 1650),
+            SensorFace(SensorRect(1800, 1350, 2200, 1650)),
             // Inside the 4:3 the sensor sees, above the 16:9 the recording keeps.
-            SensorRect(1800, 60, 2200, 300),
+            SensorFace(SensorRect(1800, 60, 2200, 300)),
         )
 
         val framed = FaceMapping.facesInFrame(
