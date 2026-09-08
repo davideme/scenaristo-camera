@@ -73,6 +73,24 @@ class LanGuardTest {
         assertEquals(FORBIDDEN, status(get("/preview.mjpg", host = "evil.example.com")))
     }
 
+    /**
+     * The download route, added by ADR-0028, gets the guard for free: the plugin
+     * intercepts before routing, so a new route is covered the moment it exists.
+     * Asserted rather than assumed, because "for free" is exactly what was
+     * believed about `staticResources` in the bug above.
+     *
+     * This route matters more than the others if the guard ever slips. The
+     * bundle and the preview leak what the camera is pointed at now; this one
+     * hands over the finished footage.
+     */
+    @Test
+    fun `PRD 6_8 - a take download is refused when Host is not an IP literal`() {
+        assertEquals(
+            FORBIDDEN,
+            status(get("/takes/Scenaristo_2026-09-06_14-32-05.mp4", host = "evil.example.com")),
+        )
+    }
+
     // The second half of the bug: `call.respond()` inside a `webSocket {}` handler
     // runs after the upgrade has been negotiated, so the answer was 101 followed
     // by a close frame. PRD 6.8 asks for 403, and a guard that has to let the
