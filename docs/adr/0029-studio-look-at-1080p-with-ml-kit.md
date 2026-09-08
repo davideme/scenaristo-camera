@@ -1,10 +1,44 @@
 # ADR-0029: A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit
 
-**Status:** Proposed
+**Status:** Deprecated — the feature was parked on 2026-09-08, before this was accepted
 **Date:** 2026-09-08
 **Deciders:** Davide Mendolia
 **PRD sections:** 3 (Non-Goals), 6.1, 6.11
 **Related ADRs:** [ADR-0002](0002-android-capture-stack.md), [ADR-0018](0018-preview-tap-for-metering-and-preview-frames.md), [ADR-0023](0023-lock-exposure-for-the-take.md), [ADR-0028](0028-portrait-lighting-read.md)
+
+## Outcome: parked, 2026-09-08
+
+Davide parked the studio look after seeing it running. The reasons are worth keeping, because they
+are about what the platform gives us rather than about the implementation:
+
+**The mask is not good enough, and cannot be made so cheaply.** ML Kit Selfie Segmentation returns a
+640×480 confidence mask, drawn into a 1080p frame — a third of the resolution it is composited at.
+Thresholded hard it aliases into a staircase; blurred soft it stops separating. Both were built and
+looked at. macOS Photo Booth's studio light, compared side by side on the same scene, has neither
+problem.
+
+**And macOS is working from information we do not have.** Its studio light appears to use depth or
+HDR data to decide what to lift and what to sink, per pixel. Everything here is derived from a
+segmentation mask and a face mesh — a silhouette and a landmark set — which is a much poorer
+description of a face than a depth map. That gap is not closed by a better shader.
+
+**The speed is the other half of the same wall.** Segmenting at 1080p instead of 640×360 was measured
+at 48–50 ms against 17–27 ms, which halves the analyser's rate from about 15 Hz to about 8 Hz. Edge
+quality and tracking speed trade directly against each other, and the product would have to pick a
+side of a trade neither side of which is good.
+
+What survives, and is worth keeping whatever happens to the look:
+
+- **Face rectangles reach the meter**, which makes PRD 6.3's "face-weighted" metering true for the
+  first time.
+- **The lighting read** (ADR-0028): key ratio, background separation and the enough-light gate,
+  reported and decided upon by nobody. It detects the backlit subject, which is the commonest
+  domestic lighting fault, and it needs no ML Kit at all.
+- **The measurements below**, which are the answer to "could we do this" and should not have to be
+  taken twice.
+
+Unparking this means either a depth or matte source better than a 640×480 mask, or a CameraX release
+that changes what can bind beside a UHD recording (#27, #62). Neither is a shader problem.
 
 ## Context
 

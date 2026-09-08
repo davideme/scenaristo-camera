@@ -46,7 +46,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0027](0027-mount-level-from-the-accelerometer.md) | Read the accelerometer to report mount level and steadiness, and only while a take is not running | Proposed | 6.1, 6.8, 6.11 |
 | [0028](0028-serve-takes-over-the-lan.md) | Serve finished takes over a second HTTP route, refused while recording; resumable, and unauthenticated like the rest of the LAN surface | Proposed | 6.11, 6.8, 6.7 |
 | [0029](0029-portrait-lighting-read.md) | Read the key ratio, background separation and room light from the frames already being metered; report only, and not during a take | Proposed | 6.3, 6.11 |
-| [0030](0030-studio-look-at-1080p-with-ml-kit.md) | A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit; 4K keeps everything it has | Proposed | 3, 6.1, 6.10, 6.11 |
+| [0030](0030-studio-look-at-1080p-with-ml-kit.md) | A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit; **feature parked 2026-09-08** — the mask is too coarse and macOS works from depth we cannot reach | Deprecated | 3, 6.1, 6.10, 6.11 |
 
 ## Challenges to positions stated in the PRD
 
