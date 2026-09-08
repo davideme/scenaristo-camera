@@ -149,6 +149,9 @@ This is the deliberate departure from the OBS design. OBS holds chapters in memo
 ---
 **CM-6 — Take list in the web UI**
 
+> **Naming, 2026-09-07.** "Take" means two different things once PRD §6.11's download lands, and this is the row where they collide. Here a *take* is a marked segment **inside one recording**; in UI-24 and ADR-0028 a *take* is a recorded **file**, and its take list is a list of files to download. Both lists are called "the take list in the web UI" and they are unrelated features. CM-6 is unbuilt and blocked behind the CameraX 1.7 revisit, so renaming this one — to chapters, or segments — is cheap and worth doing before anyone builds it. Davide's call.
+
+
 - Live list of takes for the current recording: number, start timestamp, running duration for the take in progress, keeper flag.
 - Newest at the top; the in-progress take is visually distinct.
 - The list is part of the phone's single-source-of-truth state and is broadcast to every connected client within 200 ms, per parent §6.8. A second browser sees the same list.

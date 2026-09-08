@@ -19,6 +19,7 @@ import {
   MainsPanel,
   PhonePanel,
   SoundPanel,
+  TakesPanel,
   ViewPanel,
 } from './panels'
 import type { GridFrequency, State, Warning } from './protocol'
@@ -236,6 +237,10 @@ export function App() {
               onSet={(zoomRatio) => void patch({ zoomRatio })}
             />
             <SoundPanel state={state} />
+            {/* After Sound and before Capability: it is the only panel about
+                what has already been shot, so it sits at the end of the ones
+                about the shot in progress. */}
+            <TakesPanel state={state} recording={recording} />
             <CapabilityPanel state={state} />
             <ViewPanel
               view={view}

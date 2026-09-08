@@ -81,3 +81,11 @@ export const MirrorIcon = () => (
     <path d="M16 7l4 5-4 5V7Z" />
   </svg>
 )
+
+/** PRD 6.11: the download link on each take. */
+export const DownloadIcon = () => (
+  <svg {...base} class="icon">
+    <path d="M12 3v12M7 11l5 5 5-5" />
+    <path d="M4 20h16" />
+  </svg>
+)

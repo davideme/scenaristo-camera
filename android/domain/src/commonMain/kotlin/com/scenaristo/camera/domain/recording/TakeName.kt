@@ -7,8 +7,10 @@ package com.scenaristo.camera.domain.recording
  * name from the same instant, and a second implementation is a second chance to
  * get the separators wrong (ADR-0013). It matters more than a filename usually
  * does: the timestamp is what makes two takes a minute apart sort correctly in a
- * directory listing, which is the only ordering a creator gets -- there is no
- * take list in the app (PRD 6.9), so the file browser is the take list.
+ * directory listing, and it is the ordering the remote control's take list uses
+ * as well (PRD 6.11). The phone's own screen still shows no list -- that is a
+ * non-goal of the phone UI spec, not an oversight -- so on the phone the file
+ * browser remains the take list.
  *
  * The platform supplies the calendar fields rather than an instant, because
  * turning an instant into a local date needs a time zone database and

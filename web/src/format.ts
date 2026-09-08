@@ -99,7 +99,42 @@ export function remotes(count: number): string {
   return `${count} remote${count === 1 ? '' : 's'} connected`
 }
 
-/** UI-4: free space is minutes at the current bitrate. Gigabytes are never shown. */
+/**
+ * UI-4: **free space** is minutes at the current bitrate, never gigabytes.
+ *
+ * Scoped to free space on 2026-09-07, because it used to say gigabytes were
+ * never shown at all and PRD 6.11's take list shows them. The rule was always
+ * about the question rather than the unit: "how much room is left" is answered
+ * in minutes because a creator is deciding whether to start a take, and no
+ * amount of arithmetic turns 4.2 GB into that answer. "How big is this file"
+ * is a different question, asked when a take is already shot and about to be
+ * copied somewhere, and bytes are its honest unit.
+ */
 export function minutesLeft(minutes: number): string {
   return minutes > 0 ? `${minutes} min` : ABSENT
+}
+
+/**
+ * A take's size, for the download list (PRD 6.11).
+ *
+ * Decimal units, because that is what every file manager the user will compare
+ * this against reports -- macOS Finder and the browser's own download shelf
+ * both call 1000 bytes a kilobyte. Being right about powers of two here would
+ * only mean disagreeing with the number beside it.
+ *
+ * One decimal place below 100, none above: "1.4 GB" is worth a digit, "847 MB"
+ * is not, and the varying width of a right-aligned column is worse than the
+ * precision is worth.
+ */
+export function fileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return ABSENT
+  if (bytes < 1000) return `${bytes} B`
+  const units = ['kB', 'MB', 'GB', 'TB']
+  let value = bytes / 1000
+  let unit = 0
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000
+    unit += 1
+  }
+  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`
 }
