@@ -1,10 +1,10 @@
-# ADR-0029: A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit
+# ADR-0030: A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit
 
 **Status:** Deprecated — the feature was parked on 2026-09-08, before this was accepted
 **Date:** 2026-09-08
 **Deciders:** Davide Mendolia
 **PRD sections:** 3 (Non-Goals), 6.1, 6.11
-**Related ADRs:** [ADR-0002](0002-android-capture-stack.md), [ADR-0018](0018-preview-tap-for-metering-and-preview-frames.md), [ADR-0023](0023-lock-exposure-for-the-take.md), [ADR-0028](0028-portrait-lighting-read.md)
+**Related ADRs:** [ADR-0002](0002-android-capture-stack.md), [ADR-0018](0018-preview-tap-for-metering-and-preview-frames.md), [ADR-0023](0023-lock-exposure-for-the-take.md), [ADR-0029](0029-portrait-lighting-read.md)
 
 ## Outcome: parked, 2026-09-08
 
@@ -31,7 +31,7 @@ What survives, and is worth keeping whatever happens to the look:
 
 - **Face rectangles reach the meter**, which makes PRD 6.3's "face-weighted" metering true for the
   first time.
-- **The lighting read** (ADR-0028): key ratio, background separation and the enough-light gate,
+- **The lighting read** (ADR-0029): key ratio, background separation and the enough-light gate,
   reported and decided upon by nobody. It detects the backlit subject, which is the commonest
   domestic lighting fault, and it needs no ML Kit at all.
 - **The measurements below**, which are the answer to "could we do this" and should not have to be
@@ -42,7 +42,7 @@ that changes what can bind beside a UHD recording (#27, #62). Neither is a shade
 
 ## Context
 
-ADR-0028 reads how the room is lighting the subject and reports it. The next step applies a look —
+ADR-0029 reads how the room is lighting the subject and reports it. The next step applies a look —
 Rembrandt or Clamshell (PRD 6.11) — by shaping the light that is already there: a soft directional
 gain across the face moving the measured ratio toward 2:1, and a gain on everything that is not the
 subject, moving the background to the one-to-two stops under the face that `docs/research/studio-lighting.md`
@@ -51,13 +51,13 @@ previewed.
 
 Three things have to be true for that, and on the 4K path each is expensive or unavailable.
 
-**A face, better than a rectangle.** ADR-0028 divides a face at the midpoint of the HAL's two eye
+**A face, better than a rectangle.** ADR-0029 divides a face at the midpoint of the HAL's two eye
 landmarks. That is a proxy for the nose line and it is all the platform offers. A face contour would
 let the ratio be measured across skin rather than across a box, and let a gain be shaped to a face
 rather than to a gradient.
 
 **A person mask.** Measuring background separation needs only the complement of the face box, which
-ADR-0028 already has. *Applying* the background rule needs to know where the person ends, or the gain
+ADR-0029 already has. *Applying* the background rule needs to know where the person ends, or the gain
 that darkens the wall also darkens their shoulders and hair.
 
 **Somewhere to run a model.** ADR-0018 exists because #20 measured that **no configuration on the
@@ -132,7 +132,7 @@ copy measured a **median of 0 ms** at 640×360, so it was the resolution and not
 first round of these numbers look expensive. And they were taken with all three models running, where
 the product will run two.
 
-4K recording keeps everything it has today, including ADR-0028's reading, which continues to run on the
+4K recording keeps everything it has today, including ADR-0029's reading, which continues to run on the
 tap. **The look is the only thing that constrains resolution**, and choosing it is how a user asks for
 whatever trade their device imposes.
 
@@ -221,7 +221,7 @@ answer.
 
 - **Easier:** the shader has a sixth of the pixels; ML Kit supplies face and mask through one
   dependency; `FaceMapping` and `TapGeometry` become deletable on this path, and with them the
-  `DISTORTION_CORRECTION_MODE` hazard ADR-0028 had to write down rather than solve.
+  `DISTORTION_CORRECTION_MODE` hazard ADR-0029 had to write down rather than solve.
 - **Easier:** the thermal question shrinks enough that the take-length disclaimer Davide accepted on
   2026-09-08 may not be needed. It stays until measured, not because it is expected to bind.
 - **Harder:** two session shapes, and a rebind when the look changes — which is why a look is refused
@@ -250,7 +250,7 @@ answer.
 4. [ ] Measure Face Mesh at three-quarter angle and at 1.5–2 m, not only square to the lens. On
    2026-09-08 it returned 468 points on every frame of a seated subject, but that subject was facing the
    camera; its documented envelope is the risk, and if it declines where speakers actually sit, the
-   ratio keeps ADR-0028's eye-line split.
+   ratio keeps ADR-0029's eye-line split.
 5. [ ] Re-measure the install cost on a **release** build with R8 and per-ABI delivery. The 35 MB figure
    is an arm64 slice of an unminified debug APK, which is an upper bound rather than what a user
    downloads.
