@@ -223,6 +223,14 @@ data class SettingsPatch(
      */
     val shutterLock: Int? = null,
     /**
+     * The studio look to apply, or [StudioLook.OFF] to stop applying one
+     * (PRD 6.11).
+     *
+     * A plain enum rather than a tri-state: absence is "leave it alone" and OFF
+     * is a value the user can choose, so there is no third state to express.
+     */
+    val studioLook: StudioLook? = null,
+    /**
      * The framing to switch to, as a zoom ratio (PRD 6.5, #77).
      *
      * Only a ratio the phone actually offered in `State.lenses` is accepted.

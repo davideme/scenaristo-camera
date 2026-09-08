@@ -2,6 +2,7 @@ package com.scenaristo.camera.domain
 
 import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.protocol.CaptureSettings
+import com.scenaristo.camera.domain.protocol.StudioLook
 import com.scenaristo.camera.domain.protocol.SettingsPatch
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.serializer
@@ -38,6 +39,7 @@ class SettableSettingsTest {
         "shutterLock",
         "lockExposureWhileRecording",
         "zoomRatio",
+        "studioLook",
     )
 
     @Test
@@ -70,6 +72,11 @@ class SettableSettingsTest {
             "ADR-0023's mode is a user choice, so a stale tab must not undo it",
         )
         assertNotEquals(base.settable, base.copy(zoomRatio = 5.0).settable)
+        assertNotEquals(
+            base.settable,
+            base.copy(studioLook = StudioLook.REMBRANDT).settable,
+            "choosing a look did not count as a settings change (ADR-0024)",
+        )
     }
 
     /**

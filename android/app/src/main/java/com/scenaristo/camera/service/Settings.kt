@@ -1,5 +1,6 @@
 package com.scenaristo.camera.service
 
+import com.scenaristo.camera.domain.protocol.StudioLook
 import android.content.Context
 import android.telephony.TelephonyManager
 import com.scenaristo.camera.domain.exposure.GridFrequency
@@ -92,6 +93,20 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putFloat(KEY_ZOOM, value.toFloat()).apply()
 
     /**
+     * The studio look the creator chose, or OFF (PRD 6.11).
+     *
+     * Stored by name rather than by ordinal: an ordinal is a promise never to
+     * reorder the enum, and this one will gain looks. A stored name the enum no
+     * longer has reads back as OFF, which is the safe direction -- the app
+     * records what is in front of the lens until someone asks otherwise.
+     */
+    var studioLook: StudioLook
+        get() = prefs.getString(KEY_STUDIO_LOOK, null)
+            ?.let { name -> StudioLook.entries.firstOrNull { it.name == name } }
+            ?: StudioLook.OFF
+        set(value) = prefs.edit().putString(KEY_STUDIO_LOOK, value.name).apply()
+
+    /**
      * PRD 6.2's detection chain, with the stored override in front of it.
      *
      * This is where `resolveGrid` finally gets called. Until now the grid was the
@@ -128,6 +143,7 @@ class Settings(context: Context) {
         const val KEY_GALLERY = "save-to-gallery"
         const val KEY_EXPOSURE_LOCK = "lock-exposure-while-recording"
         const val KEY_ZOOM = "zoom-ratio"
+        const val KEY_STUDIO_LOOK = "studio-look"
 
         /** PRD 6.1's default camera, as the platform's own id for it. */
         const val DEFAULT_LENS = "0"

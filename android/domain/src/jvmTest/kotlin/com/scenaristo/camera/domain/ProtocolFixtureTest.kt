@@ -19,7 +19,9 @@ import com.scenaristo.camera.domain.protocol.Platform
 import com.scenaristo.camera.domain.protocol.ProtocolJson
 import com.scenaristo.camera.domain.protocol.ServerMessage
 import com.scenaristo.camera.domain.protocol.KeySide
+import com.scenaristo.camera.domain.protocol.State
 import com.scenaristo.camera.domain.protocol.StateMessage
+import com.scenaristo.camera.domain.protocol.StudioLook
 import com.scenaristo.camera.domain.protocol.ThermalState
 import com.scenaristo.camera.domain.protocol.VideoCodec
 import com.scenaristo.camera.domain.protocol.Warning
@@ -150,6 +152,11 @@ class ProtocolFixtureTest {
         assertEquals(KeySide.NONE, state.lighting.keySide)
         assertNull(state.lighting.backgroundStopsTenths)
         assertTrue(state.lighting.enoughLight)
+        // PRD 6.11: a look is chosen once and remembered, and OFF is the product's
+        // own answer -- the app records what is in front of the lens until asked
+        // otherwise. The golden file pins that default rather than leaving it to
+        // whichever platform decodes the snapshot.
+        assertEquals(StudioLook.OFF, state.settings.studioLook)
         // PRD 6.7's naming, which UI-9's transport row shows next to the timecode.
         assertEquals("Scenaristo_2026-09-06_14-32-05", state.recording.fileName)
         assertTrue(

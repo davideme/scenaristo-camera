@@ -13,7 +13,8 @@
         "x": 0.42,
         "y": 0.33
       },
-      "zoomRatio": 1.0
+      "zoomRatio": 1.0,
+      "studioLook": "OFF"
     },
     "recording": {
       "recording": true,

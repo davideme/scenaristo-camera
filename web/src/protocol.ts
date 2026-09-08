@@ -72,6 +72,7 @@ export interface CaptureSettings {
   lockExposureWhileRecording?: boolean;
   focus?: Focus;
   zoomRatio?: number;
+  studioLook?: StudioLook;
 }
 
 export type GridFrequency = "HZ_50" | "HZ_60";
@@ -85,6 +86,8 @@ export interface Focus {
 }
 
 export type FocusMode = "continuous" | "locked";
+
+export type StudioLook = "OFF" | "REMBRANDT" | "CLAMSHELL";
 
 export interface RecordingState {
   recording: boolean;
@@ -183,6 +186,7 @@ export interface SettingsPatch {
   saveToGallery?: boolean | null;
   lockExposureWhileRecording?: boolean | null;
   shutterLock?: number | null;
+  studioLook?: StudioLook | null;
   zoomRatio?: number | null;
 }
 

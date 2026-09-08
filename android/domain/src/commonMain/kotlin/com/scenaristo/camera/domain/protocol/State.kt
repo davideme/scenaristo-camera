@@ -137,6 +137,15 @@ data class CaptureSettings(
      * older snapshot still decodes (ADR-0007).
      */
     val zoomRatio: Double = 1.0,
+    /**
+     * Which studio look the creator has chosen, or [StudioLook.OFF] (PRD 6.11).
+     *
+     * Chosen once and remembered, like the mains frequency, because it is a fact
+     * about the kind of video someone makes rather than a decision per take.
+     * Defaulted to OFF so an older snapshot still decodes (ADR-0007) and so the
+     * product's own answer stays "we record what is in front of the lens".
+     */
+    val studioLook: StudioLook = StudioLook.OFF,
 ) {
     /**
      * The fields a client can actually ask for, which is what a settings guard
@@ -165,6 +174,7 @@ data class CaptureSettings(
             shutterLock,
             lockExposureWhileRecording,
             zoomRatio,
+            studioLook,
         )
 }
 
@@ -625,6 +635,36 @@ data class PortraitLightingState(
      */
     val enoughLight: Boolean = false,
 )
+
+/**
+ * The studio look a creator has chosen (PRD 6.11).
+ *
+ * Two looks rather than a slider, and named for what they are for rather than
+ * for what they do: the choice is which kind of video someone makes, and nothing
+ * a camera measures can tell it that. `docs/research/studio-lighting.md` §2 has
+ * both.
+ *
+ * [OFF] is the default and stays the product's own answer — the app records what
+ * is in front of the lens. A look is something a person asks for.
+ */
+@Serializable
+enum class StudioLook {
+    OFF,
+
+    /**
+     * Key round and high, nose and cheek shadows meeting to leave a triangle of
+     * light on the far cheek. The interview look, and the more dramatic of the
+     * two.
+     */
+    REMBRANDT,
+
+    /**
+     * Butterfly plus fill from below, the key nearer the lens axis. Beauty, tech
+     * and desk streaming — and roughly what a desk with a light above the monitor
+     * and a pale desktop below already is, by accident.
+     */
+    CLAMSHELL,
+}
 
 /** Which side of the frame a key light is on (PRD 6.11). */
 @Serializable

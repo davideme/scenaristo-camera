@@ -58,6 +58,7 @@ import com.scenaristo.camera.domain.exposure.GridFrequency
 import com.scenaristo.camera.domain.lighting.PortraitLighting
 import com.scenaristo.camera.domain.protocol.KeySide
 import com.scenaristo.camera.domain.protocol.PortraitLightingState
+import com.scenaristo.camera.domain.protocol.StudioLook
 import com.scenaristo.camera.domain.exposure.shutterLadder
 import com.scenaristo.camera.domain.lens.framingsFor
 import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
@@ -191,6 +192,8 @@ class CaptureService : LifecycleService() {
     /** Last grid and lens written to storage, for the same reason. */
     private var appliedGrid: GridFrequency? = null
     private var appliedLens: String? = null
+
+    private var appliedStudioLook: StudioLook? = null
 
     /** Last gallery choice written to storage (PRD 6.7). */
     private var appliedGallery: Boolean? = null
@@ -1155,6 +1158,15 @@ class CaptureService : LifecycleService() {
                 appliedLens = lens
                 settings.lensId = lens
             }
+            // Chosen once and remembered, like the mains frequency (PRD 6.11).
+            // Nothing acts on it yet -- ADR-0028's reading is reported and this
+            // is stored -- so the only work is making the choice survive a
+            // relaunch, which is the whole promise of "pick it once".
+            val look = session.state.settings.studioLook
+            if (look != appliedStudioLook) {
+                appliedStudioLook = look
+                settings.studioLook = look
+            }
             server.broadcastSnapshot()
             _state.value = session.state
             // ADR-0025: the tick is what notices a browser attaching or dropping
@@ -1702,6 +1714,7 @@ class CaptureService : LifecycleService() {
             saveToGallery = settings.saveToGallery,
             lockExposureWhileRecording = settings.lockExposureWhileRecording,
             zoomRatio = settings.zoomRatio,
+            studioLook = settings.studioLook,
         ),
         recording = RecordingState(recording = false),
         device = DeviceStatus(0, false, ThermalState.NOMINAL, 0),

@@ -13,6 +13,7 @@ import com.scenaristo.camera.domain.protocol.NackReason
 import com.scenaristo.camera.domain.protocol.RecordingState
 import com.scenaristo.camera.domain.protocol.Session
 import com.scenaristo.camera.domain.protocol.SettingsPatch
+import com.scenaristo.camera.domain.protocol.StudioLook
 import com.scenaristo.camera.domain.protocol.State
 import com.scenaristo.camera.domain.protocol.ThermalState
 import com.scenaristo.camera.domain.protocol.Warning
@@ -441,5 +442,45 @@ class SessionTest {
         session.apply(cmd(CommandName.RECORD_START), nowMs = 0)
         assertEquals(session.rev, session.snapshot().rev)
         assertEquals(session.state, session.snapshot().state)
+    }
+
+    // PRD 6.11: chosen once and remembered, like the mains frequency.
+    @Test
+    fun `PRD 6_11 - a studio look is accepted and counts as a settings change`() {
+        val session = Session(idle())
+        val before = session.settingsRev
+
+        val outcome = session.apply(
+            cmd(CommandName.SETTINGS_SET, args = SettingsPatch(studioLook = StudioLook.REMBRANDT)),
+            nowMs = 0,
+        )
+
+        assertTrue(outcome.reply is Ack, "choosing a look was refused")
+        assertEquals(
+            StudioLook.REMBRANDT,
+            session.state.settings.studioLook,
+            "the look was not applied",
+        )
+        assertTrue(session.settingsRev > before, "choosing a look did not advance the settings revision")
+    }
+
+    // PRD 6.1's locked look: nothing settable moves during a take, and a look is
+    // a setting like any other rather than an exception argued for separately.
+    @Test
+    fun `PRD 6_1 - a studio look is refused while recording`() {
+        val session = Session(idle())
+        session.apply(cmd(CommandName.RECORD_START), nowMs = 0)
+
+        val outcome = session.apply(
+            cmd(CommandName.SETTINGS_SET, id = "look", args = SettingsPatch(studioLook = StudioLook.CLAMSHELL)),
+            nowMs = 1,
+        )
+
+        assertTrue(outcome.reply is Nack, "a look changed under a running take")
+        assertEquals(
+            StudioLook.OFF,
+            session.state.settings.studioLook,
+            "the refused look was applied anyway",
+        )
     }
 }

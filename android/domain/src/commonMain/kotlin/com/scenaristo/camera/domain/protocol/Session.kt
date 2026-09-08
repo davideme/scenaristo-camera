@@ -158,6 +158,11 @@ class Session(
                 ?: state.settings.lockExposureWhileRecording,
             shutterLock = shutterLock,
             zoomRatio = patch.zoomRatio ?: state.settings.zoomRatio,
+            // No range to check: an unknown name fails to decode long before it
+            // reaches here, which is the enum doing what the Kelvin range needs
+            // explicit code for. The recording guard above still applies -- a
+            // look is a setting, and PRD 6.1's locked look holds for the take.
+            studioLook = patch.studioLook ?: state.settings.studioLook,
         )
         if (updated == state.settings) return remember(command, nowMs, changed = false)
         val settableChanged = updated.settable != state.settings.settable
