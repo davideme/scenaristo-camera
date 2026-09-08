@@ -87,9 +87,11 @@ class TakeFolderTest {
     }
 
     /**
-     * The spike screen writes `take-<epoch>.mp4` into the same directory
-     * (`InteropEchoScreen`), and a user can drop anything there over USB. Only
-     * PRD 6.7's shape is a take.
+     * `take-<epoch>.mp4` is not a hypothetical: it is what this app itself
+     * wrote before `TakeName` existed (#40), and files with that name were
+     * still sitting in the reference phone's folder when this was written. A
+     * user can also drop anything there over USB. Only PRD 6.7's shape is a
+     * take -- see [TakeFolder.list] for why the pattern is not widened.
      */
     @Test
     fun `PRD 6_11 - anything that is not a take is not listed`() {
