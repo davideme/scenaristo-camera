@@ -47,6 +47,7 @@ import com.scenaristo.camera.R
 import com.scenaristo.camera.capture.CodecReport
 import com.scenaristo.camera.capture.ExposureController
 import com.scenaristo.camera.capture.LensSweepRunner
+import com.scenaristo.camera.capture.AnalysisRecordingProbe
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.MountSensor
@@ -913,6 +914,10 @@ class CaptureService : LifecycleService() {
                         manualShutter = lens.hasManualSensor,
                         manualWhiteBalance = lens.hasManualPostProcessing,
                         hardwareHevc = codecReport.hevcEncoders.any { e -> e.hardwareAccelerated },
+                        // ADR-0029: what a studio look would record at here, asked
+                        // of the device rather than written into the product.
+                        analysisRecordingHeight = AnalysisRecordingProbe
+                            .tallestSupportedHeight(bound.cameraInfo),
                     ),
                 )
             }

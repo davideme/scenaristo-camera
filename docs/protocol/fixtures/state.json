@@ -136,6 +136,14 @@
         "equivalentFocalLengthMm": 120
       }
     ],
+    "capabilities": {
+      "probed": true,
+      "uhd30": true,
+      "manualShutter": true,
+      "manualWhiteBalance": true,
+      "hardwareHevc": true,
+      "analysisRecordingHeight": 1080
+    },
     "mount": {
       "rollDegrees": 0.0,
       "pitchDegrees": 0.0,

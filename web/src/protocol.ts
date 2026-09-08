@@ -143,6 +143,7 @@ export interface Capabilities {
   manualShutter?: boolean;
   manualWhiteBalance?: boolean;
   hardwareHevc?: boolean;
+  analysisRecordingHeight?: number | null;
 }
 
 export interface LensChoice {

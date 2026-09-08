@@ -303,6 +303,23 @@ data class Capabilities(
     val manualWhiteBalance: Boolean = false,
     /** A hardware HEVC encoder exists. Whether the profile *chooses* it is [Encoding.codec]. */
     val hardwareHevc: Boolean = false,
+    /**
+     * The tallest recording that binds alongside an analysis stream on this
+     * device, or null where none does (PRD 6.10, ADR-0029).
+     *
+     * A studio look needs a frame to run a model on, and on CameraX 1.6 whether
+     * that stream can sit beside the recording depends on the device: the
+     * reference Pixel 10 answers 1080 because #20 measured that no UHD
+     * configuration binds beside one, and another handset may answer 2160 and
+     * give up nothing. **Asked of the device rather than written into the
+     * product**, so that one phone's limit does not become everyone's.
+     *
+     * Height rather than a named tier, because the answer is a fact about this
+     * device and the next one may not be either of the two tiers we know.
+     * Reported before the look is chosen, so a user is told what it costs
+     * beforehand rather than discovering it in the file.
+     */
+    val analysisRecordingHeight: Int? = null,
 )
 
 /**

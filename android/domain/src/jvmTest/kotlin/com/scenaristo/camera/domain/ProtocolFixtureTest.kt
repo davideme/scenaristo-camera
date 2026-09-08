@@ -157,6 +157,13 @@ class ProtocolFixtureTest {
         // otherwise. The golden file pins that default rather than leaving it to
         // whichever platform decodes the snapshot.
         assertEquals(StudioLook.OFF, state.settings.studioLook)
+        // PRD 6.10, ADR-0029: what a studio look would record at *here*. The two
+        // together are the point, and the fixture carries the reference Pixel 10's
+        // pair: this device records UHD, and cannot do it with an analysis stream
+        // beside it. A platform that reported one without the other would be
+        // telling a user they can have both.
+        assertTrue(state.capabilities.uhd30)
+        assertEquals(1080, state.capabilities.analysisRecordingHeight)
         // PRD 6.7's naming, which UI-9's transport row shows next to the timecode.
         assertEquals("Scenaristo_2026-09-06_14-32-05", state.recording.fileName)
         assertTrue(

@@ -432,6 +432,19 @@ export function ViewPanel({
  * have is a fact rather than an error — the user did nothing wrong and there is
  * nothing to fix.
  */
+/**
+ * What a studio look costs on this device (ADR-0029).
+ *
+ * Said before the look is chosen rather than discovered in the file: the whole
+ * reason the height is probed rather than assumed is that it differs, and a user
+ * on a device with no cost should not be told there is one.
+ */
+function lookNote(height: number | null | undefined, uhd30: boolean): string | null {
+  if (typeof height !== 'number') return 'Not available on this camera'
+  if (!uhd30 || height >= 2160) return null
+  return `Records at ${height}p, not 4K`
+}
+
 export function CapabilityPanel({ state }: { state: State }) {
   const caps = state.capabilities
   if (!caps?.probed) {
@@ -455,6 +468,15 @@ export function CapabilityPanel({ state }: { state: State }) {
       caps.manualWhiteBalance ? null : 'Presets are approximated',
     ],
     ['Hardware HEVC', caps.hardwareHevc === true, null],
+    // ADR-0029: a studio look needs an analysis stream beside the recording, and
+    // whether the device allows that at full resolution is a device question. The
+    // note names the cost rather than the mechanism -- nobody choosing a look
+    // needs to know what an ImageAnalysis is, only what it will record at.
+    [
+      'Studio look',
+      typeof caps.analysisRecordingHeight === 'number',
+      lookNote(caps.analysisRecordingHeight, caps.uhd30 === true),
+    ],
   ]
 
   return (
