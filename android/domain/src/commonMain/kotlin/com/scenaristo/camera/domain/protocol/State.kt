@@ -68,7 +68,7 @@ data class State(
      */
     val mount: MountAttitude = MountAttitude(),
     /**
-     * How the room is lighting the subject (PRD 6.11, ADR-0028).
+     * How the room is lighting the subject (PRD 6.11, ADR-0029).
      *
      * Defaulted, so a snapshot written before it existed still decodes -- the
      * compatibility rule ADR-0007 sets for added fields.
@@ -644,7 +644,7 @@ enum class ThermalState {
 }
 
 /**
- * How the room is lighting the subject (PRD 6.11, ADR-0028).
+ * How the room is lighting the subject (PRD 6.11, ADR-0029).
  *
  * Reported only. Nothing here changes a light, and nothing here is settable: it
  * is a measurement of the room, which is the first thing this product measures

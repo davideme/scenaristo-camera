@@ -127,7 +127,7 @@ function Unmetered({ label, heading }: { label: string; heading?: boolean }) {
 }
 
 /**
- * How the room is lighting the subject (UI-24, PRD 6.11, ADR-0028).
+ * How the room is lighting the subject (UI-25, PRD 6.11, ADR-0029).
  *
  * **Reported** grammar like everything else here: dimmed, unframed, nothing to
  * press. Two numbers and no verdict — 1:1 is a legitimate deliberate choice, so
@@ -148,7 +148,7 @@ export function LightingRead({
     return (
       <div class="aid">
         <div class="aid-head">
-          <span class="label">Light on you</span>
+          <span class="label">Background</span>
           <span class="value dim">
             {recording ? 'not measured while recording' : 'no face — not measuring'}
           </span>
@@ -160,7 +160,11 @@ export function LightingRead({
   // Tenths arrive as integers so the phone's deadband survives the wire
   // (ADR-0024). Divided here and never re-rounded, or the drawing would flicker
   // between two values the phone deliberately held still.
-  const ratio = (lighting.keyRatioTenths ?? 0) / 10
+  // `keyRatioTenths` is measured, deadbanded and on the wire -- and deliberately
+  // not drawn. PRD section 2's creator "does not know what a Kelvin is but knows
+  // the video looks orange", and a key ratio is more jargon than a Kelvin: a
+  // number they cannot act on, sitting beside one they can. It comes back when it
+  // has words instead of a figure.
   const stopsTenths = lighting.backgroundStopsTenths
   const separation =
     stopsTenths === undefined || stopsTenths === null
@@ -169,10 +173,6 @@ export function LightingRead({
 
   return (
     <div class="aid">
-      <div class="aid-head">
-        <span class="label">Light on you</span>
-        <span class="value">{ratio.toFixed(1)}:1</span>
-      </div>
       <div class="aid-head">
         <span class="label">Background</span>
         <span class="value">

@@ -1,4 +1,4 @@
-# ADR-0028: Read the light on the subject from the frames already being metered, and report it
+# ADR-0029: Read the light on the subject from the frames already being metered, and report it
 
 **Status:** Proposed
 **Date:** 2026-09-08
@@ -65,7 +65,7 @@ Three rules go with them.
    every settings change the user made, which is the bug ADR-0024 exists to fix.
 
 This amends no PRD statement. It adds one bullet to **6.11 (P1)** and one entry to the UI spec
-(UI-24), which is ADR-0027's precedent for new product surface.
+(UI-25), which is ADR-0027's precedent for new product surface.
 
 ## Options Considered
 

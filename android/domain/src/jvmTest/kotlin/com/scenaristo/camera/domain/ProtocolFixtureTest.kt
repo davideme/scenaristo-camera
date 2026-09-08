@@ -157,7 +157,7 @@ class ProtocolFixtureTest {
         // to it has to be argued for rather than merged.
         assertFalse(state.mount.measuring)
         assertEquals(0.0, state.mount.rollDegrees, absoluteTolerance = 1e-9)
-        // PRD 6.11's lighting read, false here for the same reason (ADR-0028):
+        // PRD 6.11's lighting read, false here for the same reason (ADR-0029):
         // it exists so somebody can move a lamp, and a take in progress is
         // exactly when nobody is going to. `enoughLight` survives because it is
         // read off ISO rather than off a face, and stays true of the room.

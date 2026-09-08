@@ -788,7 +788,7 @@ class CaptureService : LifecycleService() {
 
     /** On a camera thread: the sensor reporting what it actually used (ADR-0005). */
     /**
-     * The domain reading as the wire type (ADR-0028).
+     * The domain reading as the wire type (ADR-0029).
      *
      * A hand-written adapter rather than making the domain type `@Serializable`:
      * the reading is a value the metering loop produces many times a second and
@@ -1135,7 +1135,7 @@ class CaptureService : LifecycleService() {
             if (attitude != session.state.mount) {
                 session.update(System.currentTimeMillis()) { it.copy(mount = attitude) }
             }
-            // Same shape, same reason (PRD 6.11, ADR-0028): the lighting read
+            // Same shape, same reason (PRD 6.11, ADR-0029): the lighting read
             // changes on frames the exposure state does not, and its deadband is
             // in PortraitLightingFilter rather than here, so a still subject
             // under a still lamp costs no revision.

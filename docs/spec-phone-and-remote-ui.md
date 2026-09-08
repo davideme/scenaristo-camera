@@ -329,9 +329,9 @@ PRD §6.11, ADR-0027. PRD §6.1 switches both stabilisers off because *"phone is
 - [ ] **It says when it is not measuring, and does not freeze.** The accelerometer is unregistered for the duration of a take (ADR-0023), so the overlay reads *"Levelling pauses while recording — the take is unaffected"*: the same register as the empty-preview note, saying what is happening and what is not wrong. With the camera released (ADR-0025) it draws nothing at all, because there is nothing to say.
 
 
-**UI-24 — The lighting read says what it sees, and never what to do**
+**UI-25 — The lighting read says what it sees, and never what to do**
 
-PRD §6.11, [ADR-0028](adr/0028-portrait-lighting-read.md). Two numbers about the room, in the browser
+PRD §6.11, [ADR-0029](adr/0029-portrait-lighting-read.md). Two numbers about the room, in the browser
 only, in the **Reported** grammar of UI-9: dimmed, unframed, untouchable.
 
 - [ ] `Key 2.1:1` and `Background −1.3 stops`, both from `State.lighting`, both drawn beside the
