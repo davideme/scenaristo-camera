@@ -121,6 +121,22 @@ class ProtocolFixtureTest {
         // are the reference device's own, measured 2026-09-06.
         assertEquals(4, state.lenses.size)
         assertEquals(listOf(13, 24, 48, 120), state.lenses.map { it.equivalentFocalLengthMm })
+        // PRD 6.11: the takes the remote control can download. Newest first, and
+        // the take being recorded is not among them -- `recording` is true in
+        // this fixture, and a take only becomes a row when the file is closed.
+        assertEquals(2, state.takes.size)
+        assertEquals("Scenaristo_2026-09-06_14-28-11", state.takes.first().name)
+        assertTrue(
+            state.takes.first().recordedAtMs > state.takes.last().recordedAtMs,
+            "the list is newest first",
+        )
+        assertTrue(
+            state.takes.none { it.name == state.recording.fileName },
+            "the take being written is not offered for download",
+        )
+        // The name is the handle the download route resolves, so the fixture is
+        // also the assertion that both platforms build the same URL from it.
+        assertEquals("/takes/Scenaristo_2026-09-06_14-28-11.mp4", TakeName.path(state.takes.first().name))
         assertEquals(1.0, state.settings.zoomRatio, absoluteTolerance = 1e-9)
         // PRD 6.5's list exists to move people off the wide lens, and on this
         // device only zooming reaches the recommended band.

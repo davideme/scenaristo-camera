@@ -135,6 +135,20 @@
         "equivalentFocalLengthMm": 120
       }
     ],
+    "takes": [
+      {
+        "name": "Scenaristo_2026-09-06_14-28-11",
+        "sizeBytes": 74283900,
+        "durationMs": 15505,
+        "recordedAtMs": 1788499800000
+      },
+      {
+        "name": "Scenaristo_2026-09-06_14-20-33",
+        "sizeBytes": 847325517,
+        "durationMs": 186240,
+        "recordedAtMs": 1788499560000
+      }
+    ],
     "mount": {
       "rollDegrees": 0.0,
       "pitchDegrees": 0.0,

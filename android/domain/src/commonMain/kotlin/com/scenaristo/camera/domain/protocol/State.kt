@@ -48,6 +48,21 @@ data class State(
      */
     val lenses: List<LensChoice> = emptyList(),
     /**
+     * The takes on the phone, newest first, for the remote control to download
+     * (PRD 6.11). Defaulted, as above.
+     *
+     * On the state document rather than behind a `GET /takes` of its own, and
+     * the reason is not convenience: the browser has to disable the links while
+     * a take is recording, and a list fetched at one moment against a
+     * `recording` flag from another would flicker and occasionally offer a link
+     * the server refuses. In one document the two cannot disagree.
+     *
+     * The take being recorded is deliberately absent: an entry appears when the
+     * recorder says the file is closed, which is the first moment there is
+     * anything to serve.
+     */
+    val takes: List<Take> = emptyList(),
+    /**
      * How the phone is sitting on its mount (PRD 6.11). Defaulted, as above, and
      * not measuring until the camera is bound and a take is not running.
      */
@@ -305,6 +320,47 @@ data class Capabilities(
  * served by glass or by a crop. A focal length is true either way, and it is
  * also the number PRD 6.5's guidance is written in.
  */
+/**
+ * One take on the phone, as the remote control needs to see it (PRD 6.11).
+ *
+ * A row in a list the browser can download from, not a description of a file: it
+ * carries what a creator picks a take by -- when it was shot and how long it
+ * runs -- and nothing about where it lives. Where it lives is the phone's
+ * business and differs by the `saveToGallery` setting (ADR-0020); the browser
+ * asks for it by [name], which is the only handle either destination shares.
+ *
+ * There is no "did this finish cleanly" flag. It is unknowable for a take found
+ * by the scan at start-up, and a flag that is honest for half a list is worse
+ * than no flag; the interrupted-take notice of #17 is what tells the user a take
+ * was cut short. A truncated take is listed and downloadable either way, because
+ * PRD 6.7 promises it is worth having.
+ */
+@Serializable
+data class Take(
+    /**
+     * Without its extension, exactly as [com.scenaristo.camera.domain.recording.TakeName]
+     * produces it (PRD 6.7 `Scenaristo_YYYY-MM-DD_HH-MM-SS`). It is the name the
+     * user sees, the key the download route resolves, and -- because it is a
+     * timestamp to the second -- unique for the life of the phone.
+     */
+    val name: String,
+    /**
+     * What the recorder counted, which is not always what the file system will
+     * report later: ADR-0020 documents MediaStore's `_size` column claiming
+     * 549 KB against 119 MB on disk after a crash. Informational, so the browser
+     * can say how big a download will be; the download itself takes its length
+     * from the file at the moment it is served.
+     */
+    val sizeBytes: Long,
+    val durationMs: Long,
+    /**
+     * Phone clock when the take finished, for ordering and for the browser to
+     * say "20 minutes ago". Not derived from [name] by the browser, which would
+     * mean parsing a local-time string with no zone (ADR-0010).
+     */
+    val recordedAtMs: Long,
+)
+
 @Serializable
 data class LensChoice(
     val zoomRatio: Double,

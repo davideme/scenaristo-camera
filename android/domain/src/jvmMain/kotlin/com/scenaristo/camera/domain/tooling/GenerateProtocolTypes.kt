@@ -5,6 +5,7 @@ import com.scenaristo.camera.domain.protocol.PROTOCOL_VERSION
 import com.scenaristo.camera.domain.lens.RECOMMENDED_FROM
 import com.scenaristo.camera.domain.lens.WIDE_BAND
 import com.scenaristo.camera.domain.protocol.ServerMessage
+import com.scenaristo.camera.domain.recording.TakeName
 import com.scenaristo.camera.domain.whitebalance.DEFAULT_KELVIN
 import com.scenaristo.camera.domain.whitebalance.LightScenario
 import com.scenaristo.camera.domain.whitebalance.presetsFor
@@ -83,6 +84,16 @@ object GenerateProtocolTypes {
             // surfaces disagreeing about the shot in front of them.
             appendLine("export const LENS_WIDE_BAND = { min: ${WIDE_BAND.first}, max: ${WIDE_BAND.last} } as const;")
             appendLine("export const LENS_RECOMMENDED_FROM = $RECOMMENDED_FROM;")
+            appendLine()
+            // PRD 6.11's download link. A function rather than a constant
+            // because the browser needs the whole path, and the alternative --
+            // the browser concatenating a prefix and an extension it was handed
+            // separately -- is the same hand-copied assembly this file exists to
+            // remove, just spread over two lines. Both halves come from
+            // TakeName, so the route and the link cannot drift apart.
+            appendLine("export function takePath(name: string): string {")
+            appendLine("  return `${TakeName.PATH_PREFIX}\${name}.${TakeName.EXTENSION}`;")
+            appendLine("}")
             appendLine()
             emitted.values.forEach { appendLine(it) }
             appendLine(union("ServerMessage", server))
