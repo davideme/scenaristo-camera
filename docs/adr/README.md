@@ -45,6 +45,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0026](0026-serve-only-on-a-local-network.md) | Open the port only while the phone is on a local network, decided by transport rather than by address shape; supplements ADR-0006 | Proposed | 6.8 |
 | [0027](0027-mount-level-from-the-accelerometer.md) | Read the accelerometer to report mount level and steadiness, and only while a take is not running | Proposed | 6.1, 6.8, 6.11 |
 | [0028](0028-serve-takes-over-the-lan.md) | Serve finished takes over a second HTTP route, refused while recording; resumable, and unauthenticated like the rest of the LAN surface | Proposed | 6.11, 6.8, 6.7 |
+| [0029](0029-portrait-lighting-read.md) | Read the key ratio, background separation and room light from the frames already being metered; report only, and not during a take | Proposed | 6.3, 6.11 |
 
 ## Challenges to positions stated in the PRD
 

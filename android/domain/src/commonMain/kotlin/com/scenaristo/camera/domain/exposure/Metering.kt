@@ -55,13 +55,28 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
      * clipping it exists to reveal is usually in the background -- the window
      * behind the speaker is exactly the thing being looked for.
      */
-    fun measure(frame: LumaFrame, faces: List<FrameRect> = emptyList()): Metered {
+    fun measure(
+        frame: LumaFrame,
+        faces: List<FrameRect> = emptyList(),
+        subject: Subject? = null,
+    ): Metered {
         val windows = faces.ifEmpty { listOf(config.centreWindow) }
         val stride = config.sampleStride.coerceAtLeast(1)
         val bins = IntArray(Histogram.BINS)
 
         var weightedLog = 0.0
         var weight = 0.0
+        // The lighting read (PRD 6.11): the two halves of the subject's face and
+        // everything that is not the subject at all. Accumulated here rather than
+        // in a second walk because reading a pixel out of a platform buffer is the
+        // expensive part and it is already being paid -- the same argument the
+        // histogram makes two fields up.
+        var litLog = 0.0
+        var litWeight = 0.0
+        var shadowLog = 0.0
+        var shadowWeight = 0.0
+        var backgroundLog = 0.0
+        var backgroundWeight = 0.0
         var row = 0
         while (row < frame.height) {
             val y = (row + 0.5) / frame.height
@@ -87,6 +102,22 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
                     weightedLog += w * ln(luma)
                     weight += w
                 }
+                if (subject != null) {
+                    if (subject.rect.contains(x, y)) {
+                        if (x < subject.splitX) {
+                            litLog += ln(luma)
+                            litWeight += 1.0
+                        } else {
+                            shadowLog += ln(luma)
+                            shadowWeight += 1.0
+                        }
+                    } else if (!inWindow) {
+                        // Not the face, and not any other face either: the
+                        // background the subject has to stand out from.
+                        backgroundLog += ln(luma)
+                        backgroundWeight += 1.0
+                    }
+                }
                 col += stride
             }
             row += stride
@@ -95,14 +126,41 @@ class FaceWeightedMeter(private val config: MeteringConfig = MeteringConfig()) {
         return Metered(
             luma = if (weight == 0.0) 0.0 else exp(weightedLog / weight),
             histogram = Histogram(bins.toList()),
+            // Named for the frame, not for the subject: "left" is the left of the
+            // picture. Which side the key is on is a reading of these two, and it
+            // is made in one place (PortraitLighting) rather than here.
+            faceLeftLuma = mean(litLog, litWeight),
+            faceRightLuma = mean(shadowLog, shadowWeight),
+            backgroundLuma = mean(backgroundLog, backgroundWeight),
         )
     }
+
+    private fun mean(log: Double, weight: Double): Double? =
+        if (weight <= 0.0) null else exp(log / weight)
 }
+
+/**
+ * The one face a lighting read is about, and where its two halves divide
+ * (PRD 6.11).
+ *
+ * [splitX] is a frame coordinate rather than a fraction of [rect] because the
+ * dividing line is the subject's nose, and a face turned three-quarters to camera
+ * does not have its nose in the middle of its own bounding box. The camera layer
+ * derives it from the eye landmarks where the device reports them and falls back
+ * to the box's centre where it does not.
+ */
+data class Subject(val rect: FrameRect, val splitX: Double)
 
 /** One metered frame: the number the loop acts on, and the shape of the picture it came from. */
 data class Metered(
     val luma: Double,
     val histogram: Histogram,
+    /** Geometric mean of the subject's left half of frame, or null if unmeasured. */
+    val faceLeftLuma: Double? = null,
+    /** Geometric mean of the subject's right half of frame, or null if unmeasured. */
+    val faceRightLuma: Double? = null,
+    /** Geometric mean of everything that is not a face, or null if unmeasured. */
+    val backgroundLuma: Double? = null,
 )
 
 /**

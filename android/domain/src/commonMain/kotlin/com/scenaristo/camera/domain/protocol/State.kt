@@ -68,6 +68,13 @@ data class State(
      */
     val mount: MountAttitude = MountAttitude(),
     /**
+     * How the room is lighting the subject (PRD 6.11, ADR-0028).
+     *
+     * Defaulted, so a snapshot written before it existed still decodes -- the
+     * compatibility rule ADR-0007 sets for added fields.
+     */
+    val lighting: PortraitLightingState = PortraitLightingState(),
+    /**
      * The phone's clock when this snapshot was built. Elapsed recording time is
      * derived from this rather than sent directly, so it stays right across a
      * reconnect and does not drift with the browser's clock (ADR-0007).
@@ -635,6 +642,49 @@ enum class ThermalState {
     /** Whether the interface says anything at all about this (PRD 6.8, UI-9). */
     val worthShowing: Boolean get() = this == SERIOUS || this == CRITICAL
 }
+
+/**
+ * How the room is lighting the subject (PRD 6.11, ADR-0028).
+ *
+ * Reported only. Nothing here changes a light, and nothing here is settable: it
+ * is a measurement of the room, which is the first thing this product measures
+ * that is not a measurement of the equipment.
+ *
+ * **Tenths, as integers.** A snapshot goes out at least twice a second
+ * (ADR-0007) and ADR-0024 counts settings revisions off changes to the document;
+ * a double that jitters in its last bits would advance one every frame. The
+ * domain-side filter deadbands before this is filled in.
+ *
+ * [measuring] is the whole contract. It is false whenever the meter fell back to
+ * its centre window -- no face, or no tap geometry yet -- and every other field
+ * is then meaningless rather than merely stale. A reading of zero and a meter
+ * that is not running are different things (`AudioState.metering`,
+ * `MountAttitude.measuring`).
+ */
+@Serializable
+data class PortraitLightingState(
+    val measuring: Boolean = false,
+    /** Lit half against shadow half, in tenths: 20 is 2.0:1. Studio practice is near 20. */
+    val keyRatioTenths: Int = 0,
+    /** Which side of the *frame* -- never of the subject -- the key is on. */
+    val keySide: KeySide = KeySide.NONE,
+    /**
+     * How far the background sits below the face, in tenths of a stop. One to two
+     * stops reads as lit; **negative means the background is brighter**, which is
+     * a window behind the speaker and the commonest domestic fault.
+     */
+    val backgroundStopsTenths: Int? = null,
+    /**
+     * Whether the room has a stop of headroom over PRD 6.3's noise threshold
+     * (ISO 400, decision 2026-09-08). Shaping light lifts one side of a face and
+     * amplifies whatever noise is there.
+     */
+    val enoughLight: Boolean = false,
+)
+
+/** Which side of the frame a key light is on (PRD 6.11). */
+@Serializable
+enum class KeySide { LEFT, RIGHT, NONE }
 
 /** Things the app tells the user about the shot (PRD 6.3, 6.5). */
 @Serializable

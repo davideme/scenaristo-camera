@@ -44,6 +44,46 @@ package com.scenaristo.camera.domain.exposure
  */
 data class SensorRect(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
+/** A landmark in the same whole-pixel sensor coordinates as [SensorRect]. */
+data class SensorPoint(val x: Int, val y: Int)
+
+/**
+ * One reported face: where it is, and the eyes if the device offers them.
+ *
+ * Measured on the reference Pixel 10 (2026-09-08): `availableFaceDetectModes` is
+ * `[0, 1, 2]`, `FULL` is honoured with 3A off, and both eye positions are
+ * populated. They are nullable anyway, because `SIMPLE` is a legal answer and a
+ * device that gives only bounds must still meter.
+ *
+ * **`leftEye` is the image's left, not the subject's.** Measured on that device:
+ * `leftEye.x` is consistently the smaller of the two on an unmirrored frame. The
+ * names follow the platform's own field names rather than being corrected here,
+ * because a reader checking against `CaptureResult` should find what they expect
+ * -- and because nothing downstream needs to know whose left it is: [splitBetween]
+ * wants a midpoint, which is the same point either way round.
+ */
+data class SensorFace(
+    val bounds: SensorRect,
+    val leftEye: SensorPoint? = null,
+    val rightEye: SensorPoint? = null,
+) {
+    /**
+     * Where the lit and shadow halves divide, in sensor pixels.
+     *
+     * The midpoint of the eyes when both are known, which tracks a turned head:
+     * a face three-quarters to camera does not have its nose in the middle of
+     * its own bounding box, and splitting the box there would call part of the
+     * lit cheek "shadow". The box centre otherwise, which is right for a face
+     * square to the lens and is what a `SIMPLE`-only device gets.
+     */
+    val splitBetween: Int
+        get() {
+            val l = leftEye
+            val r = rightEye
+            return if (l != null && r != null) (l.x + r.x) / 2 else (bounds.left + bounds.right) / 2
+        }
+}
+
 /**
  * What the preview tap does to the buffer between the sensor and the frame the
  * meter reads (ADR-0018): a quarter turn to upright, then a centred crop to the
@@ -85,6 +125,17 @@ object FaceMapping {
      * Returns null rather than a clamped guess for a degenerate crop or a face
      * with no area: a face the caller cannot place is the centre window's case,
      * and PRD 6.3's fallback is better than a rectangle nobody can defend.
+     *
+     * **Known limit, stated rather than discovered later.** Which active array a
+     * face is reported against depends on `DISTORTION_CORRECTION_MODE`: the
+     * corrected array when it is on, the pre-correction one when it is off, and
+     * the two differ on lenses with enough barrel distortion to be worth
+     * correcting. Only the crop region is used here, so this bites solely on the
+     * fallback path -- a result carrying no crop region on a device where the two
+     * arrays differ, which would offset every face by the difference. It does not
+     * arise on the reference Pixel 10, where the crop region at 1x is reported as
+     * the whole 4000x3000 array (measured 2026-09-08), so the fallback is never
+     * the one in use. Widening the matrix (#29) is when this needs an answer.
      */
     fun normalisedInCrop(
         faceLeft: Int,
@@ -209,7 +260,7 @@ object FaceMapping {
      * after it.
      */
     fun facesInCrop(
-        faces: List<SensorRect>,
+        faces: List<SensorFace>,
         cropRegion: SensorRect?,
         activeArray: SensorRect?,
     ): List<FrameRect> {
@@ -217,10 +268,10 @@ object FaceMapping {
         val region = cropRegion ?: activeArray ?: return emptyList()
         return faces.mapNotNull {
             normalisedInCrop(
-                faceLeft = it.left,
-                faceTop = it.top,
-                faceRight = it.right,
-                faceBottom = it.bottom,
+                faceLeft = it.bounds.left,
+                faceTop = it.bounds.top,
+                faceRight = it.bounds.right,
+                faceBottom = it.bounds.bottom,
                 cropLeft = region.left,
                 cropTop = region.top,
                 cropRight = region.right,
@@ -250,6 +301,59 @@ object FaceMapping {
                 cropOffsetY = geometry.cropOffsetY,
             )
         }
+    }
+
+    /**
+     * The subject of a lighting read: the first reported face, in frame
+     * coordinates, with the line its two halves divide on (PRD 6.11).
+     *
+     * The first face rather than the largest, deliberately. A talking head is one
+     * subject, and picking by size would let the reading hop between two people
+     * as they lean -- a number that changes because the *choice* changed is worse
+     * than one that is merely about the wrong person.
+     *
+     * The split is carried through the same turn and crop as the rectangle, not
+     * recomputed from the mapped box, so a turned head keeps its nose line.
+     */
+    fun subjectInFrame(
+        faces: List<SensorFace>,
+        cropRegion: SensorRect?,
+        activeArray: SensorRect?,
+        geometry: TapGeometry?,
+    ): Subject? {
+        val face = faces.firstOrNull() ?: return null
+        val region = cropRegion ?: activeArray ?: return null
+        if (geometry == null) return null
+
+        val rect = facesInFrame(
+            facesInCrop(listOf(face), cropRegion, activeArray),
+            geometry,
+        ).firstOrNull() ?: return null
+
+        // The split is a point, so it travels as a degenerate rectangle through
+        // the same two steps: one pixel wide, so the arithmetic that refuses a
+        // zero-area face does not refuse it.
+        val splitX = face.splitBetween
+        val asRect = normalisedInCrop(
+            faceLeft = splitX,
+            faceTop = face.bounds.top,
+            faceRight = splitX + 1,
+            faceBottom = face.bounds.bottom,
+            cropLeft = region.left,
+            cropTop = region.top,
+            cropRight = region.right,
+            cropBottom = region.bottom,
+        ) ?: return null
+        val split = toFrame(
+            rect = asRect,
+            rotationDegrees = geometry.rotationDegrees,
+            cropScaleX = geometry.cropScaleX,
+            cropScaleY = geometry.cropScaleY,
+            cropOffsetX = geometry.cropOffsetX,
+            cropOffsetY = geometry.cropOffsetY,
+        ) ?: return null
+
+        return Subject(rect = rect, splitX = (split.left + split.right) / 2.0)
     }
 
     /**

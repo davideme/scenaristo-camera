@@ -1,5 +1,5 @@
 import { stops } from './format'
-import type { ExposureReadout } from './protocol'
+import type { ExposureReadout, PortraitLightingState } from './protocol'
 
 /**
  * The exposure aids (UI-17, #97): how far the shot is from correct, and where
@@ -121,6 +121,67 @@ function Unmetered({ label, heading }: { label: string; heading?: boolean }) {
       <div class="aid-head">
         {heading ? <h2>{label}</h2> : <span class="label">{label}</span>}
         <span class="value dim">not metering</span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * How the room is lighting the subject (UI-24, PRD 6.11, ADR-0028).
+ *
+ * **Reported** grammar like everything else here: dimmed, unframed, nothing to
+ * press. Two numbers and no verdict — 1:1 is a legitimate deliberate choice, so
+ * a product that called it "flat" would be wrong more often than the user is.
+ *
+ * `recording` comes from the caller rather than from the reading, because a
+ * reading that has stopped and a reading that never started look identical on
+ * the wire (`measuring: false`) and mean different things to a person.
+ */
+export function LightingRead({
+  lighting,
+  recording,
+}: {
+  lighting: PortraitLightingState
+  recording: boolean
+}) {
+  if (!lighting.measuring) {
+    return (
+      <div class="aid">
+        <div class="aid-head">
+          <span class="label">Light on you</span>
+          <span class="value dim">
+            {recording ? 'not measured while recording' : 'no face — not measuring'}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // Tenths arrive as integers so the phone's deadband survives the wire
+  // (ADR-0024). Divided here and never re-rounded, or the drawing would flicker
+  // between two values the phone deliberately held still.
+  const ratio = (lighting.keyRatioTenths ?? 0) / 10
+  const stopsTenths = lighting.backgroundStopsTenths
+  const separation =
+    stopsTenths === undefined || stopsTenths === null
+      ? null
+      : stopsTenths / 10
+
+  return (
+    <div class="aid">
+      <div class="aid-head">
+        <span class="label">Light on you</span>
+        <span class="value">{ratio.toFixed(1)}:1</span>
+      </div>
+      <div class="aid-head">
+        <span class="label">Background</span>
+        <span class="value">
+          {separation === null
+            ? '—'
+            : separation < 0
+              ? `${Math.abs(separation).toFixed(1)} stops brighter than you`
+              : `${separation.toFixed(1)} stops below you`}
+        </span>
       </div>
     </div>
   )
