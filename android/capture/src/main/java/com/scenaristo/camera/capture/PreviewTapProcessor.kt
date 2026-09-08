@@ -206,6 +206,16 @@ class PreviewTapProcessor(
     /** @see geometry */
     fun geometry(): TapGeometry? = geometry
 
+    /**
+     * Whether the browser's relit frames are being produced right now.
+     *
+     * Asked of the reader rather than remembered by the caller: a remembered
+     * answer goes stale the moment the look is turned off, and the frames it
+     * would then suppress are the only ones left -- which is a blank preview
+     * rather than an unrelit one.
+     */
+    fun relitPreviewActive(): Boolean = lookReader != null
+
     private val vertices: ByteBuffer = ByteBuffer.allocateDirect(VERTICES.size * 4)
         .order(ByteOrder.nativeOrder())
         .apply { asFloatBuffer().put(VERTICES).position(0) }
