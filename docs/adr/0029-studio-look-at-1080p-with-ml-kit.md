@@ -62,18 +62,20 @@ answer is UHD and the look costs nothing. Writing 1080p into the product would b
 limit into everyone's, which is the mistake ADR-0017 warns about in the other direction: *"a Phase 0
 pass is evidence about a Pixel 10, not about Android."*
 
-The look itself uses, measured on the Pixel 10 at 1920 × 1080 on 2026-09-08:
+The look itself uses, measured on the Pixel 10 on 2026-09-08. **At the analysis stream's own size**,
+which is what an `ImageAnalysis` actually delivers — ADR-0018 measured that configuration as
+`analysis 640×480` — with the recording-sized column beside it to show how steeply each scales:
 
-| Model | Median | Returns | Delivery |
-|---|---|---|---|
-| **Selfie Segmentation** (`STREAM_MODE`) | **48–50 ms** | full-resolution mask, every frame | bundled |
-| **Face Mesh** (`FACE_MESH`) | **58–65 ms** | 468 points, every frame | bundled |
-| Face Detection (`FAST`, landmarks, no contours) | 122–151 ms | box and landmarks | bundled |
+| Model | at 640×360 | at 1920×1080 | Returns | Delivery |
+|---|---|---|---|---|
+| **Selfie Segmentation** (`STREAM_MODE`) | **17–27 ms** | 48–50 ms | mask at input size, every frame | bundled |
+| **Face Mesh** (`FACE_MESH`) | **40–50 ms** | 58–65 ms | 468 points, every frame | bundled |
+| Face Detection (`FAST`, landmarks, no contours) | 76–91 ms | 122–151 ms | box and landmarks | bundled |
 
 - **Selfie Segmentation** for the person mask. There is no reasonable custom alternative, and the
   background half of the look cannot be applied without it.
-- **Face Mesh** for the face. It is both better *and* cheaper than Face Detection here — 468 points
-  including a contour, at less than half the latency — which inverts the order this ADR first proposed.
+- **Face Mesh** for the face. It is both better *and* cheaper than Face Detection — 468 points
+  including a contour, at roughly half the latency — which inverts the order this ADR first proposed.
 - **Face Detection** only where Face Mesh declines. It buys a box for more cost than a mesh, so it is a
   fallback on availability, never on preference.
 
@@ -81,10 +83,20 @@ All three are **bundled**: the log shows `DynamiteModule: Selected local version
 `models_bundled/*.tflite`, with no download. There is no first-run network dependency, which the
 "no backend" headline would otherwise have made a problem.
 
-**Neither model runs per frame.** At 30 fps the frame budget is 33 ms and mesh plus mask is about
-106 ms serially. They do not need to: the shader runs per frame, and the mesh and mask it shapes
-against are refreshed at a lower rate and held between refreshes. The rate is an action item below,
-because it trades how fast the look follows a moving head against what it costs.
+**The analyser is not expected to see every frame, and does not need to.** `ImageAnalysis` with
+`STRATEGY_KEEP_ONLY_LATEST` drops what it cannot keep up with by design — the shape Google's own
+`camerax-greenscreen` sample uses for exactly this pair of concerns. Mesh plus mask is about 70 ms at
+640×360, so the analyser sustains roughly 14 Hz while capture stays at 30. **The design question is
+therefore not whether the models keep up, but how stale a mesh and a mask may be before the look
+visibly lags a head that moved** — which is an action item below, and a product judgement rather than a
+measurement.
+
+Two things the numbers above are pessimistic about, both worth knowing before anyone reads them as a
+budget. They include a `Bitmap` copy per frame that the real path will not have — the sample hands the
+`ImageProxy`'s media image straight to `InputImage.fromMediaImage(mediaImage, rotation)` — though that
+copy measured a **median of 0 ms** at 640×360, so it was the resolution and not the copy that made the
+first round of these numbers look expensive. And they were taken with all three models running, where
+the product will run two.
 
 4K recording keeps everything it has today, including ADR-0028's reading, which continues to run on the
 tap. **The look is the only thing that constrains resolution**, and choosing it is how a user asks for
@@ -197,10 +209,10 @@ answer.
 2. [ ] Measure that the chosen configuration holds 30 fps with a recording running *and* a model in the
    loop. ADR-0018 measured the bind; 2026-09-08 measured the models standing alone, with no recording.
    Neither is that number.
-3. [ ] Choose the refresh rate for the mesh and the mask, and how the shader holds them between
-   refreshes. Mesh 58–65 ms plus mask 48–50 ms is about 106 ms serially against a 33 ms frame, so this
-   is a real decision and not a detail: it trades how fast the look follows a moving head against what
-   it costs.
+3. [ ] Decide how stale a mesh and a mask may be. At 640×360 the analyser sustains about 14 Hz against
+   a 30 fps capture, so the shader interpolates or holds between refreshes either way; the question is
+   what a viewer notices when the speaker moves, which is a judgement to make by looking rather than a
+   number to measure.
 4. [ ] Measure Face Mesh at three-quarter angle and at 1.5–2 m, not only square to the lens. On
    2026-09-08 it returned 468 points on every frame of a seated subject, but that subject was facing the
    camera; its documented envelope is the risk, and if it declines where speakers actually sit, the
@@ -219,5 +231,7 @@ Models run against real tap frames resized to 1920 × 1080, one detector in flig
 
 Not covered, and named so nobody reads the table as more than it is: **no recording was running**, the
 subject was square to the lens, the numbers are medians of twenty frames rather than a sustained run,
-and the device was already at thermal `MODERATE` from earlier work. Per ADR-0017 all of it is a claim
-about one handset.
+all three models ran where the product will run two, and the device was already at thermal `MODERATE`
+from earlier work. The frames came from the preview tap resized to each column's size rather than from
+a real `ImageAnalysis`, so they carry a `Bitmap` copy the real path avoids — measured at a median of
+0 ms at 640×360. Per ADR-0017 all of it is a claim about one handset.
