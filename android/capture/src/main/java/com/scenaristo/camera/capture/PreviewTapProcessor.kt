@@ -135,6 +135,8 @@ class PreviewTapProcessor(
     private var maskTexture = 0
     private var maskBytes: ByteBuffer? = null
     private var maskAspect: Float = 1f
+    private var maskWidth: Int = 1
+    private var maskHeight: Int = 1
     private var pendingMask: PendingMask? = null
 
     /** One look, flattened to what the shader needs. */
@@ -571,6 +573,7 @@ class PreviewTapProcessor(
             if (mask > surface) scaleX = surface / mask else scaleY = mask / surface
             GLES20.glUniform2f(at("uMaskScale"), scaleX, scaleY)
             GLES20.glUniform2f(at("uMaskOffset"), (1f - scaleX) / 2f, (1f - scaleY) / 2f)
+            GLES20.glUniform2f(at("uMaskTexel"), 1f / maskWidth, 1f / maskHeight)
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskTexture)
@@ -617,6 +620,8 @@ class PreviewTapProcessor(
             GLES20.GL_LUMINANCE, GLES20.GL_UNSIGNED_BYTE, bytes,
         )
         maskAspect = mask.width.toFloat() / mask.height
+        maskWidth = mask.width
+        maskHeight = mask.height
     }
 
     private fun releaseReader() {
@@ -738,6 +743,8 @@ class PreviewTapProcessor(
             // them -- which is exactly what it did.
             uniform vec2 uMaskScale;
             uniform vec2 uMaskOffset;
+            /** One mask texel, in the mask's own coordinates. */
+            uniform vec2 uMaskTexel;
             uniform float uHasFace;
             varying vec2 vTexCoord;
             varying vec2 vFrame;
@@ -762,19 +769,34 @@ class PreviewTapProcessor(
                     float across = clamp(dot(offset, normalize(uAxis)), -1.0, 1.0);
                     float shaped = sign(across) * pow(abs(across), uFalloff);
                     // Fades out past the face rather than stopping at its edge: a
-                    // gradient with a border is a rectangle somebody can see.
-                    float inFace = smoothstep(1.6, 0.7, length(offset));
+                    // gradient with a border is a rectangle somebody can see, and
+                    // at 1.6..0.7 it still was one. Widened so the falloff runs
+                    // well past the face and has no boundary to notice.
+                    float inFace = smoothstep(2.6, 0.2, length(offset));
                     gain = pow(uHalfRatio, shaped * inFace);
                 }
 
                 float background = 1.0;
                 if (uHasMask > 0.5) {
-                    // Hardened rather than used raw: the model's confidence
-                    // ramps gently, and a linear mix across it gives a boundary
-                    // so soft the separation reads as a haze instead of an edge.
-                    // The thresholds are the greenscreen sample's.
-                    float confidence = texture2D(uMask, p * uMaskScale + uMaskOffset).r;
-                    float person = smoothstep(0.10, 0.95, confidence);
+                    // The mask is a third of the frame's resolution, so its edge
+                    // arrives as a staircase once magnified. Blurred across nine
+                    // taps first -- the steps are what the eye reads as a jagged
+                    // cutout, and averaging them costs less than the mask itself.
+                    vec2 m = p * uMaskScale + uMaskOffset;
+                    float confidence = 0.0;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            vec2 at = m + vec2(float(dx), float(dy)) * uMaskTexel * 1.5;
+                            confidence += texture2D(uMask, at).r;
+                        }
+                    }
+                    confidence /= 9.0;
+                    // Then a *gentle* threshold. Hardening it to the greenscreen
+                    // sample's 0.10..0.95 was right for a green screen, where the
+                    // background is replaced and a soft edge shows the old one
+                    // through. Here the background is only darkened, so a soft
+                    // edge is invisible and a hard one is a cutout.
+                    float person = smoothstep(0.25, 0.75, confidence);
                     background = mix(uBackground, 1.0, person);
                 }
 
