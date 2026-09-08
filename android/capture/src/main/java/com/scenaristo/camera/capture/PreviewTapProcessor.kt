@@ -62,6 +62,14 @@ class PreviewTapProcessor(
      * anyone holds on.
      */
     private val onFrame: (android.media.Image) -> Unit = { it.close() },
+    /**
+     * A frame with the look drawn on it, for the browser (ADR-0029).
+     *
+     * A second reader rather than the meter's, because the meter must never see
+     * its own output -- see [setLook]. Only produced while a look is active, so a
+     * session with none costs exactly what it did before.
+     */
+    private val onLookFrame: (android.media.Image) -> Unit = { it.close() },
 ) : SurfaceProcessor {
 
     private val thread = HandlerThread("preview-tap").apply { start() }
@@ -80,6 +88,8 @@ class PreviewTapProcessor(
     private val outputs = mutableMapOf<SurfaceOutput, EGLSurface>()
     private var reader: ImageReader? = null
     private var readerSurface: EGLSurface = EGL14.EGL_NO_SURFACE
+    private var lookReader: ImageReader? = null
+    private var lookReaderSurface: EGLSurface = EGL14.EGL_NO_SURFACE
 
     private val texMatrix = FloatArray(16)
 
@@ -144,14 +154,19 @@ class PreviewTapProcessor(
     private class PendingMask(val buffer: ByteBuffer, val width: Int, val height: Int)
 
     /**
-     * Apply a look to the phone's viewfinder, or none (ADR-0029).
+     * Apply a look to the viewfinder and the browser, but never to the meter's
+     * frames (ADR-0029).
      *
-     * **The reader is deliberately not relit.** Its frames are what the exposure
-     * loop meters (ADR-0018), and a meter reading its own output is a feedback
+     * **The metering reader is never relit.** Its frames are what the exposure
+     * loop reads (ADR-0018), and a meter reading its own output is a feedback
      * loop: the look lifts one cheek, the loop sees a brighter face, ISO comes
-     * down, the look lifts again. The browser preview reads the same frames and so
-     * also stays clean, which is the honest state for a rehearsal that does not
-     * touch the recording either.
+     * down, the look lifts again.
+     *
+     * The browser gets its own reader instead, drawn with the look. Sharing the
+     * meter's frames was the first shape, and it made the look invisible from the
+     * remote control -- which is the surface the whole feature is judged from, and
+     * exists so a creator does not have to walk to the phone. A second 960x540
+     * draw is a small price for a look somebody can actually see.
      */
     fun setLook(uniforms: LookUniforms?) {
         look = uniforms
@@ -277,6 +292,25 @@ class PreviewTapProcessor(
                 Matrix.multiplyMM(outMatrix, 0, cameraXMatrix, 0, cropMatrix, 0)
                 // Never the look: see setLook. The meter reads these.
                 drawTo(readerSurface, outMatrix, Size(r.width, r.height), texture.timestamp, null)
+
+                // The same frame again, with the look, for the browser. The
+                // matrix is already composed and the texture already bound, so
+                // this is a second draw and not a second pass.
+                val uniforms = look
+                if (uniforms != null) {
+                    ensureLookReader(r.width, r.height)
+                    lookReader?.let { lr ->
+                        drawTo(
+                            lookReaderSurface,
+                            outMatrix,
+                            Size(lr.width, lr.height),
+                            texture.timestamp,
+                            uniforms,
+                        )
+                    }
+                } else if (lookReader != null) {
+                    releaseLookReader()
+                }
             }
         }
     }
@@ -413,6 +447,43 @@ class PreviewTapProcessor(
         Log.d(TAG, "tap reader ${width}x$height, rotation=$rotationDegrees, crop=$region")
     }
 
+    /**
+     * The browser's reader, built on first use and torn down when the look goes.
+     *
+     * The same size as the meter's, because it is the same picture: the browser
+     * and the meter disagree about the light on it and about nothing else.
+     */
+    private fun ensureLookReader(width: Int, height: Int) {
+        val existing = lookReader
+        if (existing != null && existing.width == width && existing.height == height) return
+        releaseLookReader()
+
+        lookReader = ImageReader.newInstance(
+            width,
+            height,
+            android.graphics.PixelFormat.RGBA_8888,
+            READER_BUFFERS,
+            android.hardware.HardwareBuffer.USAGE_GPU_COLOR_OUTPUT or
+                android.hardware.HardwareBuffer.USAGE_CPU_READ_OFTEN,
+        ).also { r ->
+            r.setOnImageAvailableListener({ reader ->
+                val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+                onLookFrame(image)
+            }, handler)
+            lookReaderSurface = createWindowSurface(r.surface)
+        }
+        Log.d(TAG, "look reader ${width}x$height")
+    }
+
+    private fun releaseLookReader() {
+        if (lookReaderSurface != EGL14.EGL_NO_SURFACE) {
+            EGL14.eglDestroySurface(display, lookReaderSurface)
+        }
+        lookReaderSurface = EGL14.EGL_NO_SURFACE
+        lookReader?.close()
+        lookReader = null
+    }
+
     /** The input as it will look once turned upright; a quarter turn swaps the axes. */
     private fun uprightInputSize(): Size =
         if ((rotationDegrees / 90) % 2 == 1) Size(inputSize.height, inputSize.width) else inputSize
@@ -529,6 +600,7 @@ class PreviewTapProcessor(
     }
 
     private fun releaseReader() {
+        releaseLookReader()
         if (readerSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, readerSurface)
         readerSurface = EGL14.EGL_NO_SURFACE
         reader?.close()
@@ -677,7 +749,12 @@ class PreviewTapProcessor(
 
                 float background = 1.0;
                 if (uHasMask > 0.5) {
-                    float person = texture2D(uMask, p * uMaskScale + uMaskOffset).r;
+                    // Hardened rather than used raw: the model's confidence
+                    // ramps gently, and a linear mix across it gives a boundary
+                    // so soft the separation reads as a haze instead of an edge.
+                    // The thresholds are the greenscreen sample's.
+                    float confidence = texture2D(uMask, p * uMaskScale + uMaskOffset).r;
+                    float person = smoothstep(0.10, 0.95, confidence);
                     background = mix(uBackground, 1.0, person);
                 }
 

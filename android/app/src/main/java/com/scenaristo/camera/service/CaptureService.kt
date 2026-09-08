@@ -364,7 +364,7 @@ class CaptureService : LifecycleService() {
         _state.value = session.state
         Log.i(SETTINGS_TAG, "grid ${session.state.settings.grid} from ${settings.grid().source}")
         jpeg.quality = 80
-        tap = PreviewTapProcessor(onFrame = ::onTapFrame)
+        tap = PreviewTapProcessor(onFrame = ::onTapFrame, onLookFrame = ::onLookFrame)
         camera = buildSession()
         publishLookToTap()
         server = ControlServer(
@@ -735,8 +735,34 @@ class CaptureService : LifecycleService() {
         // anyone watching -- but the encoder is skipped, and then this owns
         // closing the image, because that is normally accept()'s job and the
         // reader stalls at its buffer count on anything left outstanding.
+        // With a look on, the browser's frames come from the tap's own relit
+        // reader instead (ADR-0029), so these are metered and then dropped: the
+        // remote control must see the look, and the meter must not.
+        if (previewWatched && !relitPreview) jpeg.accept(image) else image.close()
+    }
+
+    /**
+     * A relit frame for the browser (ADR-0029).
+     *
+     * The look is what the remote control is for -- somebody choosing one is
+     * looking at a laptop, not at the phone -- so these replace the metering
+     * reader's frames on the preview stream for as long as a look is active.
+     */
+    private fun onLookFrame(image: android.media.Image) {
+        relitPreview = true
         if (previewWatched) jpeg.accept(image) else image.close()
     }
+
+    /**
+     * True while the tap is producing relit frames.
+     *
+     * Set by the relit reader itself rather than derived from the setting: the
+     * look is chosen a moment before the first relit frame exists, and dropping
+     * the metering reader's frames in that gap would blank the browser preview
+     * for as long as the rebind takes.
+     */
+    @Volatile
+    private var relitPreview: Boolean = false
 
     /** On a camera thread: the sensor reporting what it actually used (ADR-0005). */
     /**
@@ -1352,6 +1378,9 @@ class CaptureService : LifecycleService() {
             // and the answer arrives on a later bind. Never during a take: PRD 6.1
             // refuses the setting then, so this cannot interrupt a recording.
             if (wantsAnalysis() != boundAnalysis && !session.state.recording.recording) {
+                // The relit reader goes with the look; until the next relit frame
+                // arrives the metering reader is the browser's source again.
+                relitPreview = false
                 lifecycleScope.launch { rebindForLook() }
             }
             server.broadcastSnapshot()
