@@ -1,6 +1,7 @@
 package com.scenaristo.camera.capture
 
 import android.content.Context
+import android.graphics.Rect
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
@@ -18,6 +19,7 @@ import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.ExtendableBuilder
 import com.scenaristo.camera.domain.exposure.IsoRange
+import com.scenaristo.camera.domain.exposure.SensorRect
 import com.scenaristo.camera.domain.lens.equivalentFocalLengthMm
 import com.scenaristo.camera.domain.whitebalance.AwbApproximation
 import com.scenaristo.camera.domain.whitebalance.approximationFor
@@ -73,6 +75,17 @@ object ManualControls {
     private const val MODE_OFF = 0L
 
     /**
+     * Ask the HAL for face rectangles (PRD 6.3's "face-weighted" metering).
+     *
+     * `FULL` rather than `SIMPLE` because it adds eye and mouth landmarks, and a
+     * face's lit and shadow sides are divided by the nose rather than by the
+     * middle of its bounding box. The Pixel 10 reports
+     * `availableFaceDetectModes = [0, 1, 2]`, so all three exist there; a device
+     * that offers only `SIMPLE` still gets rectangles, and [faces] says which.
+     */
+    private const val FACE_DETECT_MODE = CameraMetadata.STATISTICS_FACE_DETECT_MODE_FULL
+
+    /**
      * Applies the manual keys to a use-case builder and routes every capture
      * result to [onResult].
      *
@@ -108,6 +121,7 @@ object ManualControls {
                 CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
                 CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF,
             )
+            .setCaptureRequestOption(CaptureRequest.STATISTICS_FACE_DETECT_MODE, FACE_DETECT_MODE)
             .setSessionCaptureCallback(
                 object : CameraCaptureSession.CaptureCallback() {
                     override fun onCaptureCompleted(
@@ -140,6 +154,12 @@ object ManualControls {
                 .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, request.exposureTimeNs)
                 .setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, request.sensitivity)
                 .setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, request.frameDurationNs)
+                // Re-carried for the same reason `CONTROL_AE_MODE` is: this call
+                // *replaces* the previously set options rather than merging into
+                // them, and the loop makes it six times a second. Set only in
+                // [applyTo], face detection would survive until the first
+                // exposure move and then be gone for the rest of the session.
+                .setCaptureRequestOption(CaptureRequest.STATISTICS_FACE_DETECT_MODE, FACE_DETECT_MODE)
                 .build(),
         )
     }
@@ -220,6 +240,48 @@ object ManualControls {
             result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE)?.toLong(),
         ),
     )
+
+    /**
+     * The faces the HAL found in this result, in **sensor active array**
+     * coordinates, or an empty list when it reported none.
+     *
+     * ADR-0005 asks the meter for a face-weighted luminance and PRD 6.3 promises
+     * one; until this existed, `ExposureController` fed it an empty list and the
+     * meter always took its centre-window fallback. The rectangles are not
+     * usable as they arrive -- they are in the sensor's own space, and the meter
+     * reads a frame the tap has rotated, mirrored and cropped (ADR-0018) -- so
+     * mapping them is [FaceMapping]'s job, not this one's.
+     *
+     * Whether a HAL reports faces at all with `CONTROL_AE_MODE_OFF` is a device
+     * question: face detection is a 3A statistic, and this app switches 3A off.
+     * Measured on the Pixel 10, 2026-09-08: it does, and it echoes `FULL` back.
+     *
+     * Only the bounds cross over. `FULL` also carries eye and mouth positions,
+     * measured present on that device, and the lit-to-shadow split will want the
+     * eye axis -- but a weighting window does not, and a field nothing reads is a
+     * field nobody maintains.
+     */
+    fun faces(result: CaptureResult): List<SensorRect> =
+        result.get(CaptureResult.STATISTICS_FACES)?.map { it.bounds.toSensorRect() }.orEmpty()
+
+    /**
+     * The sensor region the stream is actually reading, which zoom moves.
+     *
+     * Face rectangles are reported against this, not against the full active
+     * array, whenever a crop is in effect -- so a mapping that divides by the
+     * active array while the user is at 2x puts the face in the wrong place by
+     * exactly the zoom ratio.
+     */
+    fun cropRegion(result: CaptureResult): SensorRect? =
+        result.get(CaptureResult.SCALER_CROP_REGION)?.toSensorRect()
+
+    /** The lens's full active array, the frame [cropRegion] is a window onto. */
+    fun activeArray(cameraInfo: CameraInfo): SensorRect? =
+        Camera2CameraInfo.from(cameraInfo)
+            .getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+            ?.toSensorRect()
+
+    private fun Rect.toSensorRect() = SensorRect(left = left, top = top, right = right, bottom = bottom)
 
     /**
      * The platform white balance mode that stands in for a Kelvin preset
