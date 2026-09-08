@@ -640,6 +640,54 @@ main.recording .preview-frame::after {
   color: var(--orange);
 }
 
+/* PRD 6.11 / UI-24: the take list. Time first because it is what the user
+   remembers a take by, duration second because it is what they pick one by, and
+   the size last because it only answers "how long will this copy take". The
+   filename is the title, not a column: every row would repeat the same date. */
+.takes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.take-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 4px;
+  margin: 0 -4px;
+  border-radius: 4px;
+  color: var(--dim);
+  text-decoration: none;
+}
+
+/* The whole row is the target, not the eight characters of a timestamp. */
+a.take-row:hover,
+a.take-row:focus-visible {
+  background: rgba(242, 240, 237, 0.06);
+  color: var(--amber);
+}
+
+.take-when {
+  flex: 0 0 auto;
+}
+
+.take-length {
+  flex: 1 1 auto;
+  font-size: 11px;
+  color: var(--dimmer);
+}
+
+.take-size {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--dimmer);
+}
+
 .lock-note {
   display: flex;
   align-items: center;

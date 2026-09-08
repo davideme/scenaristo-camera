@@ -1,6 +1,7 @@
-import { ABSENT, minutesLeft, optics, remotes } from './format'
+import { ABSENT, fileSize, minutesLeft, optics, remotes, timecode } from './format'
 import {
   BatteryIcon,
+  DownloadIcon,
   LensIcon,
   LightIcon,
   MicIcon,
@@ -9,6 +10,7 @@ import {
   ThermalIcon,
   WaveIcon,
 } from './icons'
+import { takePath } from './protocol'
 import type { GridFrequency, State } from './protocol'
 import type { ViewPrefs } from './viewprefs'
 import { isRecommended } from './lens'
@@ -487,6 +489,121 @@ export function CapabilityPanel({ state }: { state: State }) {
       ) : null}
     </section>
   )
+}
+
+
+/**
+ * PRD 6.11 / UI-23: the takes on the phone, and a way to get one off it.
+ *
+ * The only panel whose reason for existing is that the phone is *not* reachable
+ * any other way. ADR-0020 writes takes into the app's own folder by default,
+ * which the gallery does not index and USB does not show, so before this the
+ * answer to "how do I get that file" was `adb pull`.
+ *
+ * §5 grammar: this is **Reported** content carrying a touchable action, which
+ * the spec's table does not have a row for -- see UI-23, where it is written
+ * down as an exception rather than settled here by whichever style got typed
+ * first.
+ *
+ * Duration leads each row because it is what a creator picks a take by: two
+ * takes from the same minute are told apart by one running 4 seconds and the
+ * other 40, not by one being 20 MB. Size follows because it is what tells you
+ * whether this is a quick copy or a coffee.
+ */
+export function TakesPanel({ state, recording }: { state: State; recording: boolean }) {
+  // Defaulted in the protocol, so an older phone sends no field at all.
+  const takes = state.takes ?? []
+  const toGallery = state.settings?.saveToGallery === true
+  // Every take from one session shares a date, so showing it on each row would
+  // spend the column's width on the one part that never distinguishes anything.
+  // It earns its place only when the list actually spans more than one day.
+  const spansDays = new Set(takes.map((take) => takeDate(take.name))).size > 1
+
+  return (
+    <Panel title="Takes" icon={<DownloadIcon />} locked={recording}>
+      {takes.length === 0 ? (
+        <p class="lock-note">
+          {toGallery
+            ? 'Saving to the gallery — these takes are in Photos on the phone, or over USB'
+            : 'No takes on the phone yet'}
+        </p>
+      ) : (
+        <ul class="takes">
+          {takes.map((take) => {
+            const when = spansDays
+              ? `${takeDate(take.name)} ${takeTime(take.name)}`
+              : takeTime(take.name)
+            const duration = timecode(take.durationMs / 1000)
+            const size = fileSize(take.sizeBytes)
+            const row = (
+              <>
+                <span class="take-when mono">{when}</span>
+                <span class="take-length mono">{duration}</span>
+                <span class="take-size">{size}</span>
+              </>
+            )
+            // The filename is not drawn: every row would repeat
+            // `Scenaristo_2026-09-07_` and only the time would differ, which is
+            // the column's whole width spent on the part that distinguishes
+            // nothing. It stays reachable as the title and the accessible name,
+            // and the browser's own download shelf shows it on the way past.
+            const label = `${take.name}, ${duration}, ${size}`
+            return (
+              <li key={take.name}>
+                {/* While recording the row is text, not a link. The server
+                    answers 409 anyway (ADR-0028), but a link that is refused
+                    when clicked is a worse answer than one visibly not
+                    offered -- and there is no such thing as a disabled anchor. */}
+                {recording ? (
+                  <span class="take-row" title={label}>
+                    {row}
+                  </span>
+                ) : (
+                  <a
+                    class="take-row"
+                    href={takePath(take.name)}
+                    download={`${take.name}.mp4`}
+                    title={label}
+                    aria-label={`Download ${label}`}
+                  >
+                    {row}
+                  </a>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {/* Said once under the list rather than per row. Someone who turned the
+          setting on is looking for takes that are not here. */}
+      {toGallery && takes.length > 0 ? (
+        <p class="lock-note">Newer takes are going to the gallery, not this list</p>
+      ) : null}
+    </Panel>
+  )
+}
+
+/**
+ * The clock time out of a take name (PRD 6.7 `Scenaristo_YYYY-MM-DD_HH-MM-SS`).
+ *
+ * Sliced from the name rather than formatted from `recordedAtMs`, and that is
+ * deliberate: the name is the phone's **local** time by construction, which is
+ * the time the person in front of the camera experienced. Formatting the
+ * timestamp instead would render it in the *browser's* zone, so a laptop an hour
+ * off the phone would label every take an hour wrong -- and the label would then
+ * disagree with the filename it downloads.
+ *
+ * Slicing a fixed shape, not parsing a date: no zone is involved, and a name
+ * that somehow does not match falls back to itself rather than to a wrong time.
+ */
+function takeTime(name: string): string {
+  const match = /_(\d{2})-(\d{2})-(\d{2})$/.exec(name)
+  return match ? `${match[1]}:${match[2]}:${match[3]}` : name
+}
+
+function takeDate(name: string): string {
+  const match = /_(\d{4}-\d{2}-\d{2})_/.exec(name)
+  return match ? match[1] : name
 }
 
 /**

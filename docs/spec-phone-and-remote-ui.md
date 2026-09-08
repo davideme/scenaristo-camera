@@ -293,6 +293,24 @@ PRD §6.5 and UI-12: *"Distance guidance reads 'Wide lens — sit 1.5–2 m back
 - [ ] The band comes from `:domain` (`LENS_WIDE_BAND`), generated rather than written down twice: a browser deciding at 26 mm what the phone decides at 25 is two surfaces disagreeing about the shot in front of them.
 
 ---
+**UI-24 — The take list, and getting a take off the phone**
+
+PRD §6.11, ADR-0028. The only panel in the product whose reason for existing is that the phone is *not* reachable any other way: ADR-0020 writes takes into the app's own folder by default, which the gallery does not index and USB does not show, so before this the answer to "how do I get that file" was `adb pull`.
+
+- [ ] **A panel in the control column**, listing the takes on the phone newest first, capped at ten (`State.takes`). Ten because ADR-0007 broadcasts the whole state document on every change, and because ten is about as far back as "which take was that" reaches — anything older is found by date, and the phone is where you find it.
+- [ ] **Each row is time, then duration, then size, and the whole row is the link.** Time first because it is what a person remembers a take by — *"the one I shot just before the break"*. Duration second because it is what they pick between two candidates by: two takes from the same minute are told apart by one running 4 seconds and the other 40, not by one being 20 MB. Size last, because it only answers "how long will this copy take".
+- [ ] **The filename is not a column.** Drawing it was the first design and it was wrong: every row repeated `Scenaristo_2026-09-07_` and only the last eight characters differed, so the widest column in the panel was the one that distinguished nothing — and it still truncated. It is the row's `title` and its accessible name, and the browser's own download shelf shows it on the way past.
+- [ ] **The clock time is sliced out of the name, not formatted from `recordedAtMs`.** The name is the *phone's* local time by construction (PRD §6.7); formatting the timestamp would render it in the **browser's** zone, so a laptop an hour off the phone would label every take an hour wrong — and disagree with the filename it downloads.
+- [ ] **The date appears only when the list spans more than one day.** Ten takes from one session share a date, and a column that never distinguishes anything is a column spent on nothing.
+- [ ] **A plain `<a download>` and nothing cleverer.** The page is not a secure context (ADR-0006), so the file-system APIs that would give a save dialog or a progress bar do not exist; the browser's own download UI is the whole of the affordance, and it is one every user already knows.
+- [ ] **While recording, rows are text rather than links**, and the panel carries UI-6's existing "Locked while recording" note. The server answers 409 either way (ADR-0028), but a link that is refused when clicked is a worse answer than one visibly not offered — and there is no such thing as a disabled anchor.
+- [ ] **The empty state says which empty it is.** Nothing recorded yet reads *"No takes on the phone yet"*. With `saveToGallery` on it says the takes are in Photos or over USB, because that list is empty for a reason the user chose and can act on (the precedent is #126: say why, rather than showing a blank rectangle).
+- [ ] **No delete, from here or anywhere in the browser** (Davide, 2026-09-07). A read-only surface is the one that cannot lose a shoot to a stranger on the LAN, and freeing space stays a phone-side job.
+- [ ] **Names truncate from the left**, not the right: the middle of a take name is a date every row shares, and the end is the time that tells them apart.
+
+**§5 grammar: the exception.** §5's table says Reported content is *"Touchable: Never"*, and this panel is Reported facts carrying a touchable action. It is drawn as **Yours** — framed, in the control column — because touchability is what a reader predicts from the frame, and a dimmed unframed row with a link in it would be the first thing in the product to break that prediction. Written down here as a deliberate exception rather than settled by whichever style got typed first; the alternative, a third grammar for "reported but actionable", is not worth inventing for one panel.
+
+---
 **UI-23 — The horizon overlay**
 
 PRD §6.11, ADR-0027. PRD §6.1 switches both stabilisers off because *"phone is on a tripod"*; this is the only thing in the product that checks that premise.
@@ -373,6 +391,7 @@ All are **additive**, so no ADR is required ([CLAUDE.md](../CLAUDE.md): *"additi
 | The lens list, as selectable framings | `LensChoice` list on `State`, `zoomRatio` on `CaptureSettings` and `SettingsPatch` | §6.5, §6.8 (UI-21, #77) | **Landed.** A phone's other lenses are zoom ratios, not cameras |
 | The lens as an optic: focal length and f/-number | `Optics` on `State` | §6.5, §6.8 (UI-18, #101) | **Landed.** `equivalentFocalLengthMm`, `apertureFNumber`. The T-stop is derived in the browser and deliberately not on the wire |
 | How the phone sits on its mount: level and steadiness | `MountAttitude` on `State` | §6.11 (UI-23, ADR-0027) | **Landed.** `rollDegrees`, `pitchDegrees`, `steady`, `measuring`. Reported only, and quantised with a deadband before it reaches the wire so a still phone costs no revision (ADR-0024). The overlay's *toggle* is client-local, like UI-20's; only the measurement is protocol |
+| The takes on the phone, and where to fetch one | `Take` and a `takes` list on `State`; the path from `TakeName.path`, generated into TypeScript rather than written down twice | §6.11 (UI-24, ADR-0028) | **Landed.** `name`, `sizeBytes`, `durationMs`, `recordedAtMs`, newest first, capped at ten. Derived from the folder on each rescan rather than accumulated, so it cannot go stale. On the state document rather than a `GET /takes`, because the links must be disabled while recording and a list fetched separately from the `recording` flag would flicker and offer links the server refuses |
 | Exposure aids: stops from correct, and a histogram | `ExposureReadout` on `State` | §6.3, §6.8 (UI-17, #97) | **Landed.** `stopsFromTarget`, `histogram` (64 bins), `metering`. Measured in the metering walk of ADR-0018, so the reading and the loop cannot disagree |
 
 The guides row has a design question inside it rather than a shape question: two remotes watching one phone may reasonably want different overlays, in which case the toggle is not protocol at all.
@@ -408,5 +427,5 @@ The first row is a candidate for the *Challenges to positions stated in the PRD*
 |---|---|
 | Parent Phase 1 | UI-1 to UI-8, UI-11, UI-12 on the phone. The connect sheet (UI-7) can ship ahead of the browser page, since it is what makes the server discoverable. |
 | Parent Phase 2 | UI-9, UI-10, and the browser halves of UI-1, UI-2, UI-5, UI-11, UI-12. §8's three protocol additions land here. |
-| Parent Phase 3 | UI-13 to UI-15. |
+| Parent Phase 3 | UI-13 to UI-15, and UI-24 (the take list; the route it links to is ADR-0028). |
 | Parent Phase 4 | The remote control is reused byte-identically on iOS ([ADR-0013](adr/0013-multiplatform-strategy.md)); the phone HUD is re-implemented natively against this spec. UI-3 has no iOS equivalent — iOS must state that the app has to stay in the foreground (PRD §6.9). |
