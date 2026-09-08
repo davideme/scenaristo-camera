@@ -112,6 +112,67 @@ class PreviewTapProcessor(
     private var haveCameraXMatrix = false
 
     /**
+     * The look, or null for none (PRD 6.11, ADR-0029).
+     *
+     * Written from the service thread and read on the tap's own, hence volatile.
+     * Null is the whole of "OFF": the pass-through program runs and no uniform is
+     * set, so a look that is off costs one branch per frame rather than a shader.
+     */
+    @Volatile
+    private var look: LookUniforms? = null
+
+    private var lookProgram = 0
+    private var maskTexture = 0
+    private var maskBytes: ByteBuffer? = null
+    private var maskAspect: Float = 1f
+    private var pendingMask: PendingMask? = null
+
+    /** One look, flattened to what the shader needs. */
+    data class LookUniforms(
+        val faceCentreX: Float,
+        val faceCentreY: Float,
+        val faceHalfX: Float,
+        val faceHalfY: Float,
+        val axisX: Float,
+        val axisY: Float,
+        val falloff: Float,
+        val halfRatio: Float,
+        val background: Float,
+        val hasFace: Boolean,
+    )
+
+    private class PendingMask(val buffer: ByteBuffer, val width: Int, val height: Int)
+
+    /**
+     * Apply a look to the phone's viewfinder, or none (ADR-0029).
+     *
+     * **The reader is deliberately not relit.** Its frames are what the exposure
+     * loop meters (ADR-0018), and a meter reading its own output is a feedback
+     * loop: the look lifts one cheek, the loop sees a brighter face, ISO comes
+     * down, the look lifts again. The browser preview reads the same frames and so
+     * also stays clean, which is the honest state for a rehearsal that does not
+     * touch the recording either.
+     */
+    fun setLook(uniforms: LookUniforms?) {
+        look = uniforms
+    }
+
+    /**
+     * The person mask for the next frames, as ML Kit produced it.
+     *
+     * Converted from confidence floats to bytes here rather than on the analysis
+     * thread, because this runs once per *mask* -- about 15 Hz -- while the shader
+     * runs per frame at 30, and the conversion is the only part that is O(pixels).
+     */
+    fun setMask(buffer: ByteBuffer?, width: Int, height: Int) {
+        pendingMask = if (buffer == null || width <= 0 || height <= 0) {
+            null
+        } else {
+            PendingMask(buffer, width, height)
+        }
+    }
+
+    /**
      * What this pass does to the buffer, for a caller that has a rectangle in the
      * sensor's coordinates and needs it in the reader's (PRD 6.3).
      *
@@ -199,7 +260,7 @@ class PreviewTapProcessor(
             // CameraX knows what its own surface expects -- rotation, mirroring,
             // and the crop rect from any ViewPort.
             output.updateTransformMatrix(outMatrix, texMatrix)
-            drawTo(eglSurface, outMatrix, output.size, texture.timestamp)
+            drawTo(eglSurface, outMatrix, output.size, texture.timestamp, look)
             // Keep the last one as the base for our own surface: it is the same
             // camera, the same frame and the same upright orientation, and the
             // only thing our reader wants differently is the crop.
@@ -214,34 +275,43 @@ class PreviewTapProcessor(
         if (readerSurface != EGL14.EGL_NO_SURFACE && haveCameraXMatrix) {
             reader?.let { r ->
                 Matrix.multiplyMM(outMatrix, 0, cameraXMatrix, 0, cropMatrix, 0)
-                drawTo(readerSurface, outMatrix, Size(r.width, r.height), texture.timestamp)
+                // Never the look: see setLook. The meter reads these.
+                drawTo(readerSurface, outMatrix, Size(r.width, r.height), texture.timestamp, null)
             }
         }
     }
 
-    private fun drawTo(eglSurface: EGLSurface, matrix: FloatArray, size: Size, timestampNs: Long) {
+    private fun drawTo(
+        eglSurface: EGLSurface,
+        matrix: FloatArray,
+        size: Size,
+        timestampNs: Long,
+        look: LookUniforms?,
+    ) {
         if (!EGL14.eglMakeCurrent(display, eglSurface, eglSurface, context)) {
             Log.w(TAG, "eglMakeCurrent failed; dropping frame")
             return
         }
         GLES20.glViewport(0, 0, size.width, size.height)
-        GLES20.glUseProgram(program)
+        val active = if (look != null) ensureLookProgram() else program
+        GLES20.glUseProgram(active)
+        if (look != null) applyLook(active, look, size)
 
-        val position = GLES20.glGetAttribLocation(program, "aPosition")
+        val position = GLES20.glGetAttribLocation(active, "aPosition")
         GLES20.glEnableVertexAttribArray(position)
         vertices.position(0)
         GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 16, vertices)
 
-        val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
+        val texCoord = GLES20.glGetAttribLocation(active, "aTexCoord")
         GLES20.glEnableVertexAttribArray(texCoord)
         vertices.position(8)
         GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 16, vertices)
 
-        GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "uTexMatrix"), 1, false, matrix, 0)
+        GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(active, "uTexMatrix"), 1, false, matrix, 0)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
-        GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uTexture"), 0)
+        GLES20.glUniform1i(GLES20.glGetUniformLocation(active, "uTexture"), 0)
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
@@ -377,6 +447,87 @@ class PreviewTapProcessor(
         )
     }
 
+    /** Built on first use: a look that is never chosen costs no compile. */
+    private fun ensureLookProgram(): Int {
+        if (lookProgram == 0) {
+            lookProgram = buildProgram(LOOK_FRAGMENT_SHADER)
+            Log.d(TAG, "look program built")
+        }
+        return lookProgram
+    }
+
+    private fun applyLook(programId: Int, look: LookUniforms, size: Size) {
+        uploadPendingMask()
+
+        fun at(name: String) = GLES20.glGetUniformLocation(programId, name)
+        GLES20.glUniform2f(at("uFaceCentre"), look.faceCentreX, look.faceCentreY)
+        GLES20.glUniform2f(at("uFaceHalf"), look.faceHalfX, look.faceHalfY)
+        GLES20.glUniform2f(at("uAxis"), look.axisX, look.axisY)
+        GLES20.glUniform1f(at("uFalloff"), look.falloff)
+        GLES20.glUniform1f(at("uHalfRatio"), look.halfRatio)
+        GLES20.glUniform1f(at("uBackground"), look.background)
+        GLES20.glUniform1f(at("uHasFace"), if (look.hasFace) 1f else 0f)
+
+        val haveMask = maskTexture != 0
+        GLES20.glUniform1f(at("uHasMask"), if (haveMask) 1f else 0f)
+        if (haveMask) {
+            // Centre-crop the mask to the surface's shape: both are the same
+            // camera, so the narrower aspect is a crop of the wider one.
+            val surface = size.width.toFloat() / size.height
+            val mask = maskAspect
+            var scaleX = 1f
+            var scaleY = 1f
+            if (mask > surface) scaleX = surface / mask else scaleY = mask / surface
+            GLES20.glUniform2f(at("uMaskScale"), scaleX, scaleY)
+            GLES20.glUniform2f(at("uMaskOffset"), (1f - scaleX) / 2f, (1f - scaleY) / 2f)
+
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskTexture)
+            GLES20.glUniform1i(at("uMask"), 1)
+        }
+    }
+
+    /**
+     * Turn ML Kit's confidence floats into a texture, once per mask.
+     *
+     * `GL_LUMINANCE` bytes rather than a float texture: GLES 2 has no float
+     * sampling without an extension, and a byte holds a confidence to a finer
+     * step than a mask edge is accurate to anyway.
+     */
+    private fun uploadPendingMask() {
+        val mask = pendingMask ?: return
+        pendingMask = null
+
+        val pixels = mask.width * mask.height
+        val bytes = maskBytes?.takeIf { it.capacity() >= pixels }
+            ?: ByteBuffer.allocateDirect(pixels).order(ByteOrder.nativeOrder()).also { maskBytes = it }
+        bytes.clear()
+        val floats = mask.buffer.asFloatBuffer()
+        for (i in 0 until pixels) {
+            bytes.put((floats.get(i) * 255f).toInt().coerceIn(0, 255).toByte())
+        }
+        bytes.flip()
+
+        if (maskTexture == 0) {
+            val ids = IntArray(1)
+            GLES20.glGenTextures(1, ids, 0)
+            maskTexture = ids[0]
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskTexture)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+        } else {
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskTexture)
+        }
+        GLES20.glTexImage2D(
+            GLES20.GL_TEXTURE_2D, 0, GLES20.GL_LUMINANCE,
+            mask.width, mask.height, 0,
+            GLES20.GL_LUMINANCE, GLES20.GL_UNSIGNED_BYTE, bytes,
+        )
+        maskAspect = mask.width.toFloat() / mask.height
+    }
+
     private fun releaseReader() {
         if (readerSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, readerSurface)
         readerSurface = EGL14.EGL_NO_SURFACE
@@ -395,9 +546,9 @@ class PreviewTapProcessor(
         return ids[0]
     }
 
-    private fun buildProgram(): Int {
+    private fun buildProgram(fragmentSource: String = FRAGMENT_SHADER): Int {
         val vertex = compile(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER)
-        val fragment = compile(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER)
+        val fragment = compile(GLES20.GL_FRAGMENT_SHADER, fragmentSource)
         return GLES20.glCreateProgram().also { p ->
             GLES20.glAttachShader(p, vertex)
             GLES20.glAttachShader(p, fragment)
@@ -463,14 +614,100 @@ class PreviewTapProcessor(
             1f, 1f, 1f, 1f,
         )
 
+        /**
+         * The look (PRD 6.11, ADR-0029): a low-frequency gain field, and nothing
+         * more ambitious.
+         *
+         * **It shapes light and creates none**, which is why the whole feature is
+         * gated on the room already having enough (`docs/research/studio-lighting.md`
+         * §4). Two gains multiply: one across the face along the look's own axis,
+         * one on everything the segmentation mask says is not the person.
+         *
+         * Linearised before the gains and re-encoded after. The meter works in
+         * gamma-encoded space deliberately and says so, but a stop is a doubling
+         * of *light*: multiplying encoded values would darken the shadow side by
+         * about half what it should and leave the ratio wrong.
+         */
+        const val LOOK_FRAGMENT_SHADER = """
+            #extension GL_OES_EGL_image_external : require
+            precision mediump float;
+            uniform samplerExternalOES uTexture;
+            uniform sampler2D uMask;
+            uniform vec2 uFaceCentre;   // frame coords, top-left origin
+            uniform vec2 uFaceHalf;     // half width and height of the face
+            uniform vec2 uAxis;         // where the key appears to come from
+            uniform float uFalloff;
+            uniform float uHalfRatio;   // sqrt of the ratio to apply
+            uniform float uBackground;  // gain on everything that is not the person
+            uniform float uHasMask;
+            // The mask covers the analysis stream's field of view, which is 4:3
+            // where the surface being drawn is 16:9. Without this the person
+            // outline lands in the wrong place and the look draws a halo around
+            // them -- which is exactly what it did.
+            uniform vec2 uMaskScale;
+            uniform vec2 uMaskOffset;
+            uniform float uHasFace;
+            varying vec2 vTexCoord;
+            varying vec2 vFrame;
+
+            float toLinear(float v) {
+                return v < 0.081 ? v / 4.5 : pow((v + 0.099) / 1.099, 1.0 / 0.45);
+            }
+
+            float toEncoded(float v) {
+                return v < 0.018 ? v * 4.5 : 1.099 * pow(v, 0.45) - 0.099;
+            }
+
+            void main() {
+                vec4 colour = texture2D(uTexture, vTexCoord);
+                // The quad's own coordinate, flipped to image convention so it
+                // agrees with every rectangle :domain hands down.
+                vec2 p = vec2(vFrame.x, 1.0 - vFrame.y);
+
+                float gain = 1.0;
+                if (uHasFace > 0.5 && uFaceHalf.x > 0.0 && uFaceHalf.y > 0.0) {
+                    vec2 offset = (p - uFaceCentre) / uFaceHalf;
+                    float across = clamp(dot(offset, normalize(uAxis)), -1.0, 1.0);
+                    float shaped = sign(across) * pow(abs(across), uFalloff);
+                    // Fades out past the face rather than stopping at its edge: a
+                    // gradient with a border is a rectangle somebody can see.
+                    float inFace = smoothstep(1.6, 0.7, length(offset));
+                    gain = pow(uHalfRatio, shaped * inFace);
+                }
+
+                float background = 1.0;
+                if (uHasMask > 0.5) {
+                    float person = texture2D(uMask, p * uMaskScale + uMaskOffset).r;
+                    background = mix(uBackground, 1.0, person);
+                }
+
+                vec3 lit = vec3(
+                    toLinear(colour.r),
+                    toLinear(colour.g),
+                    toLinear(colour.b)
+                ) * gain * background;
+
+                gl_FragColor = vec4(
+                    toEncoded(clamp(lit.r, 0.0, 1.0)),
+                    toEncoded(clamp(lit.g, 0.0, 1.0)),
+                    toEncoded(clamp(lit.b, 0.0, 1.0)),
+                    1.0
+                );
+            }
+        """
+
         const val VERTEX_SHADER = """
             uniform mat4 uTexMatrix;
             attribute vec4 aPosition;
             attribute vec4 aTexCoord;
             varying vec2 vTexCoord;
+            // The quad's own coordinate, untransformed: the look is positioned in
+            // the frame the viewer sees, not in the texture it is sampled from.
+            varying vec2 vFrame;
             void main() {
                 gl_Position = aPosition;
                 vTexCoord = (uTexMatrix * aTexCoord).xy;
+                vFrame = aTexCoord.xy;
             }
         """
 

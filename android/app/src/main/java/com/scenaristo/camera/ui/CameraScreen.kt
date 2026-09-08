@@ -124,11 +124,31 @@ fun CameraScreen(
     }
 }
 
+/**
+ * What the take will be, as the strip says it (PRD 6.1, 6.7).
+ *
+ * The height decides the word: 2160 is "4K" and anything else is its own number,
+ * because a look that costs resolution must say so here and not only in the
+ * browser. Falls back to the PRD default before the first bind has reported one.
+ */
+private fun formatOf(state: ProtocolState): String {
+    val height = state.encoding.heightPx
+    val label = when {
+        height <= 0 -> "4K"
+        height >= 2160 -> "4K"
+        else -> "${height}p"
+    }
+    return "$label · ${state.encoding.frameRate}"
+}
+
 @Composable
 private fun TopStrip(state: ProtocolState, codec: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
-            Reported(label = "Format", value = "4K · 30")
+            // Read from the state document rather than written down: a studio
+            // look records at whatever this device allows beside an analysis
+            // stream (ADR-0029), so "4K" was a constant that could be a lie.
+            Reported(label = "Format", value = formatOf(state))
             Shutter(state)
             Reported(label = "ISO", value = state.settings.iso.toString())
             Reported(label = "Codec", value = codec)

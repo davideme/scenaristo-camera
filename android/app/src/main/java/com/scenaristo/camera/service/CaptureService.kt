@@ -50,14 +50,16 @@ import com.scenaristo.camera.capture.LensSweepRunner
 import androidx.camera.video.GroupableFeatures
 import com.scenaristo.camera.capture.AnalysisRecordingProbe
 import com.scenaristo.camera.capture.LookSource
+import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
 import com.scenaristo.camera.capture.MountSensor
 import com.scenaristo.camera.capture.PreviewJpegSource
-import com.scenaristo.camera.capture.PreviewTapProcessor
 import com.scenaristo.camera.domain.mount.ScreenRotation
 import com.scenaristo.camera.domain.exposure.ExposureState
 import com.scenaristo.camera.domain.exposure.GridFrequency
+import com.scenaristo.camera.domain.lighting.LookParameters
+import com.scenaristo.camera.domain.lighting.LookShape
 import com.scenaristo.camera.domain.lighting.PortraitLighting
 import com.scenaristo.camera.domain.protocol.KeySide
 import com.scenaristo.camera.domain.protocol.PortraitLightingState
@@ -81,6 +83,8 @@ import com.scenaristo.camera.domain.protocol.State as ProtocolState
 import com.scenaristo.camera.server.ControlServer
 import com.scenaristo.camera.server.Lan
 import com.scenaristo.camera.server.PreviewFrames
+import kotlin.math.pow
+import kotlin.math.sqrt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -362,6 +366,7 @@ class CaptureService : LifecycleService() {
         jpeg.quality = 80
         tap = PreviewTapProcessor(onFrame = ::onTapFrame)
         camera = buildSession()
+        publishLookToTap()
         server = ControlServer(
             session = session,
             frames = PreviewFrames { jpeg.latest() },
@@ -830,6 +835,77 @@ class CaptureService : LifecycleService() {
 
     /** What the bound session actually records at, or null for the default. */
     private var boundRecordingHeight: Int? = null
+
+    /**
+     * Turn what the models found into what the shader draws (PRD 6.11, ADR-0029).
+     *
+     * The two halves meet here and nowhere else: `LookShape` says what the chosen
+     * look wants, `PortraitLighting` says what the room is already giving, and the
+     * correction is the difference. A face already near the target asks for a
+     * ratio of 1.0, which is the feature's own rule arriving as arithmetic rather
+     * than as a special case.
+     *
+     * Collected for the life of the service rather than started and stopped with
+     * the look: the flow says null when no analysis stream is bound, so this costs
+     * nothing while the look is off, and a coroutine that starts and stops with a
+     * rebind is one more lifecycle to get wrong.
+     */
+    private fun publishLookToTap() {
+        lifecycleScope.launch {
+            lookSource.look.collect { found ->
+                val chosen = LookShape.of(session.state.settings.studioLook)
+                if (chosen == null || found == null) {
+                    tap.setLook(null)
+                    tap.setMask(null, 0, 0)
+                    return@collect
+                }
+
+                // What the room is already doing, from ADR-0028's reading, and how
+                // far it is from what this look wants.
+                val measured = exposure?.lighting?.value
+                val ratio = LookShape.ratioToApply(
+                    measuredTenths = measured?.keyRatioTenths ?: 0,
+                    parameters = chosen,
+                )
+                val face = found.face
+
+                tap.setMask(found.mask, found.maskWidth, found.maskHeight)
+                tap.setLook(
+                    PreviewTapProcessor.LookUniforms(
+                        faceCentreX = face?.let { ((it.left + it.right) / 2).toFloat() } ?: 0.5f,
+                        faceCentreY = face?.let { ((it.top + it.bottom) / 2).toFloat() } ?: 0.5f,
+                        faceHalfX = face?.let { ((it.right - it.left) / 2).toFloat() } ?: 0f,
+                        faceHalfY = face?.let { ((it.bottom - it.top) / 2).toFloat() } ?: 0f,
+                        axisX = chosen.horizontal.toFloat(),
+                        axisY = chosen.vertical.toFloat(),
+                        falloff = chosen.falloff.toFloat(),
+                        halfRatio = sqrt(ratio).toFloat(),
+                        background = backgroundGainFor(chosen, measured),
+                        hasFace = face != null,
+                    ),
+                )
+            }
+        }
+    }
+
+    /**
+     * How far the background must move to sit where the look wants it.
+     *
+     * A gain below 1.0 darkens, which is the usual direction. Clamped hard: the
+     * background reading is the least reliable of the three -- it is whatever is
+     * not a face, including a window -- and an unclamped correction would turn a
+     * bright wall black on the strength of it.
+     */
+    private fun backgroundGainFor(
+        look: LookParameters,
+        measured: PortraitLighting.Reading?,
+    ): Float {
+        val nowTenths = measured?.backgroundStopsTenths ?: return 1f
+        val wantedTenths = look.backgroundStopsTenths
+        if (nowTenths >= wantedTenths) return 1f
+        val stopsToLose = (wantedTenths - nowTenths) / 10.0
+        return 2.0.pow(-stopsToLose).coerceIn(MIN_BACKGROUND_GAIN, 1.0).toFloat()
+    }
 
     /** ADR-0029: where a look's face contour and person mask come from. */
     private val lookSource = LookSource()
@@ -1884,6 +1960,9 @@ class CaptureService : LifecycleService() {
         private const val CHANNEL_ID = "capture"
         private const val EXPOSURE_TAG = "ExposureLoop"
         private const val LOOK_TAG = "StudioLook"
+
+        /** A look may take the background down by at most two stops. */
+        private const val MIN_BACKGROUND_GAIN = 0.25
 
         /** PRD 6.1's default recording height, and the line a look may drop below. */
         private const val UHD_HEIGHT = 2160
