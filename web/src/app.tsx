@@ -16,12 +16,13 @@ import {
   ExposurePanel,
   LensPanel,
   LightPanel,
+  LookPanel,
   MainsPanel,
   PhonePanel,
   SoundPanel,
   ViewPanel,
 } from './panels'
-import type { GridFrequency, State, Warning } from './protocol'
+import type { GridFrequency, State, StudioLook, Warning } from './protocol'
 import { loadViewPrefs, saveViewPrefs, type ViewPrefs } from './viewprefs'
 
 /**
@@ -82,6 +83,7 @@ export function App() {
     whiteBalanceKelvin?: number
     lockExposureWhileRecording?: boolean
     zoomRatio?: number
+    studioLook?: StudioLook
   }) => {
     const c = connection.current
     if (!c) return
@@ -225,6 +227,11 @@ export function App() {
               state={state}
               locked={recording}
               onSet={(whiteBalanceKelvin) => void patch({ whiteBalanceKelvin })}
+            />
+            <LookPanel
+              state={state}
+              locked={recording}
+              onSet={(studioLook) => void patch({ studioLook })}
             />
             <MainsPanel state={state} locked={recording} onSet={(grid) => void patch({ grid })} />
             <ExposurePanel

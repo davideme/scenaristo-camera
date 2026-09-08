@@ -337,6 +337,29 @@ only, in the **Reported** grammar of UI-9: dimmed, unframed, untouchable.
       preview. Any copy that names a side has to resolve that on the surface that knows which way the
       image is drawn — which is why v1's copy names none.
 
+
+**UI-25 — The studio look, and what it costs**
+
+PRD §6.11, [ADR-0029](adr/0029-studio-look-at-1080p-with-ml-kit.md). The **Yours** half of what
+UI-24 reports: that one says what the room is doing, this one says what to do about it.
+
+- [ ] A panel in the control column, between Light and Mains frequency, with three choices: `None`,
+      `Interview`, `Desk & beauty`. Each carries a one-line note — *Records what is there*, *Key
+      round and high*, *Softer, from the front* — because "Rembrandt" names a painter and the user
+      does not have to know that to pick the right one, exactly as UI-12 keeps Kelvin off the light
+      scenarios.
+- [ ] **It names its cost before the choice, not after the take.** Where the device cannot bind an
+      analysis stream beside a UHD recording, the panel reads `A look records at 1080p, not 4K`, from
+      `Capabilities.analysisRecordingHeight`. Shown whether or not a look is on, because the cost is
+      what decides the choice. A device with no cost is told nothing, and one that cannot do it at
+      all reads `Not available on this camera`.
+- [ ] **Locked while recording**, like every other settable panel — PRD §6.1's locked look, and the
+      session cannot be rebound under a running take anyway.
+- [ ] **Browser only in v1.** The phone shows the look in its viewfinder; choosing one is a decision
+      made while setting up, which is UI-23's argument for the horizon overlay and the same one here.
+- [ ] The look is **not** drawn as a warning or a status chip. It is a choice the user made, and
+      UI-2's rule is that a value you chose lives on the control that sets it and nowhere else.
+
 ---
 **UI-20 — Framing guides**
 

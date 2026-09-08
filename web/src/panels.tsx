@@ -9,7 +9,7 @@ import {
   ThermalIcon,
   WaveIcon,
 } from './icons'
-import type { GridFrequency, State } from './protocol'
+import type { GridFrequency, State, StudioLook } from './protocol'
 import type { ViewPrefs } from './viewprefs'
 import { isRecommended } from './lens'
 import { SCENARIOS, approximationNote, presetFor, scenarioOf } from './whitebalance'
@@ -217,6 +217,72 @@ export function ExposurePanel({
       {holds ? (
         <p class="lock-note">The exposure aids stop reading while a locked take runs</p>
       ) : null}
+    </Panel>
+  )
+}
+
+/**
+ * The studio look (PRD 6.11, UI-25, ADR-0029).
+ *
+ * A **Yours** panel and not a Reported one, unlike everything else the lighting
+ * work added: the reading beside the exposure aids says what the room is doing,
+ * and this says what to do about it. They are two different grammars about the
+ * same subject and the spec keeps them apart on purpose.
+ *
+ * It names its cost. On a device where an analysis stream cannot sit beside a
+ * UHD recording, choosing a look drops the take to what the device does allow,
+ * and a creator is told that here -- before the take, next to the choice --
+ * rather than finding a 1080p file afterwards.
+ */
+export function LookPanel({
+  state,
+  locked,
+  onSet,
+}: {
+  state: State
+  locked: boolean
+  onSet: (look: StudioLook) => void
+}) {
+  const current = state.settings.studioLook ?? 'OFF'
+  const height = state.capabilities?.analysisRecordingHeight
+  const available = typeof height === 'number'
+  const costsResolution = available && (state.capabilities?.uhd30 === true) && height < 2160
+
+  const looks: Array<[StudioLook, string, string]> = [
+    ['OFF', 'None', 'Records what is there'],
+    ['REMBRANDT', 'Interview', 'Key round and high'],
+    ['CLAMSHELL', 'Desk & beauty', 'Softer, from the front'],
+  ]
+
+  return (
+    <Panel title="Studio look" locked={locked}>
+      {available ? (
+        <>
+          <div class="choices">
+            {looks.map(([value, name, note]) => (
+              <button
+                key={value}
+                type="button"
+                class={current === value ? 'choice selected' : 'choice'}
+                aria-pressed={current === value}
+                disabled={locked}
+                onClick={() => onSet(value)}
+              >
+                <span class="choice-name">{name}</span>
+                <span class="choice-note">{note}</span>
+              </button>
+            ))}
+          </div>
+          {/* Said whether or not a look is on, because the cost is what decides
+              the choice and a creator should read it before choosing rather
+              than after. */}
+          {costsResolution ? (
+            <p class="lock-note">A look records at {height}p, not 4K</p>
+          ) : null}
+        </>
+      ) : (
+        <p class="lock-note">Not available on this camera</p>
+      )}
     </Panel>
   )
 }
