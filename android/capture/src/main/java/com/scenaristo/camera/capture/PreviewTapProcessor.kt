@@ -225,7 +225,17 @@ class PreviewTapProcessor(
     override fun onInputSurface(request: SurfaceRequest) {
         handler.post {
             ensureEgl()
+            // A rebind can hand us a differently shaped stream -- binding an
+            // analysis use case changes what CameraX picks for the preview
+            // (ADR-0029) -- and the crop is computed from this. Left alone, the
+            // reader keeps a crop derived from the previous input and the browser
+            // sees the wrong framing, which is what it saw.
+            val resized = inputSize != request.resolution
             inputSize = request.resolution
+            if (resized) {
+                Log.d(TAG, "input resized to $inputSize; rebuilding the reader")
+                releaseReader()
+            }
 
             textureId = createExternalTexture()
             val texture = SurfaceTexture(textureId).apply {
