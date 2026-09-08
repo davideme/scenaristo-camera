@@ -18,6 +18,7 @@ import android.view.Surface
 import androidx.camera.core.SurfaceOutput
 import androidx.camera.core.SurfaceProcessor
 import androidx.camera.core.SurfaceRequest
+import com.scenaristo.camera.domain.exposure.TapGeometry
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -109,6 +110,25 @@ class PreviewTapProcessor(
      */
     private var rotationDegrees = 0
     private var haveCameraXMatrix = false
+
+    /**
+     * What this pass does to the buffer, for a caller that has a rectangle in the
+     * sensor's coordinates and needs it in the reader's (PRD 6.3).
+     *
+     * The matrix above cannot answer that question -- it maps *output* to raw
+     * external-texture coordinates, so its input space is not the sensor image --
+     * but the turn and the crop are the whole of the difference in image space,
+     * and they are right here. `FaceMapping.toFrame` applies them.
+     *
+     * Written on the tap's own thread from [rebuildReaderMatrix] and read from
+     * the camera thread, hence volatile; null until the first surface arrives,
+     * which is the honest answer before there is a frame to map into.
+     */
+    @Volatile
+    private var geometry: TapGeometry? = null
+
+    /** @see geometry */
+    fun geometry(): TapGeometry? = geometry
 
     private val vertices: ByteBuffer = ByteBuffer.allocateDirect(VERTICES.size * 4)
         .order(ByteOrder.nativeOrder())
@@ -346,6 +366,15 @@ class PreviewTapProcessor(
         Matrix.setIdentityM(cropMatrix, 0)
         Matrix.translateM(cropMatrix, 0, region.offsetX, region.offsetY, 0f)
         Matrix.scaleM(cropMatrix, 0, region.scaleX, region.scaleY, 1f)
+        // Published in the same breath as the matrix is built, from the same two
+        // inputs, so the two cannot describe different frames.
+        geometry = TapGeometry(
+            rotationDegrees = rotationDegrees,
+            cropScaleX = region.scaleX.toDouble(),
+            cropScaleY = region.scaleY.toDouble(),
+            cropOffsetX = region.offsetX.toDouble(),
+            cropOffsetY = region.offsetY.toDouble(),
+        )
     }
 
     private fun releaseReader() {
