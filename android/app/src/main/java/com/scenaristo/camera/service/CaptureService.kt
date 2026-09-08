@@ -989,6 +989,11 @@ class CaptureService : LifecycleService() {
             // ADR-0025: a camera released while nobody was watching comes back
             // where it left off, so a wake is not a visibly dark first second.
             resumeFrom = lastExposure,
+            // PRD 6.3's "face-weighted" needs both halves: where the sensor says
+            // the face is, and what the tap does to the buffer on the way to the
+            // meter. Either one missing falls back to the centre window.
+            activeArray = ManualControls.activeArray(bound.cameraInfo),
+            tapGeometry = { tap.geometry() },
         )
         exposure = controller
         // A fresh controller starts life believing no take is running. That is

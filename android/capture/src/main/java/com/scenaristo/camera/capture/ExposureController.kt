@@ -6,6 +6,7 @@ import androidx.camera.core.CameraControl
 import com.scenaristo.camera.domain.exposure.ExposureConfig
 import com.scenaristo.camera.domain.exposure.ExposureLoop
 import com.scenaristo.camera.domain.exposure.ExposureState
+import com.scenaristo.camera.domain.exposure.FaceMapping
 import com.scenaristo.camera.domain.exposure.FaceWeightedMeter
 import com.scenaristo.camera.domain.exposure.FrameRect
 import com.scenaristo.camera.domain.exposure.GridFrequency
@@ -15,6 +16,8 @@ import com.scenaristo.camera.domain.exposure.LumaFrame
 import com.scenaristo.camera.domain.exposure.LumaSampler
 import com.scenaristo.camera.domain.exposure.LumaScale
 import com.scenaristo.camera.domain.exposure.MeteringConfig
+import com.scenaristo.camera.domain.exposure.SensorRect
+import com.scenaristo.camera.domain.exposure.TapGeometry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +69,21 @@ class ExposureController(
      * Null on a cold start, which is the sensor floor per PRD 6.3.
      */
     resumeFrom: ExposureState? = null,
+    /**
+     * The lens's full active array, the fallback divisor for a capture result
+     * that carries no crop region (PRD 6.3).
+     */
+    private val activeArray: SensorRect? = null,
+    /**
+     * What the tap is doing to the buffer right now (ADR-0018).
+     *
+     * A function rather than a value because it changes when the phone is
+     * turned, and a face is mapped for the frame in hand rather than for the
+     * orientation the camera was bound in. Defaults to knowing nothing, which
+     * puts the meter on its centre window -- the behaviour every take had before
+     * faces were wired.
+     */
+    private val tapGeometry: () -> TapGeometry? = { null },
 ) {
 
     @Volatile
@@ -101,19 +119,20 @@ class ExposureController(
     val histogram: StateFlow<Histogram> = _histogram.asStateFlow()
 
     /**
-     * Face rectangles are not wired yet, so the meter uses its centre window.
+     * The faces the sensor last reported, normalised into the region it is
+     * reading but *not* yet turned or cropped into the meter's frame.
      *
-     * That is [FaceWeightedMeter]'s documented fallback for a device that does
-     * not report faces with auto-exposure off, and for a talking head on a tripod
-     * the two windows land in nearly the same place — but it is a fallback, and
-     * ADR-0005 asks for `STATISTICS_FACES`. What is missing is not the plumbing
-     * but the coordinate mapping: face rectangles arrive in the sensor's active
-     * array space, and the meter wants them normalised in a frame the tap has
-     * already cropped to the recording's aspect ratio (ADR-0018). Getting that
-     * wrong meters a rectangle that is not where the face is, which is worse
-     * than the centre window rather than better.
+     * Two steps rather than one, and split here on purpose: this half depends on
+     * the capture result and is written on the camera thread, while the other
+     * half depends on the tap's geometry and is only true for the frame being
+     * metered. A rotation between the two -- the phone turned while a result was
+     * in flight -- would otherwise leave a face mapped through the previous
+     * orientation, which is a rectangle in the wrong half of the picture.
+     *
+     * Written on a camera thread, read on the tap's GL thread, hence volatile.
      */
-    private val faces: List<FrameRect> = emptyList()
+    @Volatile
+    private var facesInCrop: List<FrameRect> = emptyList()
 
     /**
      * Meter one tapped frame and act on it. **Does not close [image]** — the tap
@@ -145,7 +164,7 @@ class ExposureController(
             return
         }
 
-        val measured = meter.measure(frameOf(image), faces)
+        val measured = meter.measure(frameOf(image), FaceMapping.facesInFrame(facesInCrop, tapGeometry()))
         _histogram.value = measured.histogram
         val next = synchronized(lock) {
             val before = _state.value
@@ -163,6 +182,11 @@ class ExposureController(
      * was asked for (ADR-0005).
      */
     fun onCaptureResult(result: CaptureResult) {
+        facesInCrop = FaceMapping.facesInCrop(
+            faces = ManualControls.faces(result),
+            cropRegion = ManualControls.cropRegion(result),
+            activeArray = activeArray,
+        )
         val reported = ManualControls.reported(result) ?: return
         synchronized(lock) {
             _state.value = loop.onSensorEcho(
