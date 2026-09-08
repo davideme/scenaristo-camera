@@ -51,9 +51,13 @@ class TakeFolder(
      * honest as well, rather than relying on the refusal to cover for it.
      *
      * A name that does not match [TakeName.PATTERN] is not a take. That excludes
-     * anything a user dropped in the folder, and it excludes the spike screen's
-     * own `take-<epoch>.mp4` recordings, which share the directory and are not
-     * takes.
+     * anything a user dropped in the folder, and -- less obviously -- it
+     * excludes this app's **own** older recordings: before `TakeName` existed,
+     * `CaptureService` wrote `take-<epoch millis>.mp4` (#40). Those are real
+     * takes and this list will not show them, which is a deliberate trade: the
+     * pattern is also the download route's traversal guard (PRD 6.8), and
+     * widening it to admit a second historical shape would widen that. A user
+     * upgrading from such a build finds those files where they always were.
      */
     fun list(inProgress: String? = null): List<Take> =
         (dir.listFiles() ?: emptyArray())
