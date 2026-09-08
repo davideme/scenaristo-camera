@@ -1,4 +1,4 @@
-# ADR-0029: A studio look is a 1080p mode, built on `ImageAnalysis` and ML Kit
+# ADR-0029: A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit
 
 **Status:** Proposed
 **Date:** 2026-09-08
@@ -40,38 +40,66 @@ recording path renders **12 MP per frame, 44 % more than the 8.3 MP recording**.
 which ADR-0023 turned down a 1 Hz meter as "still-something-running", that is the wrong end to start
 from.
 
-Davide decided on 2026-09-08 that **the look may be a 1080p-only feature**. That reopens Option B of
-ADR-0018, which was measured and rejected there for a different reason: *"binds at video 1080×1920,
-preview 1080×1920, analysis 640×480"*.
+Davide decided on 2026-09-08 that **the look may cost resolution**, and — on the same day, correcting
+a first draft of this ADR that fixed it at 1080p — that the resolution must be **derived from the
+device rather than written into the product**: the Pixel 10 offers `ImageAnalysis` only below UHD on
+CameraX 1.6, and another handset may not have that limit. That reopens Option B of ADR-0018, which was
+measured and rejected there for a different reason: *"binds at video 1080×1920, preview 1080×1920,
+analysis 640×480"*.
 
 ## Decision
 
-We will make the studio look a **1080p recording mode**. When `StudioLook` is anything but `OFF`, the
-session binds at FHD with an `ImageAnalysis`, and the look is applied through ML Kit:
+We will make the studio look a mode that binds **an `ImageAnalysis` alongside the recording, at the
+highest recording resolution that combination supports on this device**, and apply the look through
+ML Kit.
+
+**The resolution is measured, not assumed.** `SessionSupportProbe` already sweeps candidate
+configurations at bind time and PRD 6.10 already requires a capability report per device and lens;
+this adds one question to both — *what is the best recording resolution that binds beside an
+`ImageAnalysis` here?* On the reference Pixel 10 the answer is **1920 × 1080**, because #20 measured
+that no UHD configuration binds beside one. On a device whose stream configuration map allows UHD, the
+answer is UHD and the look costs nothing. Writing 1080p into the product would be turning one phone's
+limit into everyone's, which is the mistake ADR-0017 warns about in the other direction: *"a Phase 0
+pass is evidence about a Pixel 10, not about Android."*
+
+The look itself uses, measured on the Pixel 10 at 1920 × 1080 on 2026-09-08:
+
+| Model | Median | Returns | Delivery |
+|---|---|---|---|
+| **Selfie Segmentation** (`STREAM_MODE`) | **48–50 ms** | full-resolution mask, every frame | bundled |
+| **Face Mesh** (`FACE_MESH`) | **58–65 ms** | 468 points, every frame | bundled |
+| Face Detection (`FAST`, landmarks, no contours) | 122–151 ms | box and landmarks | bundled |
 
 - **Selfie Segmentation** for the person mask. There is no reasonable custom alternative, and the
   background half of the look cannot be applied without it.
-- **Face Mesh Detection** for the face, when its documented envelope holds — faces within about two
-  metres and modest angle to camera, which is exactly PRD 6.5's "sit 1.5–2 m back". It supplies the
-  contour the ratio and the gain both want.
-- **Face Detection** as the fallback where Face Mesh declines, and as the thing that would let
-  `FaceMapping` and `TapGeometry` be deleted: ML Kit reports coordinates in the input image, which on
-  this path *is* the analysed frame, so the sensor-to-frame mapping disappears along with the
-  `DISTORTION_CORRECTION_MODE` hazard ADR-0028 records.
+- **Face Mesh** for the face. It is both better *and* cheaper than Face Detection here — 468 points
+  including a contour, at less than half the latency — which inverts the order this ADR first proposed.
+- **Face Detection** only where Face Mesh declines. It buys a box for more cost than a mesh, so it is a
+  fallback on availability, never on preference.
 
-4K recording keeps everything it has today, including ADR-0028's reading, which continues to run on
-the tap. **The look is the only thing that requires 1080p**, and choosing it is how a user asks for
-that trade.
+All three are **bundled**: the log shows `DynamiteModule: Selected local version` and
+`models_bundled/*.tflite`, with no download. There is no first-run network dependency, which the
+"no backend" headline would otherwise have made a problem.
+
+**Neither model runs per frame.** At 30 fps the frame budget is 33 ms and mesh plus mask is about
+106 ms serially. They do not need to: the shader runs per frame, and the mesh and mask it shapes
+against are refreshed at a lower rate and held between refreshes. The rate is an action item below,
+because it trades how fast the look follows a moving head against what it costs.
+
+4K recording keeps everything it has today, including ADR-0028's reading, which continues to run on the
+tap. **The look is the only thing that constrains resolution**, and choosing it is how a user asks for
+whatever trade their device imposes.
 
 **This amends PRD §3.** The non-goal reads: *"Frame rates other than 30 fps or resolutions other than
-4K UHD. Fewer options is the product. Lower fallbacks exist only for devices that cannot do 4K/30."*
-It gains: *"…except that a studio look (6.11) is recorded at 1920 × 1080, which is the one place a
-user may choose a lower resolution rather than inherit one."* PRD 6.1's resolution row gains the same
-exception, and 6.11's look entry states it as the first thing it says.
+4K UHD. Fewer options is the product. Lower fallbacks exist only for devices that cannot do 4K/30."* It
+gains: *"…and except that a studio look (6.11) records at the best resolution the device offers
+alongside the analysis stream it needs, which on some devices is 1920 × 1080."* PRD 6.1's resolution row
+takes the same exception, and 6.10's capability report gains the question. The user is told the
+resolution their device will use **before** they choose the look, not after the take.
 
 ## Options Considered
 
-### Option A: 1080p mode, `ImageAnalysis` + ML Kit — chosen
+### Option A: Bind `ImageAnalysis` at the best resolution the device allows, ML Kit on top — chosen
 
 | Dimension | Assessment |
 |---|---|
@@ -80,14 +108,18 @@ exception, and 6.11's look entry states it as the first thing it says.
 | Effort | Medium — three models to evaluate, one session shape to add |
 | Reversibility | High: the mode is behind a setting that defaults to OFF |
 
-**Pros:** binds, and was measured to bind (ADR-0018 Option B). The shader renders 2.1 MP rather than
-12 MP, roughly a sixth of the work, which is the difference between a thermal question and a thermal
-answer. ML Kit's coordinates are already in the analysed frame, so ~200 lines of the most error-prone
-custom code in the stack can go. The dependency is one library serving all three needs.
+**Pros:** binds, and was measured to bind (ADR-0018 Option B). Where the device forces 1080p the shader
+renders 2.1 MP rather than 12 MP, roughly a sixth of the work — the difference between a thermal
+question and a thermal answer — and where it does not, nothing is given up at all. ML Kit's coordinates
+are already in the analysed frame, so ~200 lines of the most error-prone custom code in the stack can
+go. One dependency serves all three needs, and its cost is shared: a build with all three models was
+1.2 KB larger than a build with one.
 
 **Cons:** contradicts a PRD non-goal, and does it as a *choice* rather than a device fallback — a user
-can now record worse footage than the product's headline promises. Adds ML Kit's size and, for some
-models, its Play-services delivery. Two session shapes to keep working instead of one.
+can now record worse footage than the product's headline promises, on the devices that impose it. Adds
+about **35 MB to an arm64 install** (30.2 MB of native libraries plus 4.7 MB of models, measured). Two
+session shapes to keep working instead of one, and a capability question whose answer differs per
+device — so the *product's* behaviour now differs per device in a way a user can see.
 
 ### Option B: Keep 4K, run ML Kit on the existing tap frames
 
@@ -131,7 +163,7 @@ ADR to protect. A is a sixth of that work and reaches the documented API shape r
 one.
 
 The cost of A is a product cost, and it belongs to Davide rather than to this ADR: a user may now
-choose 1080p. **The distinction from ADR-0018's rejection of Option B is that this is a choice and that
+choose a look that costs resolution on the devices that impose it. **The distinction from ADR-0018's rejection of Option B is that this is a choice and that
 was a side effect.** ADR-0018 refused to let the *browser remote* silently degrade the recording —
 *"shipping 1080p whenever the remote is connected would mean the browser remote … degrades the thing it
 exists to help you make."* Nobody asked for that, and nobody would have seen it happen. Here the user
@@ -159,17 +191,33 @@ answer.
 
 ## Action Items
 
-1. [ ] Measure, on the reference Pixel 10, that FHD + `ImageAnalysis` + `MlKitAnalyzer` binds and holds
-   30 fps with a recording running — ADR-0018 measured the bind, not the sustained rate with a model
-   in the loop.
-2. [ ] For each of the three ML Kit models: APK size, whether it is bundled or delivered by Play
-   services, and per-frame latency at 1080p. A first-run network dependency needs stating in the PRD if
-   it exists.
-3. [ ] Measure Face Mesh on a real talking head at 1.5–2 m, and at three-quarter angle, against its
-   documented envelope. If it declines at the angles a speaker actually sits at, the contour is not
-   available and the ratio keeps ADR-0028's eye-line split.
-4. [ ] Confirm the recorded file is 1920×1080 at 29.99 fps with the look on, and that turning the look
-   off returns a 3840×2160 file identical in geometry to today's.
-5. [ ] Apply the PRD amendments named under Decision (§3, 6.1's resolution row, 6.11's look entry) in
-   the same change as the code, and mark them provisional in `docs/adr/README.md` until this ADR is
-   Accepted.
+1. [ ] Add the capability question to `SessionSupportProbe` and to the report PRD 6.10 requires: the
+   best recording resolution that binds beside an `ImageAnalysis`, per device and per lens. The Pixel 10
+   answers 1920 × 1080; nothing should assume that is the answer anywhere else.
+2. [ ] Measure that the chosen configuration holds 30 fps with a recording running *and* a model in the
+   loop. ADR-0018 measured the bind; 2026-09-08 measured the models standing alone, with no recording.
+   Neither is that number.
+3. [ ] Choose the refresh rate for the mesh and the mask, and how the shader holds them between
+   refreshes. Mesh 58–65 ms plus mask 48–50 ms is about 106 ms serially against a 33 ms frame, so this
+   is a real decision and not a detail: it trades how fast the look follows a moving head against what
+   it costs.
+4. [ ] Measure Face Mesh at three-quarter angle and at 1.5–2 m, not only square to the lens. On
+   2026-09-08 it returned 468 points on every frame of a seated subject, but that subject was facing the
+   camera; its documented envelope is the risk, and if it declines where speakers actually sit, the
+   ratio keeps ADR-0028's eye-line split.
+5. [ ] Re-measure the install cost on a **release** build with R8 and per-ABI delivery. The 35 MB figure
+   is an arm64 slice of an unminified debug APK, which is an upper bound rather than what a user
+   downloads.
+6. [ ] Apply the PRD amendments named under Decision (§3, 6.1's resolution row, 6.10's capability
+   report, 6.11's look entry) in the same change as the code, and mark them provisional in
+   `docs/adr/README.md` until this ADR is Accepted.
+
+## What was measured, and what it does not cover
+
+Reference Pixel 10, `ro.product.model` confirmed, 2026-09-08, on a throwaway branch that is not merged.
+Models run against real tap frames resized to 1920 × 1080, one detector in flight at a time.
+
+Not covered, and named so nobody reads the table as more than it is: **no recording was running**, the
+subject was square to the lens, the numbers are medians of twenty frames rather than a sustained run,
+and the device was already at thermal `MODERATE` from earlier work. Per ADR-0017 all of it is a claim
+about one handset.
