@@ -32,7 +32,8 @@ accepts only the optimising file; `android.uniquePackageNames` is on; and the mi
 version climbs *within* AGP 9 (9.0 requires Gradle 9.1, 9.3 requires 9.5), so a minor AGP bump is
 not wrapper-neutral.
 
-ADR-0012 fixes `minSdk` at 34 and is silent on the other two SDK levels.
+ADR-0012 fixed `minSdk` at 34 and was silent on the other two SDK levels; ADR-0032 moves it to
+36 and leaves them alone.
 
 ## Decision
 
@@ -46,7 +47,7 @@ We will pin the toolchain in `android/gradle/libs.versions.toml` and the Gradle 
 | Java toolchain | 17 | matches the bytecode target, so there is no target-mismatch class of failure |
 | `compileSdk` | 37 | newest platform, so new APIs and deprecations are visible |
 | `targetSdk` | **36, stated explicitly** | see below |
-| `minSdk` | 34 | ADR-0012 |
+| `minSdk` | 36 | ADR-0032, which supersedes ADR-0012's 34 |
 
 **`targetSdk` is written out rather than inherited.** AGP 9 defaults it to `compileSdk`, so
 leaving it unset would silently adopt every API 37 runtime behaviour change the moment
