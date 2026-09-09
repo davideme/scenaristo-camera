@@ -23,7 +23,7 @@ import com.scenaristo.camera.ui.RemoteScreen
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        forwardSweepRequest(intent)
+        forwardProbeRequest(intent)
         enableEdgeToEdge()
         hideSystemBars()
         setContent {
@@ -53,22 +53,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        forwardSweepRequest(intent)
+        forwardProbeRequest(intent)
     }
 
     /**
-     * Relays #20's lens sweep to the service.
+     * Relays a device measurement to the service: #20's lens sweep, or
+     * ADR-0031's background-blur probe.
      *
-     * The service is not exported, so `adb` cannot start it directly, and the
+     * The service is not exported, so `adb` cannot start it directly, and a
      * measurement has to be startable without unlocking the phone -- the result
      * is a table for an ADR, and reading it off the screen means standing in
      * front of the camera being measured. The launcher activity is the only
      * exported entry point, so the trigger comes through here.
      */
-    private fun forwardSweepRequest(intent: Intent?) {
-        if (intent?.action != CaptureService.ACTION_LENS_SWEEP) return
-        startForegroundService(
-            Intent(this, CaptureService::class.java).setAction(CaptureService.ACTION_LENS_SWEEP),
-        )
+    private fun forwardProbeRequest(intent: Intent?) {
+        val action = intent?.action ?: return
+        if (action != CaptureService.ACTION_LENS_SWEEP && action != CaptureService.ACTION_BLUR_PROBE) return
+        startForegroundService(Intent(this, CaptureService::class.java).setAction(action))
     }
 }

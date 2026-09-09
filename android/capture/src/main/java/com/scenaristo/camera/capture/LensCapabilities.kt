@@ -1,5 +1,12 @@
 package com.scenaristo.camera.capture
 
+import com.scenaristo.camera.domain.blur.BlurCapability
+import com.scenaristo.camera.domain.blur.BlurVerdict
+import com.scenaristo.camera.domain.blur.RecordingSize
+import com.scenaristo.camera.domain.blur.bestBlurSize
+import com.scenaristo.camera.domain.blur.blurVerdict
+import com.scenaristo.camera.domain.blur.canBlur as domainCanBlur
+
 /**
  * What one lens can do, as probed from `Camera2CameraInfo` characteristics plus
  * the CameraX feature-group check (ADR-0002). Populated by [ManualControls];
@@ -10,6 +17,15 @@ data class LensCapabilities(
     val hasManualSensor: Boolean,
     val hasManualPostProcessing: Boolean,
     val supportsUhd30: Boolean,
+    /**
+     * Background blur on a recording (ADR-0031).
+     *
+     * Defaulted, because [ManualControls.probe] can only fill the half that
+     * comes from characteristics -- whether the mode survives contact with the
+     * manual keys is a measurement, and until one has been taken this stays the
+     * empty capability, which every rule in `:domain` reads as "no".
+     */
+    val blur: BlurCapability = BlurCapability(),
 )
 
 /** How white balance is applied on a given lens (PRD 6.4). */
@@ -52,6 +68,27 @@ object LensGate {
      */
     fun resolutionFor(caps: LensCapabilities): Resolution =
         if (caps.supportsUhd30) Resolution.UHD else Resolution.FHD
+
+    /**
+     * ADR-0031: whether background blur may be offered on this lens.
+     *
+     * A thin adapter and nothing more. The rule itself lives in `:domain` where
+     * ADR-0011 says gating belongs and where Phase 4 will read it, so the two
+     * platforms cannot drift into offering the toggle on different grounds.
+     */
+    fun canBlur(caps: LensCapabilities): Boolean = domainCanBlur(caps.blur)
+
+    /** ADR-0031: why blur is or is not offered, for PRD 6.10's report and #125's label. */
+    fun blurVerdictFor(caps: LensCapabilities): BlurVerdict = blurVerdict(caps.blur)
+
+    /**
+     * ADR-0031: the size the app would record at with blur on, or null.
+     *
+     * Derived from the device rather than written into the product (Davide,
+     * 2026-09-09) -- the same answer ADR-0030 got the day before, and for the
+     * same reason ADR-0017 gives: one phone's ceiling is not everyone's.
+     */
+    fun blurSize(caps: LensCapabilities): RecordingSize? = bestBlurSize(caps.blur)
 
     /**
      * The lens to steer the user to, when the one they are on cannot record

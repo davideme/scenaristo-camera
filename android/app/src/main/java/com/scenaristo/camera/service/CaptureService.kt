@@ -9,6 +9,7 @@ import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
+import android.os.Build
 import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
@@ -45,8 +46,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.LifecycleService
 import com.scenaristo.camera.MainActivity
 import com.scenaristo.camera.R
+import com.scenaristo.camera.capture.BlurProbeRunner
 import com.scenaristo.camera.capture.CodecReport
 import com.scenaristo.camera.capture.ExposureController
+import com.scenaristo.camera.capture.LensGate
 import com.scenaristo.camera.capture.LensSweepRunner
 import com.scenaristo.camera.capture.ManualControls
 import com.scenaristo.camera.capture.ManualSession
@@ -167,6 +170,10 @@ class CaptureService : LifecycleService() {
     /** #20: the per-lens key echo, once the sweep has run. */
     private val _lensSweep = MutableStateFlow<String?>(null)
     val lensSweep: StateFlow<String?> = _lensSweep.asStateFlow()
+
+    /** ADR-0031's background-blur measurement, once it has run. */
+    private val _blurProbe = MutableStateFlow<String?>(null)
+    val blurProbe: StateFlow<String?> = _blurProbe.asStateFlow()
 
     /** Camera2 id of the bound back camera, for the sweep's physical-id lookup. */
     private var backCameraId: String? = null
@@ -969,6 +976,11 @@ class CaptureService : LifecycleService() {
                         manualShutter = lens.hasManualSensor,
                         manualWhiteBalance = lens.hasManualPostProcessing,
                         hardwareHevc = codecReport.hevcEncoders.any { e -> e.hardwareAccelerated },
+                        // ADR-0031. Gated on a constant as well as on the lens,
+                        // because the lens half is read from characteristics and
+                        // characteristics cannot answer the question this
+                        // capability actually asks -- see [BLUR_VERIFIED].
+                        blurWhileRecording = BLUR_VERIFIED && LensGate.canBlur(lens),
                     ),
                 )
             }
@@ -1084,6 +1096,60 @@ class CaptureService : LifecycleService() {
             cameraBound = false
             bindCamera()
         }
+    }
+
+    /**
+     * ADR-0031's background-blur measurement.
+     *
+     * Started the same way as the lens sweep and for the same reason: the result
+     * is a table for an ADR, and reading it off the screen would mean unlocking
+     * the phone and standing in front of the camera being measured. It also
+     * records a file per candidate, because an echoed mode proves the camera
+     * *selected* blur and not that the footage is blurred -- and those cannot be
+     * told apart from a table.
+     */
+    private suspend fun runBlurProbe() {
+        // Waits rather than refusing, unlike the lens sweep. The probe is
+        // started from a cold app -- the activity's launch mode is `standard`,
+        // so an intent only reaches it through `onCreate` -- and at that moment
+        // the camera has not bound yet. Refusing immediately made the tool
+        // unusable in the one way it is actually invoked.
+        val cameraId = awaitBackCamera() ?: run {
+            Log.w(BLUR_TAG, "camera did not bind within ${BLUR_BIND_WAIT_MS} ms; nothing to probe")
+            return
+        }
+        val provider = ProcessCameraProvider.awaitInstance(this)
+        val text = runCatching {
+            val info = provider.getCameraInfo(CameraSelector.DEFAULT_BACK_CAMERA)
+            BlurProbeRunner.run(
+                context = this,
+                provider = provider,
+                owner = this,
+                base = DEFAULT_REQUEST,
+                cameraInfo = info,
+                cameraId = cameraId,
+                model = Build.MODEL,
+            )
+        }.getOrElse { "Blur probe failed: ${it.message}" }
+        _blurProbe.value = text
+        // Line by line, for the reason the sweep gives: logcat truncates a single
+        // message past about 4 KB and this table is longer than that.
+        text.lineSequence().forEach { Log.i(BLUR_TAG, it) }
+        // The probe unbound everything, including the preview the browser reads.
+        cameraLock.withLock {
+            cameraBound = false
+            bindCamera()
+        }
+    }
+
+    /** [backCameraId] once the first bind has published it, or null if it never does. */
+    private suspend fun awaitBackCamera(): String? {
+        val deadline = System.currentTimeMillis() + BLUR_BIND_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            backCameraId?.let { return it }
+            delay(250)
+        }
+        return backCameraId
     }
 
     /**
@@ -1912,6 +1978,7 @@ class CaptureService : LifecycleService() {
         }
 
         if (intent?.action == ACTION_LENS_SWEEP) lifecycleScope.launch { runLensSweep() }
+        if (intent?.action == ACTION_BLUR_PROBE) lifecycleScope.launch { runBlurProbe() }
         // The user's own off switch (ADR-0019). UI-7's security copy promises
         // one -- "turn the server off when you are done" -- and an automatic
         // rule they cannot see is not an answer to a consequence they were just
@@ -1978,6 +2045,29 @@ class CaptureService : LifecycleService() {
 
         private const val SWEEP_TAG = "LensSweep"
 
+        private const val BLUR_TAG = "BlurProbe"
+
+        /** How long the blur probe waits for the first camera bind before giving up. */
+        private const val BLUR_BIND_WAIT_MS = 15_000L
+
+        /**
+         * Whether ADR-0031's background-blur measurement has been taken and
+         * passed on this device class.
+         *
+         * **False**, and it stays false until the probe's table is written into
+         * ADR-0031. The lens half of the capability is read from characteristics,
+         * and characteristics cannot say whether the mode takes the manual keys
+         * or the frame rate with it — which is the only thing that decides
+         * whether blur may be offered (Davide, 2026-09-09). Reporting the
+         * advertised half as the capability would be exactly the claim the probe
+         * exists to check.
+         *
+         * The same shape as [APPLIES_COLOUR_GAINS] and for the same reason: a
+         * one-line change, made deliberately, once there is a measurement behind
+         * it.
+         */
+        private const val BLUR_VERIFIED = false
+
         private const val ZOOM_TAG = "Framing"
 
         private const val PREVIEW_TAG = "PreviewQuality"
@@ -1987,6 +2077,9 @@ class CaptureService : LifecycleService() {
 
         /** #20's sweep, startable over adb so the phone need not be unlocked. */
         const val ACTION_LENS_SWEEP = "com.scenaristo.camera.LENS_SWEEP"
+
+        /** ADR-0031's blur measurement, startable over adb for the same reason. */
+        const val ACTION_BLUR_PROBE = "com.scenaristo.camera.BLUR_PROBE"
 
         /** The notification's own stop action (ADR-0019). */
         const val ACTION_STOP = "com.scenaristo.camera.STOP"

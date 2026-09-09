@@ -47,6 +47,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0028](0028-serve-takes-over-the-lan.md) | Serve finished takes over a second HTTP route, refused while recording; resumable, and unauthenticated like the rest of the LAN surface | Proposed | 6.11, 6.8, 6.7 |
 | [0029](0029-portrait-lighting-read.md) | Read the key ratio, background separation and room light from the frames already being metered; report only, and not during a take | Proposed | 6.3, 6.11 |
 | [0030](0030-studio-look-at-1080p-with-ml-kit.md) | A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit; **feature parked 2026-09-08** — the mask is too coarse and macOS works from depth we cannot reach | Deprecated | 3, 6.1, 6.10, 6.11 |
+| [0031](0031-background-blur-through-extended-scene-mode.md) | Background blur through Camera2's streaming scene mode, not camera extensions (which cannot apply to a recording); measured on the device before it is offered, and refused outright if it costs the manual keys | Proposed | 3, 6.1, 6.10, 6.11 |
 
 ## Challenges to positions stated in the PRD
 
@@ -79,6 +80,7 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | 8-Q5 "Phase 0 checks iPhone Safari rendering" | There is no iPhone or iPad. macOS Safari is WebKit and covers the MJPEG decode path; iOS media policy is a Phase 4 question about a Phase 4 platform. Phase 0 checks macOS Safari and Chrome. | 0017 |
 | ADR-0009 "a Gradle `Exec` task in `:app` runs `npm run build`" | `web/` uses pnpm 10, pinned via `packageManager`. ADR-0009's decision is unchanged; only the command is. Read every `npm run build` in ADR-0009 as `pnpm run build`. | 0014 |
 | 3 Non-Goals "resolutions other than 4K UHD … Lower fallbacks exist only for devices that cannot do 4K/30", and 6.1's resolution row | A studio look (6.11) records at the best resolution that binds beside an `ImageAnalysis` on *that device* — 1920 × 1080 on the Pixel 10 (#20), possibly UHD elsewhere. ML Kit's documented shape needs that stream, and a shader on the 4K path renders 12 MP per frame (#139). This is the one place a user *chooses* a lower resolution rather than inheriting one; the default stays 4K and `StudioLook.OFF`. | 0029 |
+| 3 Non-Goals "resolutions other than 4K UHD …" and 6.1's resolution row, **conditionally** | Background blur (6.11) would record at the best resolution the *device* advertises it for. **Not a challenge yet, and deliberately not written as one:** whether the reference Pixel 10 advertises the mode at all, and at what ceiling, is unmeasured — ADR-0031 ships the instrument and offers nothing. If the ceiling comes back below UHD this becomes a live challenge and a product decision for Davide (blur at 1080p / 4K without blur / both, labelled); if the device advertises nothing, this row goes away. | 0031 |
 
 ## Open conflicts
 
