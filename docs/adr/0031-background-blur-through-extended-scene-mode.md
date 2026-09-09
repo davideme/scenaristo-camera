@@ -83,17 +83,19 @@ the allowed control set"* and ADR-0013 makes that what Phase 4 inherits:
 2. **Manual exposure wins.** If the six keys stop echoing while the mode is active, blur reports
    unsupported and no toggle appears — decided by Davide on 2026-09-09. A flicker-free locked shutter
    is why this app exists; a blurred background is not.
-3. **The resolution is derived from the device, not written into the product.** The app's own ladder
-   is walked from 4K down and the first rung inside the device's advertised ceiling wins — the same
-   answer ADR-0030 was given on 2026-09-08, and for the reason ADR-0017 gives: one phone's ceiling is
-   not everyone's.
+3. **Blur costs no resolution.** The advertised ceiling is reported and never enforced. Davide
+   decided on 2026-09-09, on the measurement below, to **trust what the device does over what it
+   says**: the Pixel 10 advertises blur to 1920×1080 and applies it at 3840×2160. So the rule contains
+   no resolution at all, and a ceiling lower than what the app records is neither a refusal nor a
+   downgrade. If a device turns out not to blur what it records, that surfaces the way everything else
+   here does — as a measurement, through `manualKeysHeld` and `frameRateHeld`, which only a run can
+   set.
 
-**PRD text to amend, if and only if the measurement comes back saying blur costs resolution on this
-device:** §3's Non-Goal *"resolutions other than 4K UHD"* and §6.1's resolution row would gain a
-second exception beside ADR-0030's, for a user who *chooses* a lower resolution rather than inheriting
-one. That amendment is deliberately not made here. Until there is a number it is hypothetical, and if
-the number arrives it is a product decision for Davide — blur at 1080p, 4K without blur, or offer both
-and label which — not one this ADR takes on its own (`CONTRIBUTING.md` §7 item 3).
+**No PRD amendment is proposed.** This ADR was opened expecting to need one: §3's Non-Goal
+*"resolutions other than 4K UHD"* and §6.1's resolution row would have gained a second exception
+beside ADR-0030's, for a user who *chooses* a lower resolution. The measurement removed the need —
+blur runs at the 4K default — so PRD 6.1 stands unamended and the trade ADR-0030 had to make does not
+arise here.
 
 ## Measurement, Pixel 10, 2026-09-09
 
@@ -168,12 +170,16 @@ the corner of a monitor. That is enough to show the mode does something and noth
 it treats a face at a metre with a room behind it — which is the only scene this product cares about.
 The quality question is open and needs the camera pointed at a person.
 
-### What this leaves for Davide
+### Decided on this measurement
 
-The resolution trade this ADR was braced for **may not exist**. If blur at UHD is real, the feature is
-free and `bestBlurSize` should return UHD here; if only the advertised 1080p is trustworthy, it is the
-4K trade after all. That is the decision in Action Item 4, and it now rests on one framed-subject
-comparison rather than on a wall.
+**Davide, 2026-09-09: trust the measurement, not the vendor ceiling.** The resolution trade this ADR
+was braced for does not exist on this device — blur runs at 4K, the advertised 1920×1080 is reported
+and not enforced, and PRD 6.1's default stands. The gate that walked a resolution ladder is gone; the
+rule now has no resolution in it.
+
+Two things remain open, both listed in the Action Items: the zoom band, and whether the effect is any
+good on a face. The second is Davide's own retest, and it is the one that decides whether a toggle
+gets written.
 
 ## Options Considered
 
@@ -292,19 +298,20 @@ than a boolean flag.
        ultrawide at 0.56× below it and the 5× above it. A user who picks either loses the effect with
        nothing on screen to say why. A toggle owes a rule about that — drop blur outside the band and
        label it, or refuse the framings that cannot carry it. **A product question, listed in item 4.**
-4. [ ] **Davide's decisions, both now better informed than when this ADR was opened:**
-       - **Resolution.** The device advertises blur to 1920×1080 but measurably applies it at
-         3840×2160. Trust the measurement and keep 4K, or trust the vendor's advertised ceiling and
-         take the 1080p trade? Needs the framed-subject comparison in item 5 first.
-       - **Zoom.** What happens outside 1.0×–3.0× (the 0.56× ultrawide and the 5× framing) — blur
-         off with a label on those framings, or those framings refused while blur is on?
-5. [ ] **Point the camera at a person and re-run.** The measurement above was taken against a blank
-       wall and answers "does the mode do something", not "is this good enough to ship". Compare C0
-       against C1 and C3 on a talking-head scene: subject at ~1 m, background at ~3 m. **This is the
-       item that decides whether PR 2 gets written**, and it is the one that killed ADR-0030 when it
-       was finally looked at.
-6. [ ] Flip `BLUR_VERIFIED` only with 4 and 5 answered, and only in a change that carries the numbers.
-7. [ ] Phase 4: name the iOS equivalent (`AVCaptureDevice`'s portrait effect is a different shape) so
+4. [x] **Resolution — decided by Davide, 2026-09-09: trust the measurement, not the vendor ceiling.**
+       Blur runs at 3840×2160 despite the advertised 1920×1080, so it costs no resolution, the gate
+       carries no ladder, and no PRD text needs amending. Implemented: `advertisedCeiling` reports the
+       claim, nothing enforces it.
+5. [ ] **Zoom — still Davide's.** The band is 1.0×–3.0× and two of PRD 6.5's four framings fall
+       outside it. Blur off with a label on those framings, or those framings refused while blur is
+       on? Needed before a toggle ships, not before item 6.
+6. [ ] **Point the camera at a person and re-run** — Davide is doing this. The measurement above was
+       taken against a blank wall and answers "does the mode do something", not "is this good enough
+       to ship". Compare C0 against C1 on a talking-head scene: subject at ~1 m, background at ~3 m.
+       **This is the item that decides whether PR 2 gets written**, and it is the one that killed
+       ADR-0030 when it was finally looked at.
+7. [ ] Flip `BLUR_VERIFIED` only with 5 and 6 answered, and only in a change that carries the numbers.
+8. [ ] Phase 4: name the iOS equivalent (`AVCaptureDevice`'s portrait effect is a different shape) so
        `blurVerdict` stays the shared rule ADR-0013 requires rather than an Android-only one.
 
 ## Notes for whoever runs the probe next

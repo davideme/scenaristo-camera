@@ -2,14 +2,15 @@ package com.scenaristo.camera.domain
 
 import com.scenaristo.camera.domain.blur.BlurCapability
 import com.scenaristo.camera.domain.blur.BlurVerdict
-import com.scenaristo.camera.domain.blur.RecordingSize
-import com.scenaristo.camera.domain.blur.bestBlurSize
+import com.scenaristo.camera.domain.blur.advertisedCeiling
+import com.scenaristo.camera.domain.blur.blurLine
 import com.scenaristo.camera.domain.blur.blurVerdict
 import com.scenaristo.camera.domain.blur.canBlur
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The gating rule for background blur (ADR-0031).
@@ -42,7 +43,7 @@ class BackgroundBlurTest {
         // "we never use ImageCapture", so there is no photograph to blur.
         val stillsOnly = perfect.copy(continuousMode = false)
         assertEquals(BlurVerdict.NO_CONTINUOUS_MODE, blurVerdict(stillsOnly))
-        assertNull(bestBlurSize(stillsOnly))
+        assertNull(advertisedCeiling(stillsOnly))
     }
 
     @Test
@@ -59,37 +60,32 @@ class BackgroundBlurTest {
     }
 
     @Test
-    fun `PRD 6_10 - the best size that blurs is measured, not assumed`() {
-        assertEquals(RecordingSize(3840, 2160), bestBlurSize(perfect))
-        assertEquals(
-            RecordingSize(1920, 1080),
-            bestBlurSize(perfect.copy(maxWidthPx = 1920, maxHeightPx = 1080)),
-        )
-        // 720p blurs, but this app does not record there (PRD 6.10's fallback
-        // stops at 1080p), so the device offers nothing rather than something
-        // small.
-        val hd = perfect.copy(maxWidthPx = 1280, maxHeightPx = 720)
-        assertNull(bestBlurSize(hd))
-        assertEquals(BlurVerdict.TOO_SMALL, blurVerdict(hd))
+    fun `ADR-0031 - the advertised ceiling is reported and never gates the verdict`() {
+        // Davide, 2026-09-09: trust the measurement, not the vendor's ceiling.
+        // The reference Pixel 10 advertises 1920x1080 and was measured applying
+        // blur at 3840x2160, so a ceiling below what the app records is not a
+        // reason to refuse and not a reason to record smaller.
+        val lowCeiling = perfect.copy(maxWidthPx = 1920, maxHeightPx = 1080)
+        assertEquals(BlurVerdict.SUPPORTED, blurVerdict(lowCeiling))
+        assertTrue(canBlur(lowCeiling))
+        assertEquals("1920x1080", advertisedCeiling(lowCeiling))
     }
 
     @Test
-    fun `PRD 6_10 - a ceiling between two rungs takes the lower rung`() {
-        // 2560x1440 holds 1080p and not UHD. The ladder is walked, not rounded.
-        assertEquals(
-            RecordingSize(1920, 1080),
-            bestBlurSize(perfect.copy(maxWidthPx = 2560, maxHeightPx = 1440)),
-        )
+    fun `ADR-0031 - even a ceiling far below what the app records still supports blur`() {
+        // The rule has no resolution in it at all any more. If a device like this
+        // turns out not to blur what it records, that shows up as a measurement
+        // -- manualKeysHeld and frameRateHeld are the only things a run can set.
+        val tiny = perfect.copy(maxWidthPx = 640, maxHeightPx = 480)
+        assertEquals(BlurVerdict.SUPPORTED, blurVerdict(tiny))
+        assertEquals("640x480", advertisedCeiling(tiny))
     }
 
     @Test
-    fun `ADR-0031 - a ceiling wide enough but not tall enough does not count`() {
-        // A device advertising 3840x1080 holds neither rung at UHD; taking the
-        // width alone would record 2160 rows the HAL never promised to blur.
-        assertEquals(
-            RecordingSize(1920, 1080),
-            bestBlurSize(perfect.copy(maxWidthPx = 3840, maxHeightPx = 1080)),
-        )
+    fun `PRD 6_1 - blur costs no resolution, so the report does not name one`() {
+        // The sentence PRD 6.10's report shows. It used to end "ok at 1920x1080",
+        // which would have been the 4K trade leaking into the copy.
+        assertEquals("background blur: ok", blurLine(perfect))
     }
 
     @Test

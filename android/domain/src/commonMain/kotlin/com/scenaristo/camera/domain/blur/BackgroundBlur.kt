@@ -15,25 +15,14 @@ package com.scenaristo.camera.domain.blur
  * camera's characteristics say what a mode is for; only running it says what it
  * costs. [BlurCapability] therefore carries both halves and [blurVerdict]
  * refuses to call the advertised half an answer.
- */
-
-/** One recording size the app is willing to shoot at (PRD 6.1, 6.10). */
-data class RecordingSize(val widthPx: Int, val heightPx: Int) {
-    override fun toString(): String = "${widthPx}x$heightPx"
-}
-
-/**
- * The sizes the app records at, widest first (PRD 6.1's default and 6.10's
- * sanctioned fallback).
  *
- * This is a ladder and not a range: [bestBlurSize] walks it from the top and
- * takes the first rung the device's blur ceiling can hold, which is what
- * "record at the best resolution that blurs *here*" means in practice.
+ * That cuts both ways, and on the reference device it cut the useful way. The
+ * Pixel 10 advertises blur to 1920x1080 and was measured applying it at
+ * 3840x2160, so Davide decided on 2026-09-09 to **trust the measurement and not
+ * the vendor's ceiling**: the advertised size is reported and never enforced,
+ * and blur costs no resolution. PRD 6.1's 4K default therefore stands unamended,
+ * and the trade ADR-0030 had to make does not arise here.
  */
-val BLUR_SIZE_LADDER: List<RecordingSize> = listOf(
-    RecordingSize(3840, 2160),
-    RecordingSize(1920, 1080),
-)
 
 /**
  * What one camera can do about background blur.
@@ -56,7 +45,16 @@ data class BlurCapability(
      * wearing a yes.
      */
     val continuousMode: Boolean = false,
-    /** The largest stream the device will blur, from the mode's own advertisement. */
+    /**
+     * The largest stream the device *says* it will blur.
+     *
+     * **Reported, not enforced** (Davide, 2026-09-09). The reference Pixel 10
+     * advertises 1920x1080 and was then measured applying blur at 3840x2160,
+     * so the ceiling is the vendor's statement rather than the device's
+     * behaviour, and it does not decide what the app records at. Keeping it
+     * because it is evidence: a device whose ceiling and behaviour disagree is
+     * worth knowing about, and PRD 6.10's report says so.
+     */
     val maxWidthPx: Int = 0,
     val maxHeightPx: Int = 0,
     /**
@@ -84,9 +82,6 @@ enum class BlurVerdict {
     /** Still-capture bokeh only, which cannot reach a recording. */
     NO_CONTINUOUS_MODE,
 
-    /** Blurs, but not at any size this app is willing to record (PRD 6.10). */
-    TOO_SMALL,
-
     /** Blurs, but takes manual shutter and ISO with it. Davide's rule: refuse. */
     MANUAL_KEYS_LOST,
 
@@ -106,42 +101,28 @@ enum class BlurVerdict {
  * a device can advertise the mode, bind it at UHD and blur beautifully, and
  * still be refused because the shutter stopped being ours.
  */
-fun blurVerdict(
-    capability: BlurCapability,
-    ladder: List<RecordingSize> = BLUR_SIZE_LADDER,
-): BlurVerdict = when {
+fun blurVerdict(capability: BlurCapability): BlurVerdict = when {
     !capability.advertised -> BlurVerdict.NOT_ADVERTISED
     !capability.continuousMode -> BlurVerdict.NO_CONTINUOUS_MODE
-    bestBlurSize(capability, ladder) == null -> BlurVerdict.TOO_SMALL
     !capability.manualKeysHeld -> BlurVerdict.MANUAL_KEYS_LOST
     !capability.frameRateHeld -> BlurVerdict.FRAME_RATE_LOST
     else -> BlurVerdict.SUPPORTED
 }
 
 /**
- * The size the app would record at with blur on, or null when the device blurs
- * nothing large enough to be worth recording.
+ * The ceiling the device advertises, for the report, or null when it advertises
+ * no streaming blur at all.
  *
- * This is the resolution policy Davide chose on 2026-09-09, and it is the same
- * answer ADR-0030 got the day before: **derived from the device, not written
- * into the product.** The ladder is ours; the ceiling is theirs. A phone that
- * blurs at UHD costs nothing to turn blur on; one that stops at 1080p offers a
- * trade, and one that stops below 1080p offers nothing.
- *
- * Only the advertised ceiling is consulted here. Whether the device then
- * actually binds at that size is a separate claim, and one no characteristic
- * can make -- ADR-0018 measured this device's own answers to be optimistic, so
- * the probe binds and reads back.
+ * **Nothing gates on this.** It is here so PRD 6.10's report can say what the
+ * device claims beside what it was measured doing, which on the reference
+ * Pixel 10 are not the same thing.
  */
-fun bestBlurSize(
-    capability: BlurCapability,
-    ladder: List<RecordingSize> = BLUR_SIZE_LADDER,
-): RecordingSize? {
-    if (!capability.advertised || !capability.continuousMode) return null
-    return ladder.firstOrNull {
-        it.widthPx <= capability.maxWidthPx && it.heightPx <= capability.maxHeightPx
+fun advertisedCeiling(capability: BlurCapability): String? =
+    if (!capability.advertised || !capability.continuousMode) {
+        null
+    } else {
+        "${capability.maxWidthPx}x${capability.maxHeightPx}"
     }
-}
 
 /** Whether the toggle may be offered at all (PRD 6.10, ADR-0011). */
 fun canBlur(capability: BlurCapability): Boolean =
@@ -159,8 +140,8 @@ fun canBlur(capability: BlurCapability): Boolean =
 fun blurLine(capability: BlurCapability): String = when (blurVerdict(capability)) {
     BlurVerdict.NOT_ADVERTISED -> "background blur: not supported on this lens"
     BlurVerdict.NO_CONTINUOUS_MODE -> "background blur: stills only on this lens, not while recording"
-    BlurVerdict.TOO_SMALL -> "background blur: not supported below 1080p"
     BlurVerdict.MANUAL_KEYS_LOST -> "background blur: unavailable - it would unlock the shutter"
     BlurVerdict.FRAME_RATE_LOST -> "background blur: unavailable - it would drop below 30 fps"
-    BlurVerdict.SUPPORTED -> "background blur: ok at ${bestBlurSize(capability)}"
+    // No resolution in this sentence, because blur no longer costs one.
+    BlurVerdict.SUPPORTED -> "background blur: ok"
 }

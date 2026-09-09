@@ -2,8 +2,6 @@ package com.scenaristo.camera.capture
 
 import com.scenaristo.camera.domain.blur.BlurCapability
 import com.scenaristo.camera.domain.blur.BlurVerdict
-import com.scenaristo.camera.domain.blur.RecordingSize
-import com.scenaristo.camera.domain.blur.bestBlurSize
 import com.scenaristo.camera.domain.blur.blurVerdict
 import com.scenaristo.camera.domain.blur.canBlur as domainCanBlur
 
@@ -80,15 +78,6 @@ object LensGate {
 
     /** ADR-0031: why blur is or is not offered, for PRD 6.10's report and #125's label. */
     fun blurVerdictFor(caps: LensCapabilities): BlurVerdict = blurVerdict(caps.blur)
-
-    /**
-     * ADR-0031: the size the app would record at with blur on, or null.
-     *
-     * Derived from the device rather than written into the product (Davide,
-     * 2026-09-09) -- the same answer ADR-0030 got the day before, and for the
-     * same reason ADR-0017 gives: one phone's ceiling is not everyone's.
-     */
-    fun blurSize(caps: LensCapabilities): RecordingSize? = bestBlurSize(caps.blur)
 
     /**
      * The lens to steer the user to, when the one they are on cannot record
