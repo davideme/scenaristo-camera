@@ -125,3 +125,8 @@ replace.
 
 Tracked outside Phase 0: **#27 CameraX 1.7 revisit** (Phase 3), which holds ADR-0002's revisit
 checklist. Do not bump CameraX before it; CI enforces the pin.
+
+**Background blur is measured and parked** (ADR-0031, 2026-09-09). The Pixel 10 advertises
+`BOKEH_CONTINUOUS`, accepts it, echoes the mode back on every capture result and applies no blur, at
+either resolution. Nothing is built and nothing is offered; the numbers are in the ADR. Worth
+re-testing when #29 widens the matrix, since it is a HAL feature and another OEM may implement it.

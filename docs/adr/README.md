@@ -47,6 +47,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0028](0028-serve-takes-over-the-lan.md) | Serve finished takes over a second HTTP route, refused while recording; resumable, and unauthenticated like the rest of the LAN surface | Proposed | 6.11, 6.8, 6.7 |
 | [0029](0029-portrait-lighting-read.md) | Read the key ratio, background separation and room light from the frames already being metered; report only, and not during a take | Proposed | 6.3, 6.11 |
 | [0030](0030-studio-look-at-1080p-with-ml-kit.md) | A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit; **feature parked 2026-09-08** — the mask is too coarse and macOS works from depth we cannot reach | Deprecated | 3, 6.1, 6.10, 6.11 |
+| [0031](0031-background-blur-through-extended-scene-mode.md) | Background blur through Camera2's streaming scene mode, not camera extensions (which cannot apply to a recording); **measured 2026-09-09 and the reference Pixel 10 advertises the mode, echoes it back on every frame and applies nothing** — no toggle proposed | Proposed | 3, 6.1, 6.10, 6.11 |
 
 ## Challenges to positions stated in the PRD
 

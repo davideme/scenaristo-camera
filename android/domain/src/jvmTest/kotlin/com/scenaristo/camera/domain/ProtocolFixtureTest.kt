@@ -139,6 +139,13 @@ class ProtocolFixtureTest {
         // The name is the handle the download route resolves, so the fixture is
         // also the assertion that both platforms build the same URL from it.
         assertEquals("/takes/Scenaristo_2026-09-06_14-28-11.mp4", TakeName.path(state.takes.first().name))
+        // PRD 6.10 / ADR-0011: what this camera can do. Pinned in the fixture so
+        // Phase 4's port has to answer the same questions (ADR-0013).
+        assertTrue(state.capabilities.probed, "a snapshot from a bound camera has been probed")
+        assertTrue(state.capabilities.uhd30)
+        assertTrue(state.capabilities.manualShutter)
+        assertTrue(state.capabilities.manualWhiteBalance)
+        assertTrue(state.capabilities.hardwareHevc)
         assertEquals(1.0, state.settings.zoomRatio, absoluteTolerance = 1e-9)
         // PRD 6.5's list exists to move people off the wide lens, and on this
         // device only zooming reaches the recommended band.

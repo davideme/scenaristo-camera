@@ -117,6 +117,13 @@
       "equivalentFocalLengthMm": 24,
       "apertureFNumber": 1.7
     },
+    "capabilities": {
+      "probed": true,
+      "uhd30": true,
+      "manualShutter": true,
+      "manualWhiteBalance": true,
+      "hardwareHevc": true
+    },
     "lenses": [
       {
         "zoomRatio": 0.5557733774185181,
