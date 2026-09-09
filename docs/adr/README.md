@@ -28,7 +28,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0009](0009-web-ui-static-bundle.md) | Web UI as one static bundle (Vite + TypeScript + Preact) built into app resources; TS types generated from `:domain` | Accepted | 6.8, 9 |
 | [0010](0010-platform-free-domain-defer-kmp.md) | `:domain` as a single-target Kotlin Multiplatform module; iOS target deferred | Superseded by [0015](0015-domain-module-build-shape.md) | 9 |
 | [0011](0011-per-lens-capability-gating.md) | Require `MANUAL_SENSOR` to record; degrade WB without `MANUAL_POST_PROCESSING` | Accepted | 6.4, 6.10, 8-Q1 |
-| [0012](0012-minimum-os-versions.md) | Minimum OS Android 14 / iOS 16, with a measurement trigger | Accepted | 6.10, 8 |
+| [0012](0012-minimum-os-versions.md) | Minimum OS Android 14 / iOS 16, with a measurement trigger | Superseded by [0032](0032-minimum-android-16.md) | 6.10, 8 |
 | [0013](0013-multiplatform-strategy.md) | Multiplatform: native capture per platform, shared web UI and protocol, fixture-tested domain; KMP and Compose Multiplatform deferred | Accepted | 9, 8-Q7 |
 | [0014](0014-build-toolchain.md) | Gradle 9.7.1 / AGP 9.4.0 / Kotlin 2.4.10 on Java 17; `android` CLI provisions the SDK; wrapper committed; `targetSdk` stated explicitly | Proposed | 6.1, 6.10, 8-Q7, 9 |
 | [0015](0015-domain-module-build-shape.md) | `:domain` with two JVM-family targets under the Android KMP library plugin; platform-freeness enforced by compiler plus lint. Supersedes 0010 | Proposed | 9, 6.2, 6.3, 6.4, 6.10 |
@@ -48,6 +48,7 @@ When a PRD statement and an ADR disagree, the ADR's Status decides: Accepted ADR
 | [0029](0029-portrait-lighting-read.md) | Read the key ratio, background separation and room light from the frames already being metered; report only, and not during a take | Proposed | 6.3, 6.11 |
 | [0030](0030-studio-look-at-1080p-with-ml-kit.md) | A studio look records at the best resolution the device offers beside `ImageAnalysis`, and is built on ML Kit; **feature parked 2026-09-08** — the mask is too coarse and macOS works from depth we cannot reach | Deprecated | 3, 6.1, 6.10, 6.11 |
 | [0031](0031-background-blur-through-extended-scene-mode.md) | Background blur through Camera2's streaming scene mode, not camera extensions (which cannot apply to a recording); **measured 2026-09-09 and the reference Pixel 10 advertises the mode, echoes it back on every frame and applies nothing** — no toggle proposed | Proposed | 3, 6.1, 6.10, 6.11 |
+| [0032](0032-minimum-android-16.md) | Minimum Android moves to 16 (API 36); iOS 16 unchanged; the version fork under ADR-0033 and ADR-0034 disappears and only per-camera capability gating remains. Supersedes 0012 | Proposed | 6.10, 8, 9 |
 
 ## Challenges to positions stated in the PRD
 
@@ -81,6 +82,8 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | ADR-0009 "a Gradle `Exec` task in `:app` runs `npm run build`" | `web/` uses pnpm 10, pinned via `packageManager`. ADR-0009's decision is unchanged; only the command is. Read every `npm run build` in ADR-0009 as `pnpm run build`. | 0014 |
 | 3 Non-Goals "resolutions other than 4K UHD … Lower fallbacks exist only for devices that cannot do 4K/30", and 6.1's resolution row | A studio look (6.11) records at the best resolution that binds beside an `ImageAnalysis` on *that device* — 1920 × 1080 on the Pixel 10 (#20), possibly UHD elsewhere. ML Kit's documented shape needs that stream, and a shader on the 4K path renders 12 MP per frame (#139). This is the one place a user *chooses* a lower resolution rather than inheriting one; the default stays 4K and `StudioLook.OFF`. | 0029 |
 
+| 6.10, 8 decision log and 9 "Minimum OS: Android 14 (API 34)", and the summary table's "min Android 14" | The floor moves to Android 16 (API 36). ADR-0012's own reasoning decides it — start high pre-release, lower later with Play Console data, because that is the cheap direction — and two API 36 keys the product wants (ADR-0033, ADR-0034) would otherwise each need a version fork. Play's targeting requirement is already met by `targetSdk = 36` and is not the reason. iOS 16 is unchanged. | 0032 |
+
 ## Open conflicts
 
 | Documents | Conflict | Resolution needed |
@@ -90,6 +93,8 @@ Each row is a technical statement in the PRD that an ADR proposes to amend, and 
 | ADR-0017 vs ADR-0002, 0003, 0005, 0008, 0011, 0016 | Those ADRs phrase their Phase 0 action items "on both reference devices" and ADR-0016's context states the reference devices are a Pixel and a Samsung. ADR-0017 narrows the device scope of ADR-0002 (2, 3, 4), ADR-0003 (2), ADR-0005 (2, 3), ADR-0008 (1) and ADR-0011 (3) to one Pixel 10 plus a macOS browser. No decision in those ADRs changes. | **Resolved 2026-09-03 (Davide):** ADR-0017 Accepted. Their action items are ticked against one device; their own text is left unedited, and ADR-0017 governs the device scope until #29 widens the matrix and supersedes it. |
 | ADR-0026 vs ADR-0006 | ADR-0006's context states that "cellular interfaces sit behind carrier NAT and receive no inbound connections", and its request-time rule rests on that. Measured false on the reference Pixel 10 (2026-09-07): the carrier assigns an RFC 1918 address, which both of ADR-0006's checks admit. ADR-0026 changes none of ADR-0006's decisions — same single bind, same two request-time checks — and adds one condition in front of them: the port opens only while an interface the platform calls local is up. | **Awaiting Davide.** ADR-0026 is Proposed. ADR-0006 stays Accepted and unedited; if ADR-0026 is accepted, ADR-0006's cellular sentence is the passage to read as corrected rather than rewritten. |
 | ADR-0002 vs `docs/spec-chapter-markers.md` CM-1 | CM-1 requires an app-owned fragmented muxer with soft-remux finalisation in Phase 1; ADR-0002 chose the CameraX stock `Recorder` with no muxer access. | **Resolved 2026-09-03 (Davide):** CM-1 deferred to the CameraX 1.7 revisit; added to the ADR-0002 revisit checklist. |
+
+| ADR-0032 vs ADR-0012 | ADR-0012 fixed the Android floor at API 34 and is Accepted. ADR-0032 moves it to API 36, carrying ADR-0012's iOS floor, its "high first, lower later" reasoning and its Play Console measurement forward unchanged. The excluded installed base is still unmeasured, which ADR-0032 states as its own weakness. | **Awaiting Davide.** ADR-0032 is Proposed; ADR-0012 is marked Superseded pending its acceptance, as ADR-0010 is for ADR-0015. |
 
 ## PRD amendments
 

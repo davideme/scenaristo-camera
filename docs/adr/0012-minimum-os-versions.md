@@ -1,6 +1,6 @@
 # ADR-0012: Minimum OS is Android 14 (API 34) and iOS 16
 
-**Status:** Accepted (decided 2026-09-03 per PRD decision log); rationale reconstructed here and open to challenge
+**Status:** Superseded by ADR-0032 (proposed 2026-09-09), which moves the Android floor to API 36 and carries the iOS floor and the Play Console measurement forward. Was Accepted (decided 2026-09-03 per PRD decision log); rationale reconstructed here and open to challenge
 **Date:** 2026-09-03
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.10, 8 decision log, 9 (Phase 1, Phase 4)

@@ -7,7 +7,7 @@ kotlin = "2.4.10"             # Kotlin 2.4 requires AGP >= 9.1.0; the two are co
 
 compileSdk = "37"
 targetSdk = "36"              # stated explicitly: AGP 9 defaults it to compileSdk (ADR-0014)
-minSdk = "34"                 # Android 14 (ADR-0012)
+minSdk = "36"                 # Android 16 (ADR-0032, supersedes ADR-0012)
 
 # CameraX is PINNED at 1.6.2 by ADR-0002. Do NOT bump it.
 # The 1.7 upgrade is a scheduled review with a checklist in that ADR:
