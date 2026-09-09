@@ -19,7 +19,6 @@ import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.ExtendableBuilder
-import com.scenaristo.camera.domain.blur.BlurCapability
 import com.scenaristo.camera.domain.exposure.IsoRange
 import com.scenaristo.camera.domain.exposure.SensorFace
 import com.scenaristo.camera.domain.exposure.SensorPoint
@@ -73,61 +72,10 @@ object ManualControls {
          * [awbModeFor] maps a preset temperature onto one of these.
          */
         val awbMode: Int,
-        /**
-         * `CONTROL_EXTENDED_SCENE_MODE`, or null to leave the key unset
-         * (ADR-0031). Null is what the product ships until a measurement says
-         * otherwise, and every existing caller gets it by default.
-         *
-         * Carried on the request rather than set once -- but **not** for the
-         * reason [awbMode] is, and the difference was measured on 2026-09-09
-         * rather than assumed. [apply] replaces the whole set of options
-         * previously set *through it*, and CameraX merges that set over the ones
-         * the extender set when the use case was built. So a key set at bind
-         * time and omitted from a later runtime request **survives**: the probe
-         * asked for the mode at bind, stopped asking, and the camera stayed in
-         * it for all 91 following capture results.
-         *
-         * It rides the request anyway, because a toggle changes at runtime and a
-         * runtime change has nowhere else to go, and because the field costs
-         * nothing when null. What it is not is a defence against a wipe that
-         * does not happen.
-         */
-        val extendedSceneMode: Int? = null,
-        /**
-         * The `CONTROL_MODE` to assert beside it, or null to leave CameraX's own
-         * in place.
-         *
-         * Deliberately separate from [extendedSceneMode] and deliberately
-         * nullable. AOSP documents the scene mode as being selected by setting
-         * `CONTROL_MODE` to the extended-scene-mode value, but that control also
-         * governs the 3A routines, and its sibling `USE_SCENE_MODE` is documented
-         * to make `CONTROL_AE_MODE` *ignored* -- which would take manual shutter
-         * and ISO with it (PRD 6.1-6.3). Whether it does is a measurement, not an
-         * assumption, so the probe binds both with and without it.
-         */
-        val controlMode: Int? = null,
     )
 
     /** Off, for every mode the app takes over. Camera2 spells all three as 0. */
     private const val MODE_OFF = 0L
-
-    /**
-     * Blur applied to a *stream* -- preview and recording -- rather than to a
-     * still (ADR-0031).
-     *
-     * This is the only mode that can reach a take. Its still-capture sibling
-     * blurs a photograph, and this app has none: ADR-0002 says "we never use
-     * `ImageCapture`", which is also why the vendor extensions route was
-     * rejected. Exposed so the probe can ask for it without knowing a platform
-     * constant.
-     */
-    val BOKEH_CONTINUOUS: Int = CameraMetadata.CONTROL_EXTENDED_SCENE_MODE_BOKEH_CONTINUOUS
-
-    /** Its still-capture sibling, reported so a "yes" that is really a no is visible as one. */
-    val BOKEH_STILL_CAPTURE: Int = CameraMetadata.CONTROL_EXTENDED_SCENE_MODE_BOKEH_STILL_CAPTURE
-
-    /** The `CONTROL_MODE` value AOSP names for selecting a streaming scene mode. */
-    val CONTROL_MODE_SCENE: Int = CameraMetadata.CONTROL_MODE_USE_EXTENDED_SCENE_MODE
 
     /**
      * Ask the HAL for face rectangles (PRD 6.3's "face-weighted" metering).
@@ -177,17 +125,6 @@ object ManualControls {
                 CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF,
             )
             .setCaptureRequestOption(CaptureRequest.STATISTICS_FACE_DETECT_MODE, FACE_DETECT_MODE)
-            .also { extender ->
-                // Unset unless asked for, so every existing caller binds exactly
-                // the session it bound before ADR-0031 (#20's measurement stays
-                // a measurement of the same thing).
-                request.extendedSceneMode?.let {
-                    extender.setCaptureRequestOption(CaptureRequest.CONTROL_EXTENDED_SCENE_MODE, it)
-                }
-                request.controlMode?.let {
-                    extender.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, it)
-                }
-            }
             .setSessionCaptureCallback(
                 object : CameraCaptureSession.CaptureCallback() {
                     override fun onCaptureCompleted(
@@ -226,18 +163,6 @@ object ManualControls {
                 // [applyTo], face detection would survive until the first
                 // exposure move and then be gone for the rest of the session.
                 .setCaptureRequestOption(CaptureRequest.STATISTICS_FACE_DETECT_MODE, FACE_DETECT_MODE)
-                .also { options ->
-                    // The runtime path, which is how a toggle would change the
-                    // mode on a bound camera. Not a defence against the options
-                    // being wiped -- measured on 2026-09-09, a mode set at bind
-                    // time survives a runtime request that omits it.
-                    request.extendedSceneMode?.let {
-                        options.setCaptureRequestOption(CaptureRequest.CONTROL_EXTENDED_SCENE_MODE, it)
-                    }
-                    request.controlMode?.let {
-                        options.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, it)
-                    }
-                }
                 .build(),
         )
     }
@@ -493,91 +418,6 @@ object ManualControls {
             hasManualPostProcessing =
                 CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING in capabilities,
             supportsUhd30 = supportsUhd30,
-            blur = blurCapability(cameraInfo),
         )
-    }
-
-    /**
-     * The streaming scene modes this camera advertises (ADR-0031).
-     *
-     * One platform key carries all of it -- mode, largest stream the mode
-     * applies to, and the zoom band it exists in -- and it is flattened into
-     * plain numbers here so that every rule which reads it can be tested on the
-     * host. The platform's own size and range types are device classes; keeping
-     * them would put [BlurReport] and the gate behind a phone.
-     *
-     * An empty list is a legal, common answer and not a failure.
-     */
-    fun extendedSceneModes(cameraInfo: CameraInfo): ExtendedSceneModes {
-        val info = Camera2CameraInfo.from(cameraInfo)
-        val modes = info
-            .getCameraCharacteristic(
-                CameraCharacteristics.CONTROL_AVAILABLE_EXTENDED_SCENE_MODE_CAPABILITIES,
-            )
-            ?.map {
-                ExtendedSceneMode(
-                    mode = it.mode,
-                    label = sceneModeLabel(it.mode),
-                    maxWidthPx = it.maxStreamingSize.width,
-                    maxHeightPx = it.maxStreamingSize.height,
-                    zoomMin = it.zoomRatioRange.lower.toDouble(),
-                    zoomMax = it.zoomRatioRange.upper.toDouble(),
-                )
-            }
-            .orEmpty()
-        val controlModes = info
-            .getCameraCharacteristic(CameraCharacteristics.CONTROL_AVAILABLE_MODES)
-            ?.toList()
-            .orEmpty()
-        return ExtendedSceneModes(
-            modes = modes,
-            offersSceneModeControl = CONTROL_MODE_SCENE in controlModes,
-        )
-    }
-
-    /**
-     * The characteristics half of the blur capability, and only that half.
-     *
-     * `manualKeysHeld` and `frameRateHeld` are left false on purpose: neither is
-     * knowable without running the mode, and ADR-0018 records that every
-     * capability query on the reference device has proved optimistic. Filling
-     * them in from characteristics would be exactly the claim ADR-0031's probe
-     * exists to check.
-     */
-    fun blurCapability(cameraInfo: CameraInfo): BlurCapability {
-        val advertised = extendedSceneModes(cameraInfo)
-        val continuous = advertised.modeFor(BOKEH_CONTINUOUS)
-        return BlurCapability(
-            advertised = advertised.advertised,
-            continuousMode = continuous != null,
-            maxWidthPx = continuous?.maxWidthPx ?: 0,
-            maxHeightPx = continuous?.maxHeightPx ?: 0,
-        )
-    }
-
-    /**
-     * The scene mode the camera says it is in, or null when the result does not
-     * carry the key.
-     *
-     * Null and [SCENE_MODE_DISABLED] mean different things and are kept apart
-     * for the reason `EchoVerdict` keeps ABSENT and MISMATCH apart: one is a
-     * camera that never got the request, the other is a camera that got it and
-     * declined.
-     */
-    fun observedSceneMode(result: CaptureResult): Int? =
-        result.get(CaptureResult.CONTROL_EXTENDED_SCENE_MODE)
-
-    /** The `CONTROL_MODE` the camera says it is in, or null when absent. */
-    fun observedControlMode(result: CaptureResult): Int? =
-        result.get(CaptureResult.CONTROL_MODE)
-
-    private fun sceneModeLabel(mode: Int): String = when (mode) {
-        CameraMetadata.CONTROL_EXTENDED_SCENE_MODE_DISABLED -> "DISABLED"
-        BOKEH_STILL_CAPTURE -> "BOKEH_STILL_CAPTURE"
-        BOKEH_CONTINUOUS -> "BOKEH_CONTINUOUS"
-        // A vendor mode. Named by its number rather than guessed at: the range
-        // above 0x40 is reserved for exactly this and the app has no business
-        // pretending to know what one does.
-        else -> "VENDOR_$mode"
     }
 }

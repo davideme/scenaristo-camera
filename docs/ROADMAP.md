@@ -126,8 +126,7 @@ replace.
 Tracked outside Phase 0: **#27 CameraX 1.7 revisit** (Phase 3), which holds ADR-0002's revisit
 checklist. Do not bump CameraX before it; CI enforces the pin.
 
-Also tracked outside Phase 0: **ADR-0031's background-blur probe** (Phase 3, PRD 6.11). It is a
-Phase 0-shaped measurement arriving late — it produces a table for an ADR and is started over adb
-with the phone locked, like #20's lens sweep — and it finishes the same way: when the numbers are
-in ADR-0031, not when the probe has run. Until they are, `BLUR_VERIFIED` stays false and the app
-offers nothing.
+**Background blur is measured and parked** (ADR-0031, 2026-09-09). The Pixel 10 advertises
+`BOKEH_CONTINUOUS`, accepts it, echoes the mode back on every capture result and applies no blur, at
+either resolution. Nothing is built and nothing is offered; the numbers are in the ADR. Worth
+re-testing when #29 widens the matrix, since it is a HAL feature and another OEM may implement it.

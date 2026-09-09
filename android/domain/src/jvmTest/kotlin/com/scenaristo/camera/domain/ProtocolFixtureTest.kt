@@ -144,14 +144,8 @@ class ProtocolFixtureTest {
         assertTrue(state.capabilities.probed, "a snapshot from a bound camera has been probed")
         assertTrue(state.capabilities.uhd30)
         assertTrue(state.capabilities.manualShutter)
-        // ADR-0031. False *beside* `probed: true`, which is the interesting
-        // combination and the reason this is in a golden file: a camera that has
-        // been looked at and cannot blur a recording is the expected answer, and
-        // changing it has to be argued for rather than drifting.
-        assertFalse(
-            state.capabilities.blurWhileRecording,
-            "blur is not claimed until a device measurement says so",
-        )
+        assertTrue(state.capabilities.manualWhiteBalance)
+        assertTrue(state.capabilities.hardwareHevc)
         assertEquals(1.0, state.settings.zoomRatio, absoluteTolerance = 1e-9)
         // PRD 6.5's list exists to move people off the wide lens, and on this
         // device only zooming reaches the recommended band.

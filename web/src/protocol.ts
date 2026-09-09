@@ -145,7 +145,6 @@ export interface Capabilities {
   manualShutter?: boolean;
   manualWhiteBalance?: boolean;
   hardwareHevc?: boolean;
-  blurWhileRecording?: boolean;
 }
 
 export interface LensChoice {

@@ -308,20 +308,6 @@ data class Capabilities(
     val manualWhiteBalance: Boolean = false,
     /** A hardware HEVC encoder exists. Whether the profile *chooses* it is [Encoding.codec]. */
     val hardwareHevc: Boolean = false,
-    /**
-     * Background blur on a *recording* — measured on the device, not read off
-     * its characteristics (ADR-0031).
-     *
-     * False until a run has confirmed that the six manual keys and a constant
-     * 30.00 fps survive the mode being active. A camera that advertises a
-     * streaming bokeh and quietly takes the shutter back when asked for it has
-     * not got this, whatever it says about itself — and ADR-0018 records that
-     * every capability query on the reference device has proved optimistic.
-     *
-     * Reported, never set: the toggle that reads this is a `SettingsPatch`
-     * field and is a separate change.
-     */
-    val blurWhileRecording: Boolean = false,
 )
 
 /**

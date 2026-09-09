@@ -114,8 +114,8 @@ the allowed control set"* and ADR-0013 makes that what Phase 4 inherits:
    device fails: advertised, accepted and echoed is not support, and the capability requires a
    recording with the mode compared against one without it. Nothing here gates on the advertised
    ceiling — not because the ceiling was disproved (it was not; nothing blurs at any size on this
-   device) but because it is redundant beside a check on the picture itself. `advertisedCeiling`
-   reports the claim for PRD 6.10.
+   device) but because it is redundant beside a check on the picture itself. The advertised ceiling
+   was reported for PRD 6.10 and gated nothing.
 
 **No PRD amendment is proposed**, and on this device the question does not arise: §3's Non-Goal on
 resolutions and §6.1's resolution row are untouched, because there is no effect to trade a resolution
@@ -329,9 +329,9 @@ than a boolean flag.
   understand that a key not carried on every runtime request is a key that lasts until the next
   exposure move. The probe unbinds the session while it runs, so the browser preview drops for its
   duration — the same cost the lens sweep already has.
-- **Unchanged:** no dependency, no CameraX version change, no `PROTOCOL_VERSION` bump (the wire field
-  is additive and defaulted, which is ADR-0007's rule), and no user-visible behaviour at all until
-  `BLUR_VERIFIED` flips.
+- **Unchanged:** no dependency, no CameraX version change, no `PROTOCOL_VERSION` bump, and — once the
+  instrument came back out of the tree — no change to the shipped app at all. `Capabilities` has no
+  blur field, so nothing was added to the wire and nothing has to be carried forward compatibly.
 - **Revisit when:** the probe has run on the reference Pixel 10 and its table is in Action Item 1
   below. If the device advertises nothing, this ADR is superseded by a one-line "not available on the
   reference device" and the feature waits for #29 to widen the matrix. If it advertises the mode at a
@@ -353,17 +353,36 @@ than a boolean flag.
        3840×2160 and none at 1920×1080.** Tables above.
 5. [x] **Withdraw the resolution decision taken on the wall measurement.** The +10 % that prompted
        "trust the measurement, not the vendor ceiling" was noise on a low-detail scene, most likely
-       continuous AF. The ladder is not restored — `appliesToFootage` supersedes it — but the claim
-       that blur runs at UHD is retracted, in this ADR and in the code comments that repeated it.
+       continuous AF. The claim that blur runs at UHD is retracted, in this ADR and in the code
+       comments that repeated it; the resolution ladder it displaced was not restored, because
+       `appliesToFootage` answered the question better and then the whole lot came out of the tree.
 6. [ ] **Davide: park this, or keep it open?** The recommendation is to **park it**, in the shape
        ADR-0030 was parked: the route is right, the reference device does not implement it, and there
        is nothing further to build without different hardware. Unparking means a device whose
        `appliesToFootage` comes back true — worth re-testing when #29 widens the matrix to a second
        OEM, since this is a HAL feature and Samsung and Xiaomi are the vendors most likely to have
        implemented it.
-7. [ ] `BLUR_VERIFIED` stays false. It should not be flipped on this handset at all.
+7. [x] **Remove the instrument once the measurement is taken**, per ADR-0030's precedent — a parked
+       feature reaches `main` as an ADR, not as code. Done; see below for where it is preserved.
 8. [ ] Phase 4: if this is unparked, name the iOS equivalent (`AVCaptureDevice`'s portrait effect is a
        different shape) so `blurVerdict` stays the shared rule ADR-0013 requires.
+
+## The instrument is not in the tree
+
+Following ADR-0030's precedent -- a parked feature reaches `main` as an ADR, not as code -- the probe,
+the gating rule and the wire field were removed once the measurement was taken. What is left is this
+document. Nothing in the app knows the mode exists, `Capabilities` has no blur field, and
+`ManualControls` is as it was.
+
+**The instrument is preserved at commit `48e2741`** on `claude/camera-bokeh-extension-c84b76`, and is
+worth recovering rather than rewriting if #29 brings a device to re-test on. It is:
+
+- `capture/BlurProbe.kt` -- nine candidates, bind, settle, record ~5 s, read the echoes back
+- `capture/BlurReport.kt` -- the pure half: phase bucketing, verdicts, Markdown
+- `domain/blur/BackgroundBlur.kt` -- `BlurCapability`, `blurVerdict`, and the `appliesToFootage` check
+  that is the whole lesson of this ADR
+- two nullable fields on `ManualControls.Request`, an `ACTION_BLUR_PROBE` intent, and a
+  `meteredRequest()` that seeds the run from the exposure loop's outputs
 
 ## Notes for whoever runs the probe next
 
