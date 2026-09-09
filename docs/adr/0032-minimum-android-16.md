@@ -33,8 +33,14 @@ listed the gaps it leaves; one of them is verbatim:
 > ADR-0012's Android 14 (API 34) floor has no device that runs it.
 
 At an API 34 floor, every measurement Phase 0 takes is taken two OS versions above the floor, and
-the floor's behaviour is inferred rather than observed. At an API 36 floor the reference Pixel 10
-*is* the floor, and that gap closes without buying a phone.
+the floor's behaviour is inferred rather than observed. At an API 36 floor that distance shrinks to
+one version.
+
+> **Corrected by measurement, 2026-09-09.** This paragraph originally claimed the reference Pixel 10
+> *is* the floor and that ADR-0017's gap closes. It does not. The reference handset — `Pixel 10`,
+> confirmed with `getprop ro.product.model` — runs **Android 17, API 37**
+> (build `CP2A.260805.005`), one version above this floor. The gap narrows from two versions to one
+> and stays open. ADR-0017's third gap should be reworded rather than ticked.
 
 **Play's targeting rule is not the reason, and should not be read as one.** From 31 August 2026 new
 apps and updates must *target* API 36 to be submitted to Google Play. That is `targetSdk`, which
@@ -155,11 +161,50 @@ than this one, arrived at with evidence instead of before it.
   The response is to lower the floor **and** accept the version forks ADR-0033 and ADR-0034 avoid,
   which is a decision with its own ADR, not a build change.
 
+## Measured on the reference device, 2026-09-09
+
+The reference `Pixel 10`, Android 17 / API 37, build `CP2A.260805.005`, read with
+`adb shell dumpsys media.camera` (ADR-0017: this is a claim about one handset).
+
+**Instrument.** First read from the camera service's static HAL metadata, then **confirmed through
+`CameraCharacteristics` itself** by `CameraCapabilityReadTest`, a `:app` instrumented test added
+with this measurement. The API read is the one that counts, and it is stronger than the dump: both
+gating keys are *present* in `getKeys()` with values that exclude the mode we wanted, so neither
+result is an inference from a missing key. The distinction was not academic — for
+`CONTROL_AUTOFRAMING_AVAILABLE` the two layers disagree outright, `dumpsys` printing `[FALSE]` for a
+key `getKeys()` does not list.
+
+| Fact | Result |
+|---|---|
+| The `minSdk 36` build installs and runs | **Yes.** `app-debug.apk` at `minSdkVersion:'36'` installed clean; the app starts, holds its foreground service and does not crash. |
+| `CONTROL_AE_AVAILABLE_PRIORITY_MODES` (ADR-0033's key) | Present on both logical cameras, reads `[0]` — `OFF` only. `SENSOR_EXPOSURE_TIME_PRIORITY` (2) **declared unsupported**. Not exposed at all on the five physical cameras. |
+| `COLOR_CORRECTION_AVAILABLE_MODES` (ADR-0034's key) | Present on all seven cameras, reads `[0, 1, 2]` — `TRANSFORM_MATRIX`, `FAST`, `HIGH_QUALITY`. `CCT` (3) **declared unsupported**. |
+| `COLOR_CORRECTION_COLOR_TEMPERATURE_RANGE` | Absent from `getKeys()`, reads `null`, on every camera. |
+| `CONTROL_MAX_REGIONS_AE` / `_AF` | AE `1` everywhere; AF `1` everywhere except physical camera 3, which reports `0`. |
+
+**The two APIs that motivate this ADR are both unavailable on the only phone in the matrix.** The
+Context above argues the floor by saying that the shutter-priority mode and the Kelvin key would
+each need a version fork at API 34. That remains true as written, and it is now also true that
+neither can be used on the reference device: ADR-0033 and ADR-0034 both fall to their lower rung
+here. Their capability gating behaves exactly as designed — both state that the API floor guarantees
+the keys exist and never that a driver declares them, which is precisely what happened — but the
+Decision's motivating pair currently buys nothing measurable.
+
+That does not by itself decide the floor. ADR-0012's own reasoning (high first, lower later, before
+release), the smaller quirk matrix, and Play's targeting requirement all stand untouched. But the
+argument this ADR led with did not survive contact with the device, and whether the floor still
+stands on the remainder is Davide's call, not a correction that belongs in an edit.
+
 ## Action Items
-1. [ ] Set `minSdk = 36` in `android/gradle/libs.versions.toml` and update ADR-0014's SDK table row,
-       which cites ADR-0012 for that number.
+1. [x] Set `minSdk = 36` in `android/gradle/libs.versions.toml` and update ADR-0014's SDK table row,
+       which cites ADR-0012 for that number. **Done in #153**, and verified on the device above:
+       the resulting APK reports `minSdkVersion:'36'` and installs.
 2. [ ] Amend the four PRD passages listed under Decision, citing this ADR.
-3. [ ] Set ADR-0012's status to `Superseded by ADR-0032` and carry its action item 2 forward here.
+3. [x] Set ADR-0012's status to `Superseded by ADR-0032` and carry its action item 2 forward here.
+       **Done in #153.**
 4. [ ] Before Phase 3: pull the Play Console device catalogue for API 34–35 phones with a
        `MANUAL_SENSOR` main camera and record the excluded share in this ADR.
-5. [ ] Update ADR-0017's gap list, whose third item is the API 34 floor that no device runs.
+5. [ ] Update ADR-0017's gap list, whose third item is the API 34 floor that no device runs. The
+       measurement above changes what this should say: the gap is not closed, it is narrowed to one
+       version. Left undone until this ADR is Accepted, since ADR-0017 is Accepted and this is its
+       text.

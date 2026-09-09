@@ -30,8 +30,37 @@ temperatures in `COLOR_CORRECTION_COLOR_TEMPERATURE_RANGE`, and both values echo
 `ManualControls` already sets.
 
 Verified against `android.jar` for `compileSdk 37` on 2026-09-09; every constant named here exists
-and carries `since="36"`. **Not confirmed on a device** — no phone answered `adb devices` when this
-was written, so nothing here is a claim about the reference Pixel 10.
+and carries `since="36"`.
+
+> **Measured on the reference device, 2026-09-09 — rung 1 does not exist here.** `Pixel 10`, serial
+> Android 17 / API 37, build `CP2A.260805.005`, confirmed with
+> `getprop ro.product.model` and read with `adb shell dumpsys media.camera`.
+> `android.colorCorrection.availableModes` is `[0 1 2]` — `TRANSFORM_MATRIX`, `FAST`,
+> `HIGH_QUALITY` — on every camera. `COLOR_CORRECTION_MODE_CCT` is `3` and is not in the list, and
+> `android.colorCorrection.colorTemperatureRange` does not appear in the dump at all. **The
+> reference device selects rung 2**, so PRD 6.4's Kelvin promise still rests on the gains curve
+> nobody has built. Per ADR-0017 this is a claim about one handset, and an absent mode is a driver
+> declaration that a later build could change.
+>
+> **Confirmed through the API, 2026-09-09.** The reading above is `dumpsys`, i.e. static HAL
+> metadata, where a conclusion drawn from a *missing* key is one inference short of proof.
+> `CameraCapabilityReadTest` (`:app` instrumented test) asks through
+> `CameraCharacteristics.getKeys()` and `.get()`, and the answer is stronger: on **all seven**
+> cameras — both logical and all five physical — `COLOR_CORRECTION_AVAILABLE_MODES` is present and
+> reads `[0, 1, 2]`. `CCT` (3) is declared unsupported rather than merely unmentioned, and
+> `COLOR_CORRECTION_COLOR_TEMPERATURE_RANGE` is absent from `getKeys()` and reads `null` on every
+> one. Rung 1 is unreachable on this handset by the device's own enumeration.
+>
+> The methodological caution was still worth having, and this same run proved it: for
+> `CONTROL_AUTOFRAMING_AVAILABLE`, `dumpsys` prints `[FALSE]` in the HAL metadata while `getKeys()`
+> does not list the key at all and `get()` returns `false` on the logical cameras and `null` on the
+> physical ones. The two layers genuinely disagree about what exists, which is exactly why a
+> capability decision belongs on the API side.
+>
+> This is the case the ADR's own Context anticipates: an API 36 floor guarantees the keys exist and
+> says nothing about what a camera supports. The device is on **API 37**, a level past the one that
+> introduced the key, and still does not declare it — which is the clearest possible evidence that
+> the rungs below are not a formality.
 
 Three facts shape how far this reaches.
 
@@ -194,8 +223,16 @@ waiting a release to fix it buys nothing.
 2. [ ] Amend PRD 6.4's Android note as quoted under Decision, citing this ADR.
 3. [ ] Add the rung to the capability report (PRD 6.10) and drop the "≈ approximated" label on
        rung 1.
-4. [ ] Confirm on the reference Pixel 10 which modes the main camera declares in
-       `COLOR_CORRECTION_AVAILABLE_MODES` and what `COLOR_CORRECTION_COLOR_TEMPERATURE_RANGE`
-       reports, and record both here with the handset name (ADR-0017).
-5. [ ] Re-scope #24 to "grey-card the CCT key at 3200 K and 5600 K" on a rung-1 device, keeping the
-       curve calibration in the issue for the day rung 2 has hardware.
+4. [x] **Confirm on the reference Pixel 10 which colour-correction modes the main camera declares.**
+       Measured 2026-09-09 on the reference `Pixel 10`, Android 17 (API 37):
+       `colorCorrection.availableModes = [0 1 2]`, no `CCT`; `colorTemperatureRange` absent. Rung 1
+       is unreachable there. Written into Context above.
+5. [ ] ~~Re-scope #24 to "grey-card the CCT key"~~ — **does not apply.** That re-scoping was
+       predicated on the reference device being rung 1, and it is rung 2. #24 keeps its original
+       shape: calibrate the Kelvin-to-gains curve. The re-scoping becomes live only if #29 brings a
+       camera that declares `CCT`.
+6. [ ] Reconsider deferring rung 2. This ADR left ADR-0011's gains curve unbuilt on the grounds that
+       no available hardware selects it; the measurement above says the reference device does, and it
+       is therefore the path every take on the only phone in the matrix actually takes. That is an
+       argument for building #24 that this ADR did not have when it wrote the deferral — and it is a
+       scope call for Davide, not a correction.
