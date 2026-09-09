@@ -6,6 +6,33 @@
 **PRD sections:** 3 (Non-Goals), 6.1, 6.10, 6.11
 **Related ADRs:** [ADR-0002](0002-android-capture-stack.md), [ADR-0011](0011-per-lens-capability-gating.md), [ADR-0013](0013-multiplatform-strategy.md), [ADR-0017](0017-phase-0-verification-matrix.md), [ADR-0018](0018-preview-tap-for-metering-and-preview-frames.md), [ADR-0030](0030-studio-look-at-1080p-with-ml-kit.md)
 
+## Outcome: the mode does nothing on the reference device, 2026-09-09
+
+**The Pixel 10 advertises `BOKEH_CONTINUOUS`, accepts the request, echoes the mode back on every
+capture result, and applies no blur at all.** Measured against a face at both 3840×2160 and
+1920×1080 — the latter being exactly the size the device advertises the mode for — with background
+sharpness unchanged to within noise against a control take.
+
+There is no feature to offer here, so no toggle is proposed and `blurWhileRecording` stays false. The
+route in this ADR is still the right one — vendor extensions genuinely cannot reach a recording, and
+this is the only other door — but the door does not open on this handset.
+
+**The part worth keeping is the way it failed.** Everywhere else in this repository an echoed key is
+the end of the argument: ADR-0002 action item 2 verifies the manual keys precisely by asking whether
+the camera echoed them, across 18,027 capture results. This is the case where the echo is a lie. It is
+ADR-0018's *"every capability query on this device is optimistic"* one level deeper than that ADR
+found it — not the capability query, the capture result. The defence is
+`BlurCapability.appliesToFootage`, which no characteristic and no capture result can set: only two
+recordings compared against each other.
+
+**An earlier draft of this ADR said the opposite, and it was wrong.** The first run was taken against
+a blank wall and `blurdetect` read 7.99 against 8.80, which was written up as blur at UHD and acted on
+— Davide decided the vendor's ceiling should not be trusted over that measurement. Against a face the
+same comparison gives 9.14 against 9.29 on the background and 4.09 against 4.06 on the subject, which
+is noise. On a flat wall with continuous AF the earlier delta was almost certainly focus. **A
+low-detail scene cannot support this measurement**, and the conclusion drawn from one has been
+withdrawn along with the code that implemented it.
+
 ## Context
 
 The request was "if the camera extension Bokeh is available, offer it, in the UI and the remote
@@ -83,19 +110,17 @@ the allowed control set"* and ADR-0013 makes that what Phase 4 inherits:
 2. **Manual exposure wins.** If the six keys stop echoing while the mode is active, blur reports
    unsupported and no toggle appears — decided by Davide on 2026-09-09. A flicker-free locked shutter
    is why this app exists; a blurred background is not.
-3. **Blur costs no resolution.** The advertised ceiling is reported and never enforced. Davide
-   decided on 2026-09-09, on the measurement below, to **trust what the device does over what it
-   says**: the Pixel 10 advertises blur to 1920×1080 and applies it at 3840×2160. So the rule contains
-   no resolution at all, and a ceiling lower than what the app records is neither a refusal nor a
-   downgrade. If a device turns out not to blur what it records, that surfaces the way everything else
-   here does — as a measurement, through `manualKeysHeld` and `frameRateHeld`, which only a run can
-   set.
+3. **The footage has to change.** `appliesToFootage` is the last check and the one the reference
+   device fails: advertised, accepted and echoed is not support, and the capability requires a
+   recording with the mode compared against one without it. Nothing here gates on the advertised
+   ceiling — not because the ceiling was disproved (it was not; nothing blurs at any size on this
+   device) but because it is redundant beside a check on the picture itself. `advertisedCeiling`
+   reports the claim for PRD 6.10.
 
-**No PRD amendment is proposed.** This ADR was opened expecting to need one: §3's Non-Goal
-*"resolutions other than 4K UHD"* and §6.1's resolution row would have gained a second exception
-beside ADR-0030's, for a user who *chooses* a lower resolution. The measurement removed the need —
-blur runs at the 4K default — so PRD 6.1 stands unamended and the trade ADR-0030 had to make does not
-arise here.
+**No PRD amendment is proposed**, and on this device the question does not arise: §3's Non-Goal on
+resolutions and §6.1's resolution row are untouched, because there is no effect to trade a resolution
+for. If a device is ever found that genuinely applies the mode, the resolution question comes back and
+is Davide's then.
 
 ## Measurement, Pixel 10, 2026-09-09
 
@@ -170,16 +195,36 @@ the corner of a monitor. That is enough to show the mode does something and noth
 it treats a face at a metre with a room behind it — which is the only scene this product cares about.
 The quality question is open and needs the camera pointed at a person.
 
-### Decided on this measurement
+### Second run, against a face — 2026-09-09
 
-**Davide, 2026-09-09: trust the measurement, not the vendor ceiling.** The resolution trade this ADR
-was braced for does not exist on this device — blur runs at 4K, the advertised 1920×1080 is reported
-and not enforced, and PRD 6.1's default stands. The gate that walked a resolution ladder is gone; the
-rule now has no resolution in it.
+The run above was taken against a blank wall. Repeated with a subject at roughly a metre, a room
+behind, at 1× zoom (inside the 1.0×–3.0× band), exposure seeded from the app's own metered values
+rather than the loop's starting point so the face is correctly exposed:
 
-Two things remain open, both listed in the Action Items: the zoom band, and whether the effect is any
-good on a face. The second is Davide's own retest, and it is the one that decides whether a toggle
-gets written.
+| Region | C0, no blur | C1, blur (3840×2160) | Delta |
+|---|---|---|---|
+| Background (door, wall, ceiling) | 9.14 | 9.29 | +1.6 % |
+| Subject's face | 4.09 | 4.06 | −0.6 % |
+| Whole frame | 5.43 | 5.33 | −1.8 % |
+
+And at the size the device actually advertises, against the control downscaled to match:
+
+| Region | C0, no blur (downscaled) | C3, blur (1920×1080) |
+|---|---|---|
+| Background | 6.45 | **6.40** |
+
+**Nothing is blurred, at either resolution.** The background delta is smaller than the frame-to-frame
+noise, and the whole frame reads marginally *sharper* with the mode on. Confirmed by eye on both
+pairs: door mouldings, mirror frame, recessed ceiling lights and the wall-to-ceiling line are equally
+crisp with and without.
+
+Meanwhile the capture results said mode 2 on all 150 frames of each take. **The mode was selected and
+never applied.**
+
+The only remaining lead on this handset is a private vendor tag, `videoBokehBlurLevel` in
+`com.google.pixel.experimental2023`, which appears in the camera service's tag registry. That is
+undocumented, unsupported, Pixel-only and outside anything ADR-0002 would sanction; it is recorded
+here as an observation, not a proposal.
 
 ## Options Considered
 
@@ -287,32 +332,29 @@ than a boolean flag.
 
 ## Action Items
 
-1. [x] **Run the probe on the reference Pixel 10** — done 2026-09-09, see Measurement above. Pixel 10,
-       Android 17 (API 37), back logical camera id 0.
+1. [x] **Run the probe on the reference Pixel 10** — done 2026-09-09. Pixel 10, Android 17 (API 37),
+       back logical camera id 0.
 2. [x] **Record whether the scene-mode control value is offered, and whether the mode holds without
-       it.** It is *not* offered (`CONTROL_AVAILABLE_MODES = [0 1 2]`), and the mode holds without it.
-       This ADR's decision therefore narrows to the scene-mode key alone, with a measurement behind it.
-3. [x] **Record the zoom band.** 1.0×–3.0×, and this is the finding with the most product in it.
-       `LensGuidance.LADDER` is 1.0, 2.0 and 5.0 plus the device's own minimum, which on this phone is
-       0.56× — so of the **four framings PRD 6.5 offers, two lie outside the blur band**: the
-       ultrawide at 0.56× below it and the 5× above it. A user who picks either loses the effect with
-       nothing on screen to say why. A toggle owes a rule about that — drop blur outside the band and
-       label it, or refuse the framings that cannot carry it. **A product question, listed in item 4.**
-4. [x] **Resolution — decided by Davide, 2026-09-09: trust the measurement, not the vendor ceiling.**
-       Blur runs at 3840×2160 despite the advertised 1920×1080, so it costs no resolution, the gate
-       carries no ladder, and no PRD text needs amending. Implemented: `advertisedCeiling` reports the
-       claim, nothing enforces it.
-5. [ ] **Zoom — still Davide's.** The band is 1.0×–3.0× and two of PRD 6.5's four framings fall
-       outside it. Blur off with a label on those framings, or those framings refused while blur is
-       on? Needed before a toggle ships, not before item 6.
-6. [ ] **Point the camera at a person and re-run** — Davide is doing this. The measurement above was
-       taken against a blank wall and answers "does the mode do something", not "is this good enough
-       to ship". Compare C0 against C1 on a talking-head scene: subject at ~1 m, background at ~3 m.
-       **This is the item that decides whether PR 2 gets written**, and it is the one that killed
-       ADR-0030 when it was finally looked at.
-7. [ ] Flip `BLUR_VERIFIED` only with 5 and 6 answered, and only in a change that carries the numbers.
-8. [ ] Phase 4: name the iOS equivalent (`AVCaptureDevice`'s portrait effect is a different shape) so
-       `blurVerdict` stays the shared rule ADR-0013 requires rather than an Android-only one.
+       it.** It is *not* offered (`CONTROL_AVAILABLE_MODES = [0 1 2]`), and the mode is accepted and
+       echoed without it. This ADR's route is therefore the scene-mode key alone.
+3. [x] **Record the zoom band.** 1.0×–3.0×, which excludes two of PRD 6.5's four framings (the 0.56×
+       ultrawide and the 5×). Moot on this device, since nothing is applied at any zoom; it matters
+       again only if a device is found that works.
+4. [x] **Re-run against a face** — done 2026-09-09, at 1× zoom with metered exposure. **No blur at
+       3840×2160 and none at 1920×1080.** Tables above.
+5. [x] **Withdraw the resolution decision taken on the wall measurement.** The +10 % that prompted
+       "trust the measurement, not the vendor ceiling" was noise on a low-detail scene, most likely
+       continuous AF. The ladder is not restored — `appliesToFootage` supersedes it — but the claim
+       that blur runs at UHD is retracted, in this ADR and in the code comments that repeated it.
+6. [ ] **Davide: park this, or keep it open?** The recommendation is to **park it**, in the shape
+       ADR-0030 was parked: the route is right, the reference device does not implement it, and there
+       is nothing further to build without different hardware. Unparking means a device whose
+       `appliesToFootage` comes back true — worth re-testing when #29 widens the matrix to a second
+       OEM, since this is a HAL feature and Samsung and Xiaomi are the vendors most likely to have
+       implemented it.
+7. [ ] `BLUR_VERIFIED` stays false. It should not be flipped on this handset at all.
+8. [ ] Phase 4: if this is unparked, name the iOS equivalent (`AVCaptureDevice`'s portrait effect is a
+       different shape) so `blurVerdict` stays the shared rule ADR-0013 requires.
 
 ## Notes for whoever runs the probe next
 

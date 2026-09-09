@@ -16,12 +16,19 @@ package com.scenaristo.camera.domain.blur
  * costs. [BlurCapability] therefore carries both halves and [blurVerdict]
  * refuses to call the advertised half an answer.
  *
- * That cuts both ways, and on the reference device it cut the useful way. The
- * Pixel 10 advertises blur to 1920x1080 and was measured applying it at
- * 3840x2160, so Davide decided on 2026-09-09 to **trust the measurement and not
- * the vendor's ceiling**: the advertised size is reported and never enforced,
- * and blur costs no resolution. PRD 6.1's 4K default therefore stands unamended,
- * and the trade ADR-0030 had to make does not arise here.
+ * On the reference Pixel 10 that distinction turned out to be the whole story,
+ * and not in the direction anyone expected. The device advertises
+ * `BOKEH_CONTINUOUS` at 1920x1080, accepts it, and **echoes the mode back on
+ * every capture result while applying no blur whatsoever** -- measured against a
+ * face on 2026-09-09 at both 3840x2160 and 1920x1080, background sharpness
+ * unchanged to within noise.
+ *
+ * That is why [BlurCapability.appliesToFootage] exists and why it is the last
+ * check. Everywhere else in this codebase an echoed key is the end of the
+ * argument: ADR-0002 action item 2 verifies the manual keys precisely by asking
+ * whether the camera echoed them. This mode is the case where that is not
+ * enough, so the capability requires positive evidence that the *picture*
+ * changed, which only a recording can give.
  */
 
 /**
@@ -69,6 +76,19 @@ data class BlurCapability(
     val manualKeysHeld: Boolean = false,
     /** 30.00 fps constant still held while it was active (PRD 6.1). */
     val frameRateHeld: Boolean = false,
+    /**
+     * The footage was measurably different with the mode on.
+     *
+     * The check the reference device failed, and the reason this is not simply
+     * inferred from the other flags. On the Pixel 10 the mode is advertised,
+     * accepted, and echoed back on every frame -- and the recording is
+     * pixel-for-pixel as sharp as the control. An echo says the camera *heard*
+     * the request; only a file says it did anything.
+     *
+     * Set from a comparison of a take with the mode against a take without it,
+     * never from characteristics and never from a capture result.
+     */
+    val appliesToFootage: Boolean = false,
 )
 
 /**
@@ -88,6 +108,15 @@ enum class BlurVerdict {
     /** Blurs and keeps the keys, but not at a constant 30.00 fps (PRD 6.1). */
     FRAME_RATE_LOST,
 
+    /**
+     * Advertised, accepted, echoed -- and the footage is unchanged.
+     *
+     * The reference Pixel 10's answer (2026-09-09). Distinct from
+     * [NOT_ADVERTISED] because the device claims the mode and a client asking
+     * only what it supports would believe it.
+     */
+    NOT_APPLIED,
+
     /** Offer it. */
     SUPPORTED,
 }
@@ -106,6 +135,9 @@ fun blurVerdict(capability: BlurCapability): BlurVerdict = when {
     !capability.continuousMode -> BlurVerdict.NO_CONTINUOUS_MODE
     !capability.manualKeysHeld -> BlurVerdict.MANUAL_KEYS_LOST
     !capability.frameRateHeld -> BlurVerdict.FRAME_RATE_LOST
+    // Last, because it is the most expensive to establish and the only one that
+    // needs two recordings compared against each other.
+    !capability.appliesToFootage -> BlurVerdict.NOT_APPLIED
     else -> BlurVerdict.SUPPORTED
 }
 
@@ -142,6 +174,9 @@ fun blurLine(capability: BlurCapability): String = when (blurVerdict(capability)
     BlurVerdict.NO_CONTINUOUS_MODE -> "background blur: stills only on this lens, not while recording"
     BlurVerdict.MANUAL_KEYS_LOST -> "background blur: unavailable - it would unlock the shutter"
     BlurVerdict.FRAME_RATE_LOST -> "background blur: unavailable - it would drop below 30 fps"
-    // No resolution in this sentence, because blur no longer costs one.
+    // PRD 6.10 asks for "not supported on this lens" rather than pretending, and
+    // this is the case the sentence was written for: the device is the one
+    // pretending, and the app declines to pass it on.
+    BlurVerdict.NOT_APPLIED -> "background blur: not supported on this lens"
     BlurVerdict.SUPPORTED -> "background blur: ok"
 }

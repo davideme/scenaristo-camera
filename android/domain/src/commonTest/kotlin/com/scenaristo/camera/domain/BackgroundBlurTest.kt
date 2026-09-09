@@ -29,6 +29,7 @@ class BackgroundBlurTest {
         maxHeightPx = 2160,
         manualKeysHeld = true,
         frameRateHeld = true,
+        appliesToFootage = true,
     )
 
     @Test
@@ -89,6 +90,22 @@ class BackgroundBlurTest {
     }
 
     @Test
+    fun `ADR-0031 - a mode that is advertised, echoed and does nothing is not support`() {
+        // The reference Pixel 10, measured against a face on 2026-09-09: the
+        // device advertises BOKEH_CONTINUOUS, accepts it, echoes mode 2 back on
+        // every capture result, and records footage identical to the control at
+        // both 3840x2160 and 1920x1080.
+        //
+        // Everywhere else in this codebase an echoed key ends the argument. This
+        // is the one place it does not, which is why the flag exists.
+        val liar = perfect.copy(appliesToFootage = false)
+        assertEquals(BlurVerdict.NOT_APPLIED, blurVerdict(liar))
+        assertFalse(canBlur(liar))
+        // And PRD 6.10's report declines to pass the claim on.
+        assertEquals("background blur: not supported on this lens", blurLine(liar))
+    }
+
+    @Test
     fun `ADR-0031 - the checks are ordered, so the first wall hit is the reason given`() {
         // A device that fails everything reports the cheapest true reason rather
         // than the most alarming one: PRD 6.10 labels controls with why, and
@@ -105,5 +122,18 @@ class BackgroundBlurTest {
         // and only one of them may reach a user as an offer.
         assertFalse(canBlur(BlurCapability()))
         assertFalse(canBlur(BlurCapability(advertised = true, continuousMode = true, maxWidthPx = 3840, maxHeightPx = 2160)))
+        // Everything a camera can claim about itself, and still not an offer.
+        assertFalse(
+            canBlur(
+                BlurCapability(
+                    advertised = true,
+                    continuousMode = true,
+                    maxWidthPx = 3840,
+                    maxHeightPx = 2160,
+                    manualKeysHeld = true,
+                    frameRateHeld = true,
+                ),
+            ),
+        )
     }
 }

@@ -98,6 +98,7 @@ import java.io.FileInputStream
 import java.io.InputStream
 import java.nio.channels.Channels
 import java.time.LocalDateTime
+import kotlin.math.roundToLong
 
 /**
  * Capture and the web server, in one foreground service (ADR-0003).
@@ -1118,6 +1119,11 @@ class CaptureService : LifecycleService() {
             Log.w(BLUR_TAG, "camera did not bind within ${BLUR_BIND_WAIT_MS} ms; nothing to probe")
             return
         }
+        // Bound is not the same as metered. [meteredRequest] reads the loop's
+        // outputs, and at the moment of the first bind those are still the
+        // starting values -- sampling them here would pin the whole run to the
+        // exposure the probe exists to avoid.
+        delay(METER_SETTLE_MS)
         val provider = ProcessCameraProvider.awaitInstance(this)
         val text = runCatching {
             val info = provider.getCameraInfo(CameraSelector.DEFAULT_BACK_CAMERA)
@@ -1125,7 +1131,7 @@ class CaptureService : LifecycleService() {
                 context = this,
                 provider = provider,
                 owner = this,
-                base = DEFAULT_REQUEST,
+                base = meteredRequest(),
                 cameraInfo = info,
                 cameraId = cameraId,
                 model = Build.MODEL,
@@ -1140,6 +1146,33 @@ class CaptureService : LifecycleService() {
             cameraBound = false
             bindCamera()
         }
+    }
+
+    /**
+     * The exposure the app has actually metered, for the blur probe to hold
+     * fixed while it runs.
+     *
+     * [DEFAULT_REQUEST] would be the obvious thing to pass and it is the wrong
+     * one: it is 1/50 s at ISO 100, which is the loop's *starting* point, not an
+     * exposure for the room. Against a wall in daylight that is close enough to
+     * read; against a face indoors it is around two stops under, and a probe
+     * whose whole remaining question is "does the blur look good on a person"
+     * cannot answer it from an underexposed frame.
+     *
+     * The loop's own outputs are taken instead (ADR-0005: `shutterHz` and `iso`
+     * are outputs, which is exactly why they are read here rather than set), and
+     * then held fixed for the run so every candidate is exposed identically and
+     * the comparison is of blur and nothing else.
+     */
+    private fun meteredRequest(): ManualControls.Request {
+        val settings = session.state.settings
+        if (settings.shutterHz <= 0 || settings.iso <= 0) return DEFAULT_REQUEST
+        return ManualControls.Request(
+            exposureTimeNs = (1_000_000_000.0 / settings.shutterHz).roundToLong(),
+            sensitivity = settings.iso,
+            frameDurationNs = DEFAULT_REQUEST.frameDurationNs,
+            awbMode = ManualControls.awbModeFor(settings.whiteBalanceKelvin),
+        )
     }
 
     /** [backCameraId] once the first bind has published it, or null if it never does. */
@@ -2049,6 +2082,16 @@ class CaptureService : LifecycleService() {
 
         /** How long the blur probe waits for the first camera bind before giving up. */
         private const val BLUR_BIND_WAIT_MS = 15_000L
+
+        /**
+         * How long the blur probe lets the exposure loop settle after the first
+         * bind, before pinning its outputs for the run (ADR-0005's loop is
+         * damped, so it does not arrive at an exposure instantly).
+         *
+         * Doubles as the window a person has to get themselves framed, which is
+         * the only way the remaining question in ADR-0031 can be answered.
+         */
+        private const val METER_SETTLE_MS = 6_000L
 
         /**
          * Whether ADR-0031's background-blur measurement has been taken and
