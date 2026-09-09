@@ -4,7 +4,7 @@
 **Date:** 2026-09-09
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.1, 6.2, 6.3, 8-Q3
-**Related ADRs:** [ADR-0005](0005-exposure-control-own-metering-loop.md), [ADR-0011](0011-per-lens-capability-gating.md), [ADR-0013](0013-multiplatform-strategy.md), [ADR-0017](0017-phase-0-verification-matrix.md), [ADR-0018](0018-preview-tap-for-metering-and-preview-frames.md), [ADR-0022](0022-two-exposure-responsiveness-modes.md), [ADR-0023](0023-lock-exposure-for-the-take.md), [ADR-0029](0029-portrait-lighting-read.md), [ADR-0032](0032-minimum-android-16.md)
+**Related ADRs:** [ADR-0005](0005-exposure-control-own-metering-loop.md), [ADR-0011](0011-per-lens-capability-gating.md), [ADR-0013](0013-multiplatform-strategy.md), [ADR-0017](0017-phase-0-verification-matrix.md), [ADR-0018](0018-preview-tap-for-metering-and-preview-frames.md), [ADR-0022](0022-two-exposure-responsiveness-modes.md), [ADR-0023](0023-lock-exposure-for-the-take.md), [ADR-0029](0029-portrait-lighting-read.md), [ADR-0032](0032-minimum-android-16.md), [ADR-0034](0034-kelvin-white-balance-on-android-16.md)
 
 ## Context
 
