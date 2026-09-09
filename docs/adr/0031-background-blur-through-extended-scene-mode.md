@@ -214,9 +214,18 @@ And at the size the device actually advertises, against the control downscaled t
 | Background | 6.45 | **6.40** |
 
 **Nothing is blurred, at either resolution.** The background delta is smaller than the frame-to-frame
-noise, and the whole frame reads marginally *sharper* with the mode on. Confirmed by eye on both
+variation, and the whole frame reads marginally *sharper* with the mode on. Confirmed by eye on both
 pairs: door mouldings, mirror frame, recessed ceiling lights and the wall-to-ceiling line are equally
 crisp with and without.
+
+**What little difference there is between the takes is a lighting change, not an optical one** (Davide,
+looking at the pair). The candidates run seconds apart with the sensor pinned — AE off, fixed shutter
+and ISO — so the exposure does not move, but the room does: daylight through a window shifts the
+contrast of a scene between one take and the next, and edge-energy metrics read contrast as much as
+they read focus. That is the trap the wall run fell into, and it is the reason a metric like
+`blurdetect` is only usable here on a scene with real depth separation and enough detail that a few
+percent cannot be bought by the light changing. Where the two effects are hard to tell apart, the
+answer is a better scene, not a better statistic.
 
 Meanwhile the capture results said mode 2 on all 150 frames of each take. **The mode was selected and
 never applied.**
