@@ -42,6 +42,12 @@ machinery.
 
 ## Decision
 
+> **Scope, from ADR-0033 (accepted 2026-09-10).** The mechanism below — stopping the app's own
+> filter — is rung 2's. On rung 1 the same user-visible mode is realised by `CONTROL_AE_LOCK` for
+> the take, where `CONTROL_AE_LOCK_AVAILABLE` says so; the setting, its default and its behaviour
+> on both surfaces are unchanged. On the reference Pixel 10 every camera is rung 2 (measured
+> 2026-09-09), so nothing below changes on current hardware.
+
 We will add **an opt-in mode in which the exposure filter runs no code at all while a take is
 running**. At record start, ISO and the shutter rung hold the values they had; `FaceWeightedMeter`
 is not called, `ExposureLoop.onFrame` returns immediately, and nothing is pushed to the sensor until

@@ -1,6 +1,6 @@
 # ADR-0033: Use the platform's shutter-priority mode where a camera declares it, and keep the in-app loop as the rung below
 
-**Status:** Proposed
+**Status:** Accepted (2026-09-10, Davide; PRD 6.3 amended)
 **Date:** 2026-09-09
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.1, 6.2, 6.3, 8-Q3
@@ -285,8 +285,8 @@ on how far it diverges before Phase 4 has to live with it.
        so it is rung-independent, and cover it with `:domain` fixtures for both rungs.
 4. [ ] Add `CONTROL_AE_PRIORITY_MODE` and `CONTROL_AE_MODE` to `echoes()` so #20 reports whether the
        camera honoured the rung it was given.
-5. [ ] Amend the three PRD passages listed under Decision, citing this ADR, and narrow ADR-0022's and
-       ADR-0023's text to rung 2 where it refers to damping.
+5. [x] Amend the three PRD passages listed under Decision, citing this ADR, and narrow ADR-0022's and
+       ADR-0023's text to rung 2 where it refers to damping. **Done on acceptance, 2026-09-10.**
 6. [x] **Confirm on the reference Pixel 10 which priority modes the main camera declares.**
        Measured 2026-09-09 on the reference `Pixel 10`, Android 17 (API 37):
        `aeAvailablePriorityModes = [0]`, `OFF` only, on both cameras. Rung 1 is unreachable there.
