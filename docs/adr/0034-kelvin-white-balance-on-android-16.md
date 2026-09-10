@@ -1,6 +1,6 @@
 # ADR-0034: Set white balance in Kelvin where the device offers it, and keep the gains curve as the rung below
 
-**Status:** Proposed
+**Status:** Accepted (2026-09-10, Davide; PRD 6.4 amended)
 **Date:** 2026-09-09
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.4, 6.10, 8-Q2
@@ -125,8 +125,8 @@ because rung 1 is the only one that can honestly drop that label.
 **#24 changes shape on a rung-1 device.** It stops being "calibrate our curve against a grey card"
 and becomes "verify the vendor's key against PRD 6.4's ±300 K criterion". One grey card either way,
 and the same two temperatures — but a failure now means a device defect to report and gate on,
-rather than a curve to fit. On the reference Pixel 10, which is rung 1, that is the measurement #24
-should take.
+rather than a curve to fit. The reference Pixel 10 turned out to be rung 2 (measured 2026-09-09, below), so this
+re-scoping applies only when a camera that declares `CCT` joins the matrix (#29).
 
 ## Options Considered
 
@@ -220,7 +220,8 @@ waiting a release to fix it buys nothing.
 1. [ ] Add the rung selection to `ManualControls` — `COLOR_CORRECTION_AVAILABLE_MODES` and
        `COLOR_CORRECTION_COLOR_TEMPERATURE_RANGE` in the capability probe, the CCT keys on the
        request path, with the Kelvin-to-rung decision in `:domain` and fixtures for all three rungs.
-2. [ ] Amend PRD 6.4's Android note as quoted under Decision, citing this ADR.
+2. [x] Amend PRD 6.4's Android note as quoted under Decision, citing this ADR. **Done on acceptance,
+       2026-09-10.**
 3. [ ] Add the rung to the capability report (PRD 6.10) and drop the "≈ approximated" label on
        rung 1.
 4. [x] **Confirm on the reference Pixel 10 which colour-correction modes the main camera declares.**

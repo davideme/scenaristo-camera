@@ -109,12 +109,15 @@ Ordered by priority.
 
 On a phone the aperture is fixed, so once shutter is locked, ISO is the only remaining exposure variable. "Lowest possible" means: run an auto-exposure loop that holds shutter fixed and picks the lowest ISO that hits the target exposure.
 
-- Neither iOS nor Android exposes a native shutter-priority mode, and Android gives no metering feedback once auto-exposure is off. The app runs its own AE loop on both platforms: meter a face-weighted luminance from the analysis stream (the same frames that feed the web preview), adjust ISO within the device's supported range, hold shutter constant. Damped to avoid visible pumping. (ADR-0005)
-- The loop runs at **two speeds**: quick while the user is lighting the scene, so moving a lamp reads back within about a second, and damped once recording starts, so the exposure does not visibly move during a take. The switch follows the recording state; there is no control. The acceptance criteria below are the recording mode's, which is what they already say. (ADR-0022, decision 2026-09-06; replaces the manual ISO lock offered here previously, removed in #87 before it shipped.)
+- iOS exposes no shutter-priority mode. Android has one from API 36 (`CONTROL_AE_PRIORITY_MODE_SENSOR_EXPOSURE_TIME_PRIORITY`), which cameras declare individually; the app uses it where it is declared and runs its own metering loop everywhere else, including on iOS. The shutter, the flicker-safe ladder and both light warnings are the app's on both rungs. The app's own loop meters a face-weighted luminance from the analysis stream (the same frames that feed the web preview), adjusts ISO within the device's supported range and holds shutter constant, damped to avoid visible pumping. (ADR-0005, ADR-0033)
+- The app's own loop runs at **two speeds**: quick while the user is lighting the scene, so moving a lamp reads back within about a second, and damped once recording starts, so the exposure does not visibly move during a take. The switch follows the recording state; there is no control. The acceptance criteria below are the recording mode's, which is what they already say. (ADR-0022, decision 2026-09-06; replaces the manual ISO lock offered here previously, removed in #87 before it shipped.) On a camera using the platform's shutter priority, its auto-exposure converges at its own rate and these two speeds do not apply (ADR-0033).
 - **Too-bright handling:** if the scene is overexposed at the device's base ISO, first step the shutter to the next flicker-safe value: 1/100 s on a 50 Hz grid, 1/120 s on 60 Hz. Both are whole multiples of the mains half-period and do not band, and the motion-blur difference is invisible for a seated speaker. The shutter in use is always shown on phone and web. Only if that step is still overexposed, show "Too much light: reduce light or close blinds" (phones have no ND). Never raise shutter beyond that one step; a manually locked shutter disables the step. (ADR-0005)
 - **Too-dark warning:** if ISO exceeds a per-device noise threshold (default ISO 800, tunable), show "Low light: add light to reduce noise". Do not slow the shutter.
 
 **Acceptance criteria**
+
+*Scope (ADR-0033):* on the app's own loop these are asserted in host tests against its damping; on a camera using the platform's shutter priority they are verified on the device against the vendor's auto-exposure, and a camera that fails them is a capability-report entry, not a code change.
+
 - Given a constant scene, when recording, then ISO settles within 2 seconds and does not oscillate by more than one stop.
 - Given the scene brightens, then ISO decreases, shutter stays fixed, frame rate stays at 30.
 - Given the scene is overexposed at base ISO at 1/50 s, then the shutter steps to 1/100 s, the readout shows it on phone and web, and no warning is shown.
@@ -132,7 +135,7 @@ Two scenarios, each with three Kelvin presets. WB is always locked; auto WB is n
 - Tint fixed at 0 in v1.
 - Selecting a preset updates the preview immediately on phone and web.
 - P1: "auto once" button that samples AWB, snaps to the nearest preset, and locks.
-- Android note: there is no direct Kelvin API. The app converts Kelvin to RGB gains with a device-calibrated curve, falling back to the platform AWB modes (INCANDESCENT ≈ 3000 K, FLUORESCENT ≈ 4000 K, DAYLIGHT ≈ 5500 K, CLOUDY ≈ 6500 K) on devices that do not support manual colour gains.
+- Android note: from API 36 the app sets Kelvin directly (`COLOR_CORRECTION_MODE_CCT` with `COLOR_CORRECTION_COLOR_TEMPERATURE`) on cameras that declare it. Below that, or on a camera that does not, it converts Kelvin to RGB gains with a device-calibrated curve, and falls back to the platform AWB modes (INCANDESCENT ≈ 3000 K, FLUORESCENT ≈ 4000 K, DAYLIGHT ≈ 5500 K, CLOUDY ≈ 6500 K) on devices without manual colour gains. (ADR-0034 defines the three rungs and which one each lens gets.)
 
 **Acceptance criteria**
 - Given "Artificial light only" and 3200 K, when recording under tungsten light, then a grey card reads neutral within ±300 K measured in post.

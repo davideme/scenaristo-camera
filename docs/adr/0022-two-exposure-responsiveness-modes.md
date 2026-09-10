@@ -18,6 +18,12 @@ PRD 6.3's own wording contains the answer. Its criterion reads *"Given a constan
 
 ## Decision
 
+> **Scope, from ADR-0033 (accepted 2026-09-10).** These damping profiles belong to the app's own
+> metering loop, which ADR-0033 makes rung 2: cameras that do not declare
+> `SENSOR_EXPOSURE_TIME_PRIORITY`, and every camera on iOS. On rung 1 the platform's auto-exposure
+> converges at its own rate and neither profile applies. On the reference Pixel 10 every camera is
+> rung 2 (measured 2026-09-09), so nothing below changes on current hardware.
+
 We will run the same loop with **two sets of damping constants**, selected by whether a take is running:
 
 | | Setup (idle) | Recording |
