@@ -25,8 +25,43 @@ auto-exposure, which stays **on**, moves sensitivity alone. Availability is decl
 gateable and verifiable by the same means as the six keys `ManualControls` already sets.
 
 Verified against `android.jar` for `compileSdk 37` on 2026-09-09; every constant named here exists
-and carries `since="36"`. **It has not been confirmed on a device** — no phone answered
-`adb devices` when this was written, so nothing below is a claim about the reference Pixel 10.
+and carries `since="36"`.
+
+> **Measured on the reference device, 2026-09-09 — rung 1 does not exist here.** `Pixel 10`, serial
+> Android 17 / API 37, build `CP2A.260805.005`, confirmed with
+> `getprop ro.product.model` and read with `adb shell dumpsys media.camera`.
+> `android.control.aeAvailablePriorityModes` is `[0]` — `CONTROL_AE_PRIORITY_MODE_OFF` and nothing
+> else — identically on camera 0 and camera 1. `SENSOR_EXPOSURE_TIME_PRIORITY` is `2` and is not in
+> the list. **Every camera on the reference device therefore selects rung 2**, which is ADR-0005's
+> loop exactly as it ships. Per ADR-0017 this is a claim about one handset, and an absent mode is a
+> driver declaration that a later build could change.
+>
+> **Confirmed through the API, 2026-09-09.** The reading above is `dumpsys`, i.e. the camera
+> service's static HAL metadata, and a conclusion drawn from a *missing* key there is one inference
+> short of proof. `CameraCapabilityReadTest` (`:app` instrumented test) asks the same question the
+> app asks — `CameraCharacteristics.getKeys()` and `.get()` — and the answer is **stronger than the
+> dumpsys reading, not merely equal to it**: the key is present and its contents exclude the mode.
+>
+> | Camera | `getKeys()` | `get()` |
+> |---|---|---|
+> | 0 (logical, back) | present | `[0]` |
+> | 1 (logical, front) | present | `[0]` |
+> | 2, 3, 4, 5, 6 (physical) | **absent** | `null` |
+>
+> So this is not an absence to be inferred from: both logical cameras enumerate their supported
+> priority modes and the list contains `OFF` alone. `SENSOR_EXPOSURE_TIME_PRIORITY` (2) is declared
+> unsupported rather than merely unmentioned.
+>
+> **The key is exposed on logical cameras only**, and is absent from all five physical ones. That
+> constrains how the probe may read it, and Action Item 1 carries the detail.
+>
+> Two supporting reads, same run: `CONTROL_AE_LOCK_AVAILABLE` is `true` on all seven cameras, so
+> rung 1's lock mechanism would work; `CONTROL_MAX_REGIONS_AE` is `1` everywhere, so the native
+> face-weighted metering would too.
+>
+> `android.control.maxRegions` is `[1 0 1]` — one AE region, one AF region — so the native
+> face-weighted metering this ADR specifies for rung 1 *is* supported; only the rung that would use
+> it is not.
 
 **ADR-0032 puts the floor at API 36, so this is not a question about versions.** The key is reachable
 on every device the app runs on. What it is not is universally *available*: priority modes are a
@@ -225,6 +260,24 @@ on how far it diverges before Phase 4 has to live with it.
 1. [ ] Add `aePriorityModes`, `maxAeRegions` and `aeLockAvailable` to `LensCapabilities` and the probe
        in `ManualControls`, with `:domain` fixtures for a camera that declares the mode and one that
        does not.
+
+       **Read `aePriorityModes` from the logical camera, never from a pinned physical id.** Measured
+       2026-09-09 on the reference Pixel 10 through `CameraCharacteristics.getKeys()`:
+       `CONTROL_AE_AVAILABLE_PRIORITY_MODES` is present on the two logical cameras and **absent on
+       all five physical ones**, where `get()` returns `null`. `ManualControls` pins streams to
+       physical ids (`pinTo`, `setPhysicalCameraId`), so the obvious implementation — probe the id
+       the stream is pinned to — reads `null` on every lens and selects rung 2. On this device that
+       is the right answer for the wrong reason, and on a device that supports the mode it is simply
+       wrong, in the direction nothing would ever flag: rung 2 works, so the bug ships as "the
+       platform mode is never available anywhere".
+
+       A `null` therefore has to be read as *this camera does not report the capability* rather than
+       as *no priority modes*, and the fixtures should cover three shapes, not two: a logical camera
+       declaring the mode, a logical camera declaring only `OFF`, and a physical camera reporting
+       nothing at all.
+
+       The other two are safe to read per camera — `maxAeRegions` is `1` and `aeLockAvailable` is
+       `true` on all seven cameras of the reference device.
 2. [ ] Implement the rung selection: rung 1 sets `CONTROL_AE_MODE_ON`,
        `CONTROL_AE_PRIORITY_MODE`, `SENSOR_EXPOSURE_TIME` and `CONTROL_AE_REGIONS`; rung 2 is
        unchanged. Both feed one `ExposureState`.
@@ -234,9 +287,13 @@ on how far it diverges before Phase 4 has to live with it.
        camera honoured the rung it was given.
 5. [ ] Amend the three PRD passages listed under Decision, citing this ADR, and narrow ADR-0022's and
        ADR-0023's text to rung 2 where it refers to damping.
-6. [ ] Confirm on the reference Pixel 10 which priority modes the main camera declares, and record the
-       answer here with the handset name (`adb -s <serial> shell getprop ro.product.model`), per
-       ADR-0017.
+6. [x] **Confirm on the reference Pixel 10 which priority modes the main camera declares.**
+       Measured 2026-09-09 on the reference `Pixel 10`, Android 17 (API 37):
+       `aeAvailablePriorityModes = [0]`, `OFF` only, on both cameras. Rung 1 is unreachable there.
+       Written into Context above.
 7. [ ] Phase 3: record a step-change-in-light trace on both rungs on the same scene, and write the
        settle times, the ISO at rest, the face-target error and whether either pumps into the Revisit
-       triggers above.
+       triggers above. **Blocked, and this is the ADR's deciding measurement.** It needs a camera
+       that declares `SENSOR_EXPOSURE_TIME_PRIORITY`, and no device in the matrix does; it cannot run
+       until #29 widens the matrix to one that does. Until then rung 1 ships to nobody and this ADR
+       changes no observable behaviour.
