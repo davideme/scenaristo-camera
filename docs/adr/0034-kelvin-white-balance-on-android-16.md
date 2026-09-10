@@ -4,7 +4,7 @@
 **Date:** 2026-09-09
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.4, 6.10, 8-Q2
-**Related ADRs:** [ADR-0002](0002-android-capture-stack.md), [ADR-0011](0011-per-lens-capability-gating.md), [ADR-0013](0013-multiplatform-strategy.md), [ADR-0017](0017-phase-0-verification-matrix.md), [ADR-0033](0033-native-shutter-priority-on-android-16.md), [ADR-0032](0032-minimum-android-16.md)
+**Related ADRs:** [ADR-0002](0002-android-capture-stack.md), [ADR-0011](0011-per-lens-capability-gating.md), [ADR-0013](0013-multiplatform-strategy.md), [ADR-0017](0017-phase-0-verification-matrix.md), [ADR-0033](0033-native-shutter-priority-on-android-16.md), [ADR-0032](0032-minimum-android-16.md), [ADR-0035](0035-white-balance-from-the-cameras-own-calibration.md)
 
 ## Context
 
@@ -232,8 +232,10 @@ waiting a release to fix it buys nothing.
        predicated on the reference device being rung 1, and it is rung 2. #24 keeps its original
        shape: calibrate the Kelvin-to-gains curve. The re-scoping becomes live only if #29 brings a
        camera that declares `CCT`.
-6. [ ] Reconsider deferring rung 2. This ADR left ADR-0011's gains curve unbuilt on the grounds that
+6. [x] Reconsider deferring rung 2. This ADR left ADR-0011's gains curve unbuilt on the grounds that
        no available hardware selects it; the measurement above says the reference device does, and it
        is therefore the path every take on the only phone in the matrix actually takes. That is an
        argument for building #24 that this ADR did not have when it wrote the deferral — and it is a
-       scope call for Davide, not a correction.
+       scope call for Davide, not a correction. **Decided 2026-09-10 (Davide): build it now, from the
+       camera's own colour calibration rather than the generic curve —
+       [ADR-0035](0035-white-balance-from-the-cameras-own-calibration.md).**
