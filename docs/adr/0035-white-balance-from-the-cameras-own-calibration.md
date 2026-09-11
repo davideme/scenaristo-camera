@@ -4,7 +4,7 @@
 **Date:** 2026-09-10
 **Deciders:** Davide Mendolia
 **PRD sections:** 6.4, 6.10, 8-Q2
-**Related ADRs:** [ADR-0002](0002-android-capture-stack.md), [ADR-0011](0011-per-lens-capability-gating.md), [ADR-0013](0013-multiplatform-strategy.md), [ADR-0017](0017-phase-0-verification-matrix.md), [ADR-0033](0033-native-shutter-priority-on-android-16.md), [ADR-0034](0034-kelvin-white-balance-on-android-16.md)
+**Related ADRs:** [ADR-0002](0002-android-capture-stack.md), [ADR-0011](0011-per-lens-capability-gating.md), [ADR-0013](0013-multiplatform-strategy.md), [ADR-0017](0017-phase-0-verification-matrix.md), [ADR-0033](0033-native-shutter-priority-on-android-16.md), [ADR-0034](0034-kelvin-white-balance-on-android-16.md), [ADR-0036](0036-measure-white-balance-then-lock-it-for-the-take.md)
 
 ## Context
 
